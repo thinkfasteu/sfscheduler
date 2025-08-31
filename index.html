@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FTG Tools</title>
+    <link rel="stylesheet" href="./ui/styles.css">
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+    <script type="module" src="./main.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-brand">
+                <h1>Dienstplan-System Pro</h1>
+                <p>Schichtplanung</p>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab(event, 'staff')">Personalverwaltung</button>
+            <button class="tab" onclick="showTab(event, 'availability')">Verfügbarkeiten</button>
+            <button class="tab" onclick="showTab(event, 'schedule')">Dienstplan</button>
+            <button class="tab" onclick="showTab(event, 'vacation')">Urlaub</button>
+        </div>
+
+        <div class="tab-content">
+            <div id="staff-tab" class="section active">
+                <h2>Personalverwaltung</h2>
+                <div class="form-group staff-card">
+                    <h3 id="staffFormTitle">Neue Arbeitskraft hinzufügen</h3>
+                    <div class="form-row">
+                        <input type="text" id="staffName" placeholder="Name" />
+                        <select id="staffType">
+                            <option value="minijob">Minijob</option>
+                            <option value="student">Werkstudent</option>
+                            <option value="permanent">Festangestellt</option>
+                        </select>
+                        <input type="number" id="contractHours" placeholder="Std/Woche" />
+                        <input type="number" id="typicalWorkdays" placeholder="Tage/Woche" />
+                    </div>
+                    <div class="form-row">
+                        <button class="btn" onclick="addStaff()">Arbeitskraft speichern</button>
+                    </div>
+                </div>
+                <div id="staffList" class="form-row"></div>
+            </div>
+
+            <div id="availability-tab" class="section">
+                <h2>Verfügbarkeiten / Freiwünsche</h2>
+                <div class="controls form-row availability-controls">
+                    <div>
+                        <label>Mitarbeiter</label>
+                        <select id="availabilityStaffSelect" onchange="handleAvailabilityDisplay()"></select>
+                    </div>
+                    <div>
+                        <label>Monat</label>
+                        <select id="availabilityMonth" onchange="handleAvailabilityDisplay()"></select>
+                    </div>
+                    <button class="btn btn-secondary" onclick="showHolidaysPopup()">Feiertage</button>
+                </div>
+                <div id="availabilityForm"><p>Bitte Mitarbeiter und Monat auswählen.</p></div>
+            </div>
+
+            <div id="schedule-tab" class="section">
+                <h2>Dienstplan</h2>
+                <div class="controls form-row" style="align-items:center; grid-template-columns: 2fr 1fr 1fr 1fr 1fr;">
+                    <select id="scheduleMonth"></select>
+                    <button class="btn btn-success" onclick="generateSchedule()">Dienstplan erstellen</button>
+                    <button class="btn btn-danger" onclick="clearSchedule()">Plan löschen</button>
+                    <button class="btn" onclick="exportSchedule()">Export CSV</button>
+                    <button class="btn" onclick="printSchedule()">Drucken</button>
+                </div>
+                <div id="scheduleContent" style="overflow-x:auto;"></div>
+            </div>
+
+            <div id="vacation-tab" class="section">
+                <h2>Urlaub</h2>
+                <div class="form-row" style="align-items:flex-end; grid-template-columns: 1fr 1fr 1fr 1fr;">
+                    <div>
+                        <label>Mitarbeiter</label>
+                        <select id="vacationStaffSelect"></select>
+                    </div>
+                    <div><label>Von</label><input type="date" id="vacationStart" /></div>
+                    <div><label>Bis</label><input type="date" id="vacationEnd" /></div>
+                    <button class="btn btn-secondary" onclick="addVacationPeriod()">Urlaub hinzufügen</button>
+                </div>
+                <ul id="vacationList"></ul>
+            </div>
+        </div>
+    </div>
+</body>
+<!-- Holidays Modal -->
+<div id="holidaysModal" class="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:1000;">
+    <div class="modal-content" style="background:#fff; width: 600px; max-width: 90vw; margin: 10vh auto; padding: 16px; border-radius: 8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>Feiertage verwalten</h3>
+            <button class="btn btn-secondary" onclick="document.getElementById('holidaysModal').style.display='none'">Schließen</button>
+        </div>
+        <div class="form-row" style="margin-top:10px; grid-template-columns: 1fr 2fr 1fr; align-items:end;">
+            <div>
+                <label>Jahr</label>
+                <select id="holidaysYear"></select>
+            </div>
+            <div style="display:flex; gap:8px; align-items:end;">
+                <div>
+                    <label>Datum</label>
+                    <input type="date" id="holidayDate" />
+                </div>
+                <div>
+                    <label>Name</label>
+                    <input type="text" id="holidayName" placeholder="Feiertag" />
+                </div>
+            </div>
+            <div>
+                <button class="btn" onclick="addHoliday()">Hinzufügen</button>
+            </div>
+        </div>
+        <ul id="holidaysList" style="margin-top:12px;"></ul>
+    </div>
+</div>
+</div>
+
+<!-- Assignment/Swap Modal -->
+<div id="swapModal" class="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:1000;">
+    <div class="modal-content" style="background:#fff; width: 700px; max-width: 95vw; margin: 8vh auto; padding: 16px; border-radius: 8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 id="swapTitle">Zuweisung</h3>
+            <button class="btn btn-secondary" onclick="document.getElementById('swapModal').style.display='none'">Schließen</button>
+        </div>
+        <div id="swapDetail" style="margin:8px 0 12px 0;"></div>
+        <div class="form-row" style="grid-template-columns: 1fr 1fr; align-items:start;">
+            <div>
+                <label>Schicht</label>
+                <select id="swapShiftSelect"></select>
+                <div id="currentAssignment" style="margin-top:8px; color:#677684;"></div>
+            </div>
+            <div>
+                <label>Kandidaten</label>
+                <select id="swapStaffSelect"></select>
+                <div id="candidateNotes" style="margin-top:8px; font-size:0.9em; color:#677684;"></div>
+            </div>
+        </div>
+        <div style="margin-top:14px; display:flex; gap:8px; justify-content:flex-end;">
+            <button id="executeAssignBtn" class="btn btn-success">Zuweisen</button>
+        </div>
+    </div>
+</div>
+</html>
+</html>

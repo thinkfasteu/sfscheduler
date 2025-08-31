@@ -1,0 +1,56 @@
+.container { max-width: 1200px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); overflow: hidden; }
+.header { background: #343a40; color: #fff; padding: 20px; }
+.tabs { display: flex; background: #f8f9fa; border-bottom: 1px solid #e9ecef; }
+.tab { flex: 1; padding: 12px 16px; border: none; background: none; cursor: pointer; color: #677684; }
+.tab.active { background: #007bff; color: #fff; }
+.tab-content { padding: 20px; }
+.section { display: none; }
+.section.active { display: block; }
+.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.staff-card { background: #f8f9fa; padding: 16px; border-radius: 8px; border-left: 4px solid #007bff; }
+.btn { background: #007bff; color: #fff; border: none; padding: 10px 12px; border-radius: 6px; cursor: pointer; }
+.btn-success { background: #28a745; }
+.btn-danger { background: #dc3545; }
+.btn-secondary { background: #677684; }
+.staff-assignment { display: inline-flex; align-items: center; gap: 6px; background: #e3f2fd; color: #1565c0; padding: 4px 8px; border-radius: 14px; margin: 2px; font-size: 0.9em; }
+.badge { font-size: 0.75em; background: #ffeeba; color: #8a6d3b; padding: 2px 6px; border-radius: 10px; }
+.cal { display: grid; gap: 6px; }
+.cal-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal-cell { min-height: 80px; border: 1px solid #e9ecef; border-radius: 6px; padding: 6px; background: #fff; }
+.cal-head .cal-head-cell { background: #343a40; color: #fff; font-weight: 600; text-align: center; min-height: auto; }
+.cal-date { font-weight: 600; color: #34495e; }
+.cal-weekend { background: #f8fbff; }
+.cal-empty { background: #fafafa; }
+.avail-grid { display: grid; gap: 6px; }
+.avail-row { display: grid; grid-template-columns: 1.2fr repeat(4, 1fr) 0.8fr; gap: 6px; align-items:center; }
+.avail-cell { border: 1px solid #e9ecef; border-radius: 6px; padding: 6px; background:#fff; text-align:center; }
+.avail-head .avail-cell { background:#343a40; color:#fff; font-weight:600; }
+.avail-btn { width: 100%; padding: 6px 8px; border: 1px solid #ddd; border-radius:6px; cursor:pointer; background:#f8f9fa; }
+.avail-btn.state-yes { background:#e6ffed; border-color:#b7f5c2; }
+.avail-btn.state-prefer { background:#fff9e6; border-color:#ffe49c; }
+.avail-btn.state-no { background:#ffe6e6; border-color:#ffb3b3; }
+.avail-btn.state-unset { background:#f8f9fa; color:#888; }
+.tab-nav {
+    margin-bottom: 20px;
+}
+
+.tab-button {
+    padding: 10px 20px;
+    border: none;
+    background: #f0f0f0;
+    cursor: pointer;
+}
+
+.tab-button.active {
+    background: #007bff;
+    color: white;
+}
+
+/* Modular fallback only: hide/show contents injected after .tab-nav */
+.tab-nav ~ .tab-content {
+    display: none;
+}
+
+.tab-nav ~ .tab-content.active {
+    display: block;
+}

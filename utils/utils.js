@@ -1,5 +1,5 @@
-import { state } from '../state.js';
-import { ROLE_TYPES } from '../types.js';
+import { appState } from '../modules/state.js';  // Fixed relative path from utils/
+import { ROLE_TYPES } from './types.js';
 
 /**
  * Test data generation utilities
@@ -16,25 +16,25 @@ export class TestDataGenerator {
     }
 
     static setupBasicState() {
-        state.reset();
-        state.staffData = [
+        appState.reset();  // Using new name
+        appState.staffData = [
             this.createStaff('P1', ROLE_TYPES.PERMANENT),
             this.createStaff('S1', ROLE_TYPES.STUDENT),
             this.createStaff('M1', ROLE_TYPES.MINIJOB)
         ];
-        return state;
+        return appState;  // Using new name
     }
 
     static addAvailability(staffId, date, shifts, preference = 'yes') {
-        if (!state.availabilityData[staffId]) {
-            state.availabilityData[staffId] = {};
+        if (!appState.availabilityData[staffId]) {  // Changed
+            appState.availabilityData[staffId] = {};  // Changed
         }
-        if (!state.availabilityData[staffId][date]) {
-            state.availabilityData[staffId][date] = {};
+        if (!appState.availabilityData[staffId][date]) {  // Changed
+            appState.availabilityData[staffId][date] = {};  // Changed
         }
         
         shifts.forEach(shift => {
-            state.availabilityData[staffId][date][shift] = preference;
+            appState.availabilityData[staffId][date][shift] = preference;  // Changed
         });
     }
 }

@@ -1,4 +1,4 @@
-import { SchedulingEngine } from '../scheduler.js';
+import { SchedulingEngine } from './scheduler.js';  // Changed from '../scheduler.js'
 import { TestDataGenerator, TestAssertions } from './utils.js';
 
 async function runTests() {
