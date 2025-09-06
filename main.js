@@ -9,13 +9,16 @@ import { OvertimeRequestsUI } from './ui/overtimeRequests.js';
 // Initialize application when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     appState.load();
-    // Seed demo data if empty
-    if (!Array.isArray(appState.staffData) || appState.staffData.length === 0) {
+    // Seed demo data only once (if never seeded and no staff exist). Persist flag after first seed or after first manual modification.
+    const DEMO_FLAG_KEY = 'demoSeeded';
+    const demoFlag = (typeof localStorage !== 'undefined') ? localStorage.getItem(DEMO_FLAG_KEY) : null;
+    if ((!Array.isArray(appState.staffData) || appState.staffData.length === 0) && !demoFlag) {
         appState.staffData = [
             { id: 1, name: 'Anna', role: 'minijob', contractHours: 10, typicalWorkdays: 3 },
             { id: 2, name: 'Ben', role: 'student', contractHours: 20, typicalWorkdays: 4 },
             { id: 3, name: 'Clara', role: 'permanent', contractHours: 35, typicalWorkdays: 5 }
         ];
+        try { localStorage.setItem(DEMO_FLAG_KEY, '1'); } catch {}
         appState.save();
     }
 

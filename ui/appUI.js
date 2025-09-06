@@ -305,8 +305,65 @@ export class AppUI {
     host.querySelectorAll('button[data-action="remove"]').forEach(btn=>{
       btn.addEventListener('click', (e)=>{
         const id = Number(e.currentTarget.dataset.id);
+        const staff = appState.staffData.find(x=>x.id===id);
+        if (!staff) return;
+        const name = staff.name || id;
+        const confirmed = window.confirm(`Mitarbeiter "${name}" wirklich löschen?\nDiese Aktion kann nicht rückgängig gemacht werden.`);
+        if (!confirmed) return;
         const idx = appState.staffData.findIndex(x=>x.id===id);
-        if (idx>=0){ appState.staffData.splice(idx,1); appState.save(); this.renderStaffList(); this.populateAvailabilitySelectors(); }
+        if (idx>=0){
+          appState.staffData.splice(idx,1);
+          // Deep cleanup of associated data
+          try {
+            // Availability
+            if (appState.availabilityData && appState.availabilityData[id]) delete appState.availabilityData[id];
+            // Vacations / Illness
+            if (appState.vacationsByStaff && appState.vacationsByStaff[id]) delete appState.vacationsByStaff[id];
+            if (appState.illnessByStaff && appState.illnessByStaff[id]) delete appState.illnessByStaff[id];
+            // Carryover / month caches
+            if (appState.carryoverByStaffAndMonth){ Object.keys(appState.carryoverByStaffAndMonth).forEach(k=>{ if (k.startsWith(id+':')) delete appState.carryoverByStaffAndMonth[k]; }); }
+            if (appState.monthHoursCache){ Object.keys(appState.monthHoursCache).forEach(k=>{ if (k.startsWith(id+':')) delete appState.monthHoursCache[k]; }); }
+            // Overtime consent / credits / requests
+            if (appState.permanentOvertimeConsent){ Object.keys(appState.permanentOvertimeConsent).forEach(year=>{ const y = appState.permanentOvertimeConsent[year]; if (y && y[id]) delete y[id]; }); }
+            if (appState.overtimeCredits){ Object.keys(appState.overtimeCredits).forEach(monthKey=>{ const rec = appState.overtimeCredits[monthKey]; if (rec && rec[id]) delete rec[id]; }); }
+            if (appState.overtimeRequests){ Object.keys(appState.overtimeRequests).forEach(reqId=>{ const r = appState.overtimeRequests[reqId]; if (r && String(r.staffId)===String(id)) delete appState.overtimeRequests[reqId]; }); }
+            // Voluntary evening availability keys
+            if (appState.voluntaryEveningAvailability){ Object.keys(appState.voluntaryEveningAvailability).forEach(k=>{ if (k.startsWith(id+"::")) delete appState.voluntaryEveningAvailability[k]; }); }
+            // Weekend assignment tracking
+            if (appState.weekendAssignments){ Object.keys(appState.weekendAssignments).forEach(k=>{ if (k.startsWith(id+':')) delete appState.weekendAssignments[k]; }); }
+            // Student weekday daytime tracker
+            if (appState.studentWeekdayDaytimeShifts){ Object.keys(appState.studentWeekdayDaytimeShifts).forEach(k=>{ if (k.startsWith(id+':')) delete appState.studentWeekdayDaytimeShifts[k]; }); }
+            // Vacation ledger entries
+            if (appState.vacationLedger){ Object.keys(appState.vacationLedger).forEach(yearKey=>{ const yrec = appState.vacationLedger[yearKey]; if (yrec && yrec[id]) delete yrec[id]; }); }
+            // Schedule assignments (remove staff from any day)
+            if (appState.scheduleData){
+              Object.values(appState.scheduleData).forEach(monthObj=>{
+                if (!monthObj || !monthObj.data) return;
+                Object.values(monthObj.data).forEach(dayObj=>{
+                  if (!dayObj || !dayObj.assignments) return;
+                  Object.keys(dayObj.assignments).forEach(shiftKey=>{
+                    if (String(dayObj.assignments[shiftKey])===String(id)) delete dayObj.assignments[shiftKey];
+                  });
+                });
+              });
+            }
+            // Audit log entry
+            try { if (!Array.isArray(appState.auditLog)) appState.auditLog = []; appState.auditLog.push({ timestamp: Date.now(), message: `Mitarbeiter gelöscht: ${name} (ID ${id})` }); } catch {}
+          } catch (err){ console.warn('Cleanup after staff deletion fehlgeschlagen', err); }
+          appState.save();
+          // Re-render UI sections impacted
+            this.renderStaffList();
+            this.populateAvailabilitySelectors();
+            if (this.renderVacationList) this.renderVacationList();
+            if (this.renderVacationSummaryTable) this.renderVacationSummaryTable();
+            if (this.renderIllnessList) this.renderIllnessList();
+            if (this.renderAuditLog) this.renderAuditLog();
+            if (this.renderOvertimeRequestsTable) this.renderOvertimeRequestsTable();
+            // Reports tables
+            if (this.renderMonthlyHoursTable) this.renderMonthlyHoursTable();
+            if (this.renderFairnessTables) this.renderFairnessTables();
+            if (this.renderOvertimeCreditsTable) this.renderOvertimeCreditsTable();
+        }
       });
     });
     // Weekend preference toggles
