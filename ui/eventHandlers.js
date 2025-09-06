@@ -74,6 +74,7 @@ export class EventHandler {
         // Apply validated schedule
         appState.scheduleData[month] = validated;
         appState.save();
+    try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
         
         this.ui.refreshDisplay();
         this.closeModal('swapModal');
@@ -91,6 +92,7 @@ export class EventHandler {
             // Persist without calling schedule.save() (which references saveData)
             appState.scheduleData[month] = schedule.data;
             appState.save();
+            try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
             // Re-render calendar and assignments
             if (typeof this.ui.updateCalendarFromSelect === 'function') {
                 this.ui.updateCalendarFromSelect();
@@ -124,23 +126,58 @@ export class EventHandler {
         const shiftKey = modal.dataset.shift;
         const newStaffId = parseInt(document.getElementById('swapStaffSelect').value);
         if (!dateStr || !shiftKey || !newStaffId){ alert('Ungültige Auswahl'); return; }
+        // If weekend + permanent without preference and no regular candidates can fill, auto-create overtime request
+        try{
+            const date = new Date(dateStr);
+            const isWeekend = [0,6].includes(date.getDay());
+            const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==newStaffId);
+            if (isWeekend && staff?.role==='permanent' && !staff?.weekendPreference){
+                const month = dateStr.substring(0,7);
+                // Recompute candidates without including permanents to check fillability
+                const engine = new SchedulingEngine(month);
+                const weekNum = engine.getWeekNumber(date);
+                const scheduledToday = new Set(Object.values(window.DEBUG?.state?.scheduleData?.[month]?.[dateStr]?.assignments||{}));
+                const cands = engine.findCandidatesForShift(dateStr, shiftKey, scheduledToday, weekNum)
+                    .filter(c => c.staff.role !== 'permanent');
+                const canBeFilledByRegular = cands.some(c => c.score > -999); // heuristic: any candidate
+                if (!canBeFilledByRegular){
+                    if (!appState.overtimeRequests[month]) appState.overtimeRequests[month] = {};
+                    if (!Array.isArray(appState.overtimeRequests[month][dateStr])) appState.overtimeRequests[month][dateStr] = [];
+                    // Avoid duplicate requests
+                    const exists = appState.overtimeRequests[month][dateStr].some(r => r.staffId===newStaffId && r.shiftKey===shiftKey && r.status==='requested');
+                    if (!exists){
+                        appState.overtimeRequests[month][dateStr].push({ staffId: newStaffId, shiftKey, status: 'requested', reason: 'Unbesetzbare Schicht' });
+                        try{
+                            if (!Array.isArray(appState.auditLog)) appState.auditLog = [];
+                            const staffName = (appState.staffData||[]).find(s=>String(s.id)===String(newStaffId))?.name || String(newStaffId);
+                            const shiftName = (window.SHIFTS?.[shiftKey]?.name || shiftKey);
+                            appState.auditLog.push({ timestamp: Date.now(), message: `Überstunden-Anfrage erstellt: ${staffName} – ${dateStr} (${shiftName})` });
+                        }catch{}
+                        appState.save();
+                        alert('Überstunden-Anfrage erstellt. Bitte im Anfragen-Panel bestätigen.');
+                    }
+                    return; // Do not assign until consent
+                }
+            }
+        }catch(e){ console.warn('Auto-request check failed', e); }
         const month = dateStr.substring(0,7);
         const schedule = appState.scheduleData[month] || (appState.scheduleData[month] = {});
         if (!schedule[dateStr]) schedule[dateStr] = { assignments: {} };
         const original = { ...schedule[dateStr].assignments };
         schedule[dateStr].assignments[shiftKey] = newStaffId;
 
-        // Validate
+        // Validate (warnings allowed, only error-level blockers will prevent assignment)
         const validator = new ScheduleValidator(month);
-        const validated = validator.validateSchedule(schedule);
-        const hasBlocker = validated[dateStr]?.blockers?.[shiftKey];
+        const { schedule: consolidated } = validator.validateScheduleWithIssues(schedule);
+        const hasBlocker = consolidated[dateStr]?.blockers?.[shiftKey];
         if (hasBlocker){
             schedule[dateStr].assignments = original;
             alert(`Zuweisung nicht möglich: ${hasBlocker}`);
             return;
         }
-        appState.scheduleData[month] = validated;
+        appState.scheduleData[month] = consolidated;
         appState.save();
+    try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
         this.ui.updateCalendarFromSelect?.();
         modal.style.display = 'none';
     }

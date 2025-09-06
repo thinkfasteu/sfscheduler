@@ -13,6 +13,9 @@
                 <h1>Dienstplan-System Pro</h1>
                 <p>Schichtplanung</p>
             </div>
+            <div class="header-actions">
+                <button id="themeToggle" class="btn btn-secondary" title="Dark Mode umschalten">🌙 Dark Mode</button>
+            </div>
         </div>
 
         <div class="tabs">
@@ -20,6 +23,8 @@
             <button class="tab" onclick="showTab(event, 'availability')">Verfügbarkeiten</button>
             <button class="tab" onclick="showTab(event, 'schedule')">Dienstplan</button>
             <button class="tab" onclick="showTab(event, 'vacation')">Urlaub</button>
+            <button class="tab" onclick="showTab(event, 'reports')">Berichte</button>
+            <button class="tab" onclick="showTab(event, 'logs')">Protokolle</button>
         </div>
 
         <div class="tab-content">
@@ -27,6 +32,7 @@
                 <h2>Personalverwaltung</h2>
                 <div class="form-group staff-card">
                     <h3 id="staffFormTitle">Neue Arbeitskraft hinzufügen</h3>
+                    <input type="hidden" id="staffIdToEdit" />
                     <div class="form-row">
                         <input type="text" id="staffName" placeholder="Name" />
                         <select id="staffType">
@@ -37,8 +43,38 @@
                         <input type="number" id="contractHours" placeholder="Std/Woche" />
                         <input type="number" id="typicalWorkdays" placeholder="Tage/Woche" />
                     </div>
+                    <div class="form-row" id="permanentPreferredRow" style="display:none;">
+                        <label>Bevorzugter Schichttyp (Festangestellte)</label>
+                        <select id="permanentPreferredShift">
+                            <option value="none">Keine Präferenz</option>
+                            <option value="early">Früh</option>
+                            <option value="midday">Mittel</option>
+                        </select>
+                    </div>
                     <div class="form-row">
-                        <button class="btn" onclick="addStaff()">Arbeitskraft speichern</button>
+                        <label style="display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" id="weekendPreference" />
+                            <span>Bevorzugt Wochenendschichten</span>
+                        </label>
+                    </div>
+                    <h4>Urlaubszeiträume</h4>
+                    <div class="form-row" style="align-items:flex-end; grid-template-columns: 1fr 1fr auto;">
+                        <div><label>Von</label><input type="date" id="staffVacationStart" /></div>
+                        <div><label>Bis</label><input type="date" id="staffVacationEnd" /></div>
+                        <button class="btn btn-secondary" onclick="addStaffVacationPeriod()">Urlaub hinzufügen</button>
+                    </div>
+                    <ul id="staffVacationList"></ul>
+
+                    <h4>Krankheitszeiträume</h4>
+                    <div class="form-row" style="align-items:flex-end; grid-template-columns: 1fr 1fr auto;">
+                        <div><label>Von</label><input type="date" id="staffIllnessStart" /></div>
+                        <div><label>Bis</label><input type="date" id="staffIllnessEnd" /></div>
+                        <button class="btn btn-secondary" onclick="addStaffIllnessPeriod()">Krankmeldung hinzufügen</button>
+                    </div>
+                    <ul id="staffIllnessList"></ul>
+                    <div class="form-row">
+                        <button id="saveStaffBtn" class="btn" onclick="addStaff()">Arbeitskraft speichern</button>
+                        <button id="cancelEditBtn" class="btn btn-secondary" style="display:none;" onclick="resetStaffForm()">Abbrechen</button>
                     </div>
                 </div>
                 <div id="staffList" class="form-row"></div>
@@ -62,18 +98,56 @@
 
             <div id="schedule-tab" class="section">
                 <h2>Dienstplan</h2>
-                <div class="controls form-row" style="align-items:center; grid-template-columns: 2fr 1fr 1fr 1fr 1fr;">
+                <div class="controls form-row" style="align-items:center; grid-template-columns: 2fr auto 1fr 1fr 1fr 1fr; gap:8px;">
                     <select id="scheduleMonth"></select>
+                    <label style="display:flex; gap:6px; align-items:center;">
+                        <input type="checkbox" id="studentExceptionCheckbox" />
+                        <span>Kurzfristige Ausnahme zulassen (Werkstudent)</span>
+                    </label>
                     <button class="btn btn-success" onclick="generateSchedule()">Dienstplan erstellen</button>
                     <button class="btn btn-danger" onclick="clearSchedule()">Plan löschen</button>
                     <button class="btn" onclick="exportSchedule()">Export CSV</button>
+                    <button class="btn" onclick="exportPDF()">PDF Export</button>
                     <button class="btn" onclick="printSchedule()">Drucken</button>
                 </div>
+                <div class="controls form-row" style="align-items:center; grid-template-columns: auto 1fr; margin-top:6px;">
+                    <label style="display:flex; gap:6px; align-items:center;">
+                        <input type="checkbox" id="studentFairnessCheckbox" />
+                        <span>Fairness-Modus: Gewünschte Arbeitstage respektieren (Werkstudenten)</span>
+                    </label>
+                </div>
                 <div id="scheduleContent" style="overflow-x:auto;"></div>
+                <div id="weekendReport" style="margin-top:16px;"></div>
+                <div class="staff-card" style="margin-top:16px;">
+                    <h3>Wochenend-Überstunden Anfragen</h3>
+                    <p style="color:#6c757d;">Anfragen für Wochenendschichten von Festangestellten (nur bei unbesetzbaren Schichten)</p>
+                    <div id="overtimeRequestsList"></div>
+                </div>
             </div>
 
             <div id="vacation-tab" class="section">
                 <h2>Urlaub</h2>
+                <div class="form-row" style="align-items:center; grid-template-columns: auto 1fr; margin-bottom:8px;">
+                    <label>Jahr</label>
+                    <select id="vacationYearSelect"></select>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="width:100%; border-collapse: collapse;">
+                        <thead>
+                            <tr>
+                                <th style="text-align:left;">Mitarbeiter</th>
+                                <th>Urlaubsanspruch</th>
+                                <th>Urlaub genommen (manuell)</th>
+                                <th>Übertrag (Vorjahr)</th>
+                                <th>Urlaub geplant</th>
+                                <th>Urlaub verbleibend</th>
+                                <th>Krank gemeldet (Jahr)</th>
+                                <th>Aktion</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vacationLedgerTable"></tbody>
+                    </table>
+                </div>
                 <div class="form-row" style="align-items:flex-end; grid-template-columns: 1fr 1fr 1fr 1fr;">
                     <div>
                         <label>Mitarbeiter</label>
@@ -84,10 +158,112 @@
                     <button class="btn btn-secondary" onclick="addVacationPeriod()">Urlaub hinzufügen</button>
                 </div>
                 <ul id="vacationList"></ul>
+
+                <hr style="margin:16px 0;"/>
+                <h3>Weitere Mitarbeitende (nur Urlaube)</h3>
+                <div class="form-group staff-card">
+                    <div class="form-row" style="grid-template-columns: 1fr auto; align-items:end;">
+                        <div>
+                            <label>Name</label>
+                            <input type="text" id="otherStaffName" placeholder="Name" />
+                        </div>
+                        <button class="btn" onclick="addOtherStaff()">Mitarbeitende speichern</button>
+                    </div>
+                    <h4>Urlaubszeiträume</h4>
+                    <div class="form-row" style="grid-template-columns: 1fr 1fr auto; align-items:end;">
+                        <div>
+                            <label>Von</label>
+                            <input type="date" id="otherVacationStart" />
+                        </div>
+                        <div>
+                            <label>Bis</label>
+                            <input type="date" id="otherVacationEnd" />
+                        </div>
+                        <button class="btn btn-secondary" onclick="addOtherVacationPeriod()">Urlaub hinzufügen</button>
+                    </div>
+                    <ul id="otherVacationList"></ul>
+                </div>
+                <div id="otherStaffList" class="form-row"></div>
+            </div>
+
+            <div id="reports-tab" class="section">
+                <h2>Berichte</h2>
+                <div class="controls form-row" style="align-items:center; grid-template-columns: auto 1fr; gap:8px;">
+                    <label>Monat</label>
+                    <select id="reportsMonth"></select>
+                </div>
+                <div style="margin-top:12px;">
+                    <h3>Stundenübersicht für <span id="hoursReportMonthLabel"></span></h3>
+                    <div style="overflow-x:auto;">
+                        <table class="table" style="width:100%; border-collapse:collapse;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left;">Mitarbeiter</th>
+                                    <th>Typ</th>
+                                    <th>Stunden</th>
+                                    <th>Überstunden</th>
+                                    <th>Verdienst (ca.)</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monthlyHoursReport"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div style="margin-top:18px;">
+                    <h3>Werkstudent Wochenübersicht</h3>
+                    <div style="overflow-x:auto;">
+                        <table class="table" style="width:100%; border-collapse:collapse;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left;">Name</th>
+                                    <th>KW</th>
+                                    <th>Stunden</th>
+                                    <th>WE/Nacht-Anteil %</th>
+                                    <th>Ausnahme (WS)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="studentWeeklyReport"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div style="margin-top:18px;">
+                    <h3>Überstunden (Festangestellte) – <span id="otReportMonthLabel"></span></h3>
+                    <div style="overflow-x:auto;">
+                        <table class="table" style="width:100%; border-collapse:collapse;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left;">Name</th>
+                                    <th>KW</th>
+                                    <th>Überstunden (h)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="overtimeCreditsReport"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="logs-tab" class="section">
+                <h2>Änderungsprotokoll</h2>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="width:100%; border-collapse:collapse;">
+                        <thead>
+                            <tr>
+                                <th style="text-align:left;">Zeitstempel</th>
+                                <th>Aktion</th>
+                            </tr>
+                        </thead>
+                        <tbody id="auditLogTable"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
 </body>
+<!-- PDF export libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <!-- Holidays Modal -->
 <div id="holidaysModal" class="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:1000;">
     <div class="modal-content" style="background:#fff; width: 600px; max-width: 90vw; margin: 10vh auto; padding: 16px; border-radius: 8px;">
@@ -115,6 +291,19 @@
             </div>
         </div>
         <ul id="holidaysList" style="margin-top:12px;"></ul>
+        <hr/>
+        <div>
+            <h4>Vorlesungszeiten (ICS)</h4>
+            <p>Optional: URL eines ICS-Kalenders mit Vorlesungs- und vorlesungsfreien Zeiten.</p>
+            <div class="form-row" style="grid-template-columns: 1fr auto; align-items: end;">
+                <input type="url" id="icsUrlInput" placeholder="https://…/academic.ics" />
+                <button class="btn" onclick="addIcsSource()">Hinzufügen</button>
+            </div>
+            <ul id="icsSourcesList" style="margin-top:8px;"></ul>
+            <div style="margin-top:8px;">
+                <button class="btn btn-secondary" onclick="refreshAcademicTerms()">Vorlesungszeiten laden/aktualisieren</button>
+            </div>
+        </div>
     </div>
 </div>
 </div>
@@ -137,12 +326,74 @@
                 <label>Kandidaten</label>
                 <select id="swapStaffSelect"></select>
                 <div id="candidateNotes" style="margin-top:8px; font-size:0.9em; color:#677684;"></div>
+                        <div id="includePermanentsRow" style="display:none; margin-top:8px;">
+                            <label style="display:flex; gap:8px; align-items:center;">
+                                <input type="checkbox" id="includePermanentsCheckbox" />
+                                <span>Auch Festangestellte für Wochenendschichten berücksichtigen</span>
+                            </label>
+                        </div>
+                <div id="consentRow" style="display:none; margin-top:8px;">
+                    <label style="display:flex; gap:8px; align-items:center;">
+                        <input type="checkbox" id="consentCheckbox" />
+                        <span id="consentLabel">Zustimmung für diesen Tag anfragen</span>
+                    </label>
+                    <div id="consentHint" style="margin-top:4px; font-size:0.85em; color:#8a97a6; display:none;">
+                        Bei Zustimmung werden diese Wochenendstunden als Überstunden gezählt (außerhalb des Wochenziels).
+                    </div>
+                </div>
             </div>
         </div>
         <div style="margin-top:14px; display:flex; gap:8px; justify-content:flex-end;">
+            <button id="executeSwapBtn" class="btn btn-secondary">Wechseln</button>
             <button id="executeAssignBtn" class="btn btn-success">Zuweisen</button>
+        </div>
+        <div id="assignHint" style="margin-top:8px; font-size:0.85em; color:#677684;">
+            Hinweis: Es werden nur für den Tag zulässige Schichten angeboten (Wochenende/Feiertag/werktags). Zuweisungen werden automatisch validiert.
         </div>
     </div>
 </div>
 </html>
 </html>
+<!-- Search & Assign Modal -->
+<div id="searchModal" class="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:1000;">
+    <div class="modal-content" style="background:#fff; width: 740px; max-width: 95vw; margin: 8vh auto; padding: 16px; border-radius: 8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 id="searchTitle">Suchen & Zuweisen</h3>
+            <button class="btn btn-secondary" onclick="document.getElementById('searchModal').style.display='none'">Schließen</button>
+        </div>
+        <div id="searchDetail" style="margin:8px 0 12px 0;"></div>
+        <div class="form-row" style="grid-template-columns: 1fr 1fr; align-items:start;">
+            <div>
+                <label>Schicht</label>
+                <select id="searchShiftSelect"></select>
+            </div>
+            <div>
+                <label>Mitarbeiter</label>
+                <input type="text" id="searchFilterInput" placeholder="Suchen (Name, Rolle)" />
+                <select id="searchStaffSelect" style="margin-top:6px;"></select>
+                <div id="searchCandidateNotes" style="margin-top:8px; font-size:0.9em; color:#677684;"></div>
+                <div id="searchIncludePermanentsRow" style="display:none; margin-top:8px;">
+                    <label style="display:flex; gap:8px; align-items:center;">
+                        <input type="checkbox" id="searchIncludePermanentsCheckbox" />
+                        <span>Auch Festangestellte für Wochenendschichten berücksichtigen</span>
+                    </label>
+                </div>
+                <div id="searchConsentRow" style="display:none; margin-top:8px;">
+                    <label style="display:flex; gap:8px; align-items:center;">
+                        <input type="checkbox" id="searchConsentCheckbox" />
+                        <span id="searchConsentLabel">Zustimmung für diesen Tag anfragen</span>
+                    </label>
+                    <div id="searchConsentHint" style="margin-top:4px; font-size:0.85em; color:#8a97a6; display:none;">
+                        Bei Zustimmung werden diese Wochenendstunden als Überstunden gezählt (außerhalb des Wochenziels).
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div style="margin-top:14px; display:flex; gap:8px; justify-content:flex-end;">
+            <button id="executeSearchAssignBtn" class="btn btn-success">Zuweisen</button>
+        </div>
+        <div style="margin-top:8px; font-size:0.85em; color:#677684;">
+            Hinweis: Kandidatenliste basiert auf Regeln und Verfügbarkeiten; Blocker werden als Hinweis angezeigt und verhindern die Zuweisung.
+        </div>
+    </div>
+</div>

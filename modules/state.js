@@ -30,13 +30,19 @@ export class AppState {
     this.vacationLedger = {};
     this.permanentOvertimeConsent = {};
     this.overtimeCredits = {};
+  this.overtimeRequests = {};
     this.voluntaryEveningAvailability = {};
     this.weekendAssignments = {};
     this.studentWeekdayDaytimeShifts = {};
     this.studentExceptionWeeks = {};
     this.academicTermCache = {};
+  this.academicTermSources = [];
+  this.studentExceptionMonths = {};
+  this.studentFairnessMode = false;
   // New per-staff vacations
   this.vacationsByStaff = {};
+  // New per-staff illness periods
+  this.illnessByStaff = {};
   }
 
   reset() {
@@ -55,6 +61,10 @@ export class AppState {
           this[key] = JSON.parse(stored);
         }
       });
+  // Run light migrations after load (idempotent)
+  try { this.migrateVoluntaryEveningKeys(); } catch {}
+  // Persist if anything changed
+  try { this.save(true); } catch {}
     }
   }
 
@@ -80,6 +90,28 @@ export class AppState {
   set(key, value) {
     this[key] = value;
     this.save();
+  }
+
+  // Migrations
+  migrateVoluntaryEveningKeys(){
+    const map = this.voluntaryEveningAvailability || {};
+    let changed = false;
+    Object.keys({ ...map }).forEach(k => {
+      // Legacy format: staffId::YYYY-MM-DD (no ::evening/::closing suffix)
+      if (!k.includes('::evening') && !k.includes('::closing')){
+        const parts = k.split('::');
+        if (parts.length === 2){
+          const [staffId, dateStr] = parts;
+          const evenKey = `${staffId}::${dateStr}::evening`;
+          const closeKey = `${staffId}::${dateStr}::closing`;
+          if (!map[evenKey]) { map[evenKey] = true; changed = true; }
+          if (!map[closeKey]) { map[closeKey] = true; changed = true; }
+          delete map[k];
+          changed = true;
+        }
+      }
+    });
+    if (changed) this.voluntaryEveningAvailability = map;
   }
 }
 

@@ -4,6 +4,7 @@ import { ScheduleUI } from './ui/scheduleUI.js';  // Updated path
 import { EventHandler } from './ui/eventHandlers.js';  // Updated path
 import { APP_CONFIG, SHIFTS } from './modules/config.js';
 import { AppUI } from './ui/appUI.js';
+import { OvertimeRequestsUI } from './ui/overtimeRequests.js';
 
 // Initialize application when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
@@ -56,9 +57,33 @@ document.addEventListener('DOMContentLoaded', () => {
     // App UI for staff/availability/vacation
     const appUI = new AppUI(scheduleUI);
     appUI.init();
+    // Overtime Requests panel
+    const overtimeUI = new OvertimeRequestsUI('#overtimeRequestsList');
+    overtimeUI.render();
+    // Re-render requests list on simple schedule updates
+    const _save = appState.save.bind(appState);
+    appState.save = function(){ _save(); try{ overtimeUI.render(); }catch{} };
     // Expose to prototype compatibility shim
     window.handlers = eventHandler;
     window.appUI = appUI;
+
+    // Theme toggle
+    try {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+        const btn = document.getElementById('themeToggle');
+        if (btn) {
+            btn.addEventListener('click', () => {
+                const cur = document.documentElement.getAttribute('data-theme') || '';
+                const next = cur === 'dark' ? '' : 'dark';
+                if (next) document.documentElement.setAttribute('data-theme', next); else document.documentElement.removeAttribute('data-theme');
+                localStorage.setItem('theme', next);
+                btn.textContent = next === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+            });
+            const isDark = (document.documentElement.getAttribute('data-theme') === 'dark');
+            btn.textContent = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+        }
+    } catch {}
 });
 
 // Handle cleanup on page unload

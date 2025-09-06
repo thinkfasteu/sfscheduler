@@ -1,7 +1,11 @@
 export const APP_CONFIG = {
-    CRITICAL_SHIFTS: ['early', 'midday', 'closing'],
+    // Dynamic critical shifts: scheduler now treats ALL shifts as critical except 'evening' on EVENING_OPTIONAL_DAYS
+    // (CRITICAL_SHIFTS deprecated)
     EVENING_OPTIONAL_DAYS: [2, 4],
     NON_WEEKDAY_SHIFTS_CRITICAL: true,
+    OPTIONAL_SHIFT_MIN_SCORE: 0,
+    // Bonus for permanent staff when assigned to their preferred weekday shift
+    PERMANENT_PREFERRED_SHIFT_BONUS: 60,
     // Defaults for tolerances and precision used across engine/validator
     DEFAULT_WEEK_TOLERANCE: 4,
     DEFAULT_MONTH_TOLERANCE: 4,
@@ -23,6 +27,9 @@ export const APP_CONFIG = {
     STUDENT_WEEKEND_BONUS: 60,
     STUDENT_EVENING_BONUS: 80,
     STUDENT_WEEKDAY_DAYTIME_PENALTY_PREF: -50,
+    // Dynamic weekly caps for students (lecture vs. break); validator will pick based on academic terms
+    STUDENT_MAX_WEEKLY_HOURS_LECTURE: 20,
+    STUDENT_MAX_WEEKLY_HOURS_BREAK: 40,
 
     // Fairness weights
     TYPICAL_DAYS_PENALTY: 200,
@@ -40,6 +47,19 @@ export const APP_CONFIG = {
     MINIJOB_MAX_EARNING: 556,
     MINIJOB_HOURLY_WAGE: 13.50,
 
+    // Holiday API settings
+    HOLIDAY_API_STATE: 'HE', // Hessen by default (used with Nager API counties: DE-HE)
+
+    // Permanent weekend consent and alternative weekend days (feature flags)
+    PERMANENT_WEEKEND_CONSENT_ENABLED: true, // require consent for permanent staff weekend work if not weekendPreference
+    ALTERNATIVE_WEEKEND_ENABLED: false,       // enable alternative weekday rest days for weekend-preferring permanent staff
+    ALTERNATIVE_WEEKEND_REQUIRES_CONSENT: true,
+    ALTERNATIVE_WEEKEND_PENALTY: 120,
+    // Penalize permanent staff auto-assigned to weekday evening shifts (rare exceptions)
+    PERMANENT_WEEKDAY_EVENING_PENALTY: 400,
+    // Bonus applied when a permanent explicitly volunteers for a weekday evening/closing shift (removes penalty above)
+    PERMANENT_EVENING_VOLUNTEER_BONUS: 60,
+
     // Academic term configuration used in scheduler
     ACADEMIC_TERM_CONFIG: {
         WINTER_START_MONTH: 10,
@@ -54,7 +74,28 @@ export const APP_CONFIG = {
         WINTER_LECTURE_END: { month: 2, day: 15 },
         SUMMER_LECTURE_START: { month: 4, day: 15 },
         SUMMER_LECTURE_END: { month: 7, day: 15 }
-    }
+    },
+    // Optional ICS sources (array of URLs). If empty, fallback config above is used. Users can paste one via UI.
+    ACADEMIC_TERM_ICS_SOURCES: []
+,
+    // --- Fairness extensions (emphasis on satisfaction over raw coverage) ---
+    // Target proportion (0-1) of evening + closing shifts to be staffed by students (Werkstudenten)
+    EVENING_CLOSING_STUDENT_TARGET_RATIO: 0.5,
+    // Bonus / penalty weights to steer distribution toward target ratio
+    EVENING_CLOSING_STUDENT_BONUS: 40,
+    EVENING_CLOSING_NON_STUDENT_PENALTY: 120,
+    // Personal soft cap for non-student closing shifts before large penalty
+    CLOSING_SHIFT_PERSONAL_CAP: 3,
+    CLOSING_SHIFT_EXCESS_PENALTY: 200,
+    // Penalty for assigning a non-student to consecutive closing shifts (fatigue / satisfaction)
+    CLOSING_SHIFT_CONSECUTIVE_PENALTY: 150,
+    // Whether fairness penalties can escalate to near-blocking scores
+    FAIRNESS_STRICT_MODE: true,
+    // Enable priority logic that biases evening/closing shifts toward students until ratio reached
+    STUDENT_EVENING_PRIORITY_ENABLED: true
+    ,
+    // Recovery pass configuration (manual gap fill)
+    RECOVERY_MIN_SCORE_FLOOR: -800 // lowest candidate score accepted in recovery fill
 };
 
 export const SHIFTS = {

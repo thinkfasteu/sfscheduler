@@ -2,6 +2,7 @@ import { APP_CONFIG, SHIFTS } from '../modules/config.js';
 import { appState } from '../modules/state.js';
 import { SchedulingEngine } from '../scheduler.js';
 import { ScheduleValidator } from '../validation.js';
+import { parseYMD } from '../utils/dateUtils.js';
 
 export class ScheduleUI {
     constructor(containerId) {
@@ -95,6 +96,21 @@ export class ScheduleUI {
         }
         // Re-render on change
         el.addEventListener('change', () => this.updateCalendarFromSelect());
+        // Hook student exception toggle
+        const exc = document.getElementById('studentExceptionCheckbox');
+        if (exc){
+            exc.addEventListener('change', ()=>{
+                const month = el.value;
+                if (!month) return;
+                appState.studentExceptionMonths[month] = !!exc.checked;
+                appState.save?.();
+            });
+        }
+        const fair = document.getElementById('studentFairnessCheckbox');
+        if (fair){
+            fair.checked = !!appState.studentFairnessMode;
+            fair.addEventListener('change', ()=>{ appState.studentFairnessMode = !!fair.checked; appState.save?.(); });
+        }
     }
 
     updateCalendarFromSelect() {
@@ -113,7 +129,13 @@ export class ScheduleUI {
         const startDay = (first.getDay() + 6) % 7; // Monday=0
         const daysInMonth = new Date(y, m, 0).getDate();
 
-        let html = '<div class="cal"><div class="cal-row cal-head">';
+        let html = '<div style="display:flex; justify-content: flex-end; flex-wrap:wrap; margin-bottom:8px; gap:8px;">'
+            + '<button class="btn btn-secondary" id="openSearchAssignBtn">Suchen & Zuweisen (Datum wählen)</button>'
+            + '<button class="btn btn-secondary" id="recoveryPreviewBtn" title="Offene kritische Schichten anzeigen">Lücken prüfen</button>'
+            + '<button class="btn btn-secondary" id="recoveryApplyBtn" style="display:none;" title="Versuchen kritische Lücken zu füllen (mit gelockerten Fairness-Penalties)">Lücken füllen</button>'
+            + '</div>'
+            + '<div id="recoveryReport" style="flex:1 0 100%; font-size:0.85em; line-height:1.3; margin-top:-4px;"></div>';
+        html += '<div class="cal"><div class="cal-row cal-head">';
         const wk = ['Mo','Di','Mi','Do','Fr','Sa','So'];
         wk.forEach(d => html += `<div class="cal-cell cal-head-cell">${d}</div>`);
         html += '</div>';
@@ -129,9 +151,10 @@ export class ScheduleUI {
                     const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                     const isWeekend = c >= 5;
                     const holName = window.DEBUG?.state?.holidays?.[String(y)]?.[dateStr] || null;
+                    const type = holName ? 'holiday' : (isWeekend ? 'weekend' : 'weekday');
                     html += `<div class="cal-cell ${isWeekend ? 'cal-weekend' : ''}">
                         <div class="cal-date">${day}${holName ? ` <span class=\"badge\">${holName}</span>` : ''}</div>
-                        <div class="cal-body" data-date="${dateStr}"></div>
+                        <div class="cal-body" data-date="${dateStr}" data-type="${type}"></div>
                     </div>`;
                     day++;
                 }
@@ -140,14 +163,103 @@ export class ScheduleUI {
         }
         html += '</div>';
         grid.innerHTML = html;
+        // Track a selected date for the search modal
+        let selectedDateForSearch = null;
+        const setSelectedDate = (dateStr) => { selectedDateForSearch = dateStr; };
+        // Open search modal button
+        document.getElementById('openSearchAssignBtn')?.addEventListener('click', ()=>{
+            const dateStr = selectedDateForSearch || document.querySelector('.cal-body[data-date]')?.getAttribute('data-date');
+            if (!dateStr){ alert('Bitte ein Datum im Kalender wählen.'); return; }
+            this.openSearchAssignModal(dateStr);
+        });
+        // Recovery preview button
+        const recoveryPreviewBtn = document.getElementById('recoveryPreviewBtn');
+        const recoveryApplyBtn = document.getElementById('recoveryApplyBtn');
+        const recoveryReport = document.getElementById('recoveryReport');
+        const monthKey = month;
+        const collectCriticalGaps = () => {
+            const sched = appState.scheduleData?.[monthKey] || {};
+            const gaps = [];
+            Object.entries(sched).forEach(([dateStr, day])=>{
+                const assignments = day?.assignments || {};
+                // Determine critical shifts for date (mirrors engine logic)
+                const allShifts = Object.entries(SHIFTS).filter(([k,v])=>{
+                    const d = parseYMD(dateStr).getDay();
+                    if (v.type==='weekday'){
+                        if (k==='evening' && (APP_CONFIG?.EVENING_OPTIONAL_DAYS||[]).includes(d)) return true; // still list it; critical decided below
+                        return true;
+                    }
+                    return v.type==='weekend' || v.type==='holiday';
+                }).map(([k])=>k);
+                allShifts.forEach(sh => {
+                    const d = parseYMD(dateStr).getDay();
+                    const isCritical = !(sh==='evening' && (APP_CONFIG?.EVENING_OPTIONAL_DAYS||[]).includes(d));
+                    if (!isCritical) return; // only critical gaps
+                    if (!assignments[sh]) gaps.push({ dateStr, shiftKey: sh });
+                });
+            });
+            return gaps.sort((a,b)=> a.dateStr.localeCompare(b.dateStr));
+        };
+        const dryRunRecovery = () => {
+            const gaps = collectCriticalGaps();
+            if (!gaps.length){ recoveryReport.innerHTML = '<em>Keine offenen kritischen Schichten.</em>'; recoveryApplyBtn.style.display='none'; return; }
+            const engine = new SchedulingEngine(monthKey);
+            const preview = [];
+            gaps.forEach(g => {
+                const weekNum = engine.getWeekNumber(parseYMD(g.dateStr));
+                const scheduledToday = new Set(Object.values(appState.scheduleData?.[monthKey]?.[g.dateStr]?.assignments||{}));
+                let cands = engine.findCandidatesForShift(g.dateStr, g.shiftKey, scheduledToday, weekNum);
+                // Relax fairness: neutralize weekend & typical day penalties by boosting negatives upward minimally
+                cands = cands.map(c => ({ ...c, adjScore: c.score < 0 ? Math.max(c.score, (APP_CONFIG?.RECOVERY_MIN_SCORE_FLOOR||-800)) : c.score }));
+                cands.sort((a,b)=> b.adjScore - a.adjScore);
+                const best = cands[0];
+                if (best && best.adjScore >= (APP_CONFIG?.RECOVERY_MIN_SCORE_FLOOR||-800)){
+                    preview.push({ ...g, staffId: best.staff.id, name: best.staff.name, score: best.score, adjScore: best.adjScore });
+                }
+            });
+            if (!preview.length){ recoveryReport.innerHTML = '<em>Keine geeigneten Kandidaten für offene kritische Schichten.</em>'; recoveryApplyBtn.style.display='none'; return; }
+            recoveryReport.innerHTML = '<strong>Vorschau Füllung:</strong><br/>' + preview.map(p=> `${p.dateStr} – ${p.shiftKey} → ${p.name} (Score ${Math.round(p.score)} / adj ${Math.round(p.adjScore)})`).join('<br/>');
+            recoveryApplyBtn.style.display='inline-block';
+            recoveryApplyBtn.dataset.preview = JSON.stringify(preview);
+        };
+        recoveryPreviewBtn?.addEventListener('click', dryRunRecovery);
+        recoveryApplyBtn?.addEventListener('click', ()=>{
+            const raw = recoveryApplyBtn.dataset.preview;
+            if (!raw) return;
+            let preview; try{ preview = JSON.parse(raw);}catch{ return; }
+            const sched = appState.scheduleData?.[monthKey] || (appState.scheduleData[monthKey] = {});
+            let applied=0;
+            preview.forEach(p => {
+                // Skip if already filled since preview
+                const day = sched[p.dateStr] || (sched[p.dateStr] = { assignments:{} });
+                if (day.assignments[p.shiftKey]) return;
+                // Business rule validation via validator (simulate assignment & check for blockers)
+                day.assignments[p.shiftKey] = p.staffId;
+                const validator = new ScheduleValidator(monthKey);
+                const { schedule: consolidated } = validator.validateScheduleWithIssues(sched);
+                const blocker = consolidated[p.dateStr]?.blockers?.[p.shiftKey];
+                if (blocker){
+                    // revert
+                    delete day.assignments[p.shiftKey];
+                } else {
+                    applied++; appState.scheduleData[monthKey] = consolidated;
+                }
+            });
+            appState.save?.();
+            recoveryReport.innerHTML += `<div style="margin-top:4px;"><strong>Angewendet:</strong> ${applied} Schichten gefüllt.</div>`;
+            recoveryApplyBtn.style.display='none';
+            this.updateCalendarFromSelect();
+        });
         // Click handlers
-        grid.querySelectorAll('.cal-body').forEach(cell => {
+    grid.querySelectorAll('.cal-body').forEach(cell => {
             cell.addEventListener('click', () => {
                 const dateStr = cell.getAttribute('data-date');
+        setSelectedDate(dateStr);
                 this.openAssignModal(dateStr);
             });
             cell.addEventListener('dblclick', () => {
                 const dateStr = cell.getAttribute('data-date');
+        setSelectedDate(dateStr);
                 // Prefer first unassigned shift for that date
                 const [yy,mm,dd] = dateStr.split('-').map(Number);
                 const date = new Date(yy, mm-1, dd);
@@ -165,25 +277,50 @@ export class ScheduleUI {
             });
         });
 
-        // After drawing the grid, render current assignments if any
+    // Sync checkboxes from state for this month
+    const exc = document.getElementById('studentExceptionCheckbox');
+    if (exc) exc.checked = !!appState.studentExceptionMonths?.[month];
+    const fair = document.getElementById('studentFairnessCheckbox');
+    if (fair) fair.checked = !!appState.studentFairnessMode;
+
+    // After drawing the grid, render current assignments if any
         this.renderAssignments(month);
+    // Render weekend distribution report
+    this.renderWeekendReport(month);
     }
     
 
     renderAssignments(month) {
         const data = window.DEBUG?.state?.scheduleData?.[month] || {};
-        Object.entries(data).forEach(([dateStr, day]) => {
-            const cell = document.querySelector(`.cal-body[data-date="${dateStr}"]`);
-            if (!cell) return;
-            const assignments = day.assignments || {};
-            cell.innerHTML = Object.entries(assignments).map(([shift, staffId]) => {
+        // For each day cell, show all shifts for its type and fill assignments if present, placeholders otherwise
+        document.querySelectorAll('.cal-body[data-date]').forEach(cell => {
+            const dateStr = cell.getAttribute('data-date');
+            const type = cell.getAttribute('data-type');
+            // Find which shifts apply
+            const shifts = Object.entries(SHIFTS)
+                .filter(([_, v]) => v.type === type)
+                .map(([k]) => k);
+            const assignments = data[dateStr]?.assignments || {};
+            const html = shifts.map(shift => {
+                const staffId = assignments[shift];
                 const shiftMeta = (window.SHIFTS||{})[shift] || {};
-                const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==staffId);
-                const title = `${shiftMeta.name||shift} ${shiftMeta.time?`(${shiftMeta.time})`:''} - ${staff?.name||staffId}`;
-                return `<div class="staff-assignment" title="${title}" data-date="${dateStr}" data-shift="${shift}"><span class="badge">${shift}</span> ${staffId}</div>`;
+                if (staffId) {
+                    const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==staffId);
+                    const name = staff?.name || staffId;
+                    const title = `${shiftMeta.name||shift} ${shiftMeta.time?`(${shiftMeta.time})`:''} - ${name}`;
+                    return `<div class="staff-assignment" title="${title}" data-date="${dateStr}" data-shift="${shift}">
+                        <span class="badge">${shift}</span>
+                        <span class="assignee-name">${name}</span>
+                        <button class="btn btn-secondary btn-sm swap-btn" data-date="${dateStr}" data-shift="${shift}" style="margin-left:6px;">Wechseln</button>
+                    </div>`;
+                }
+                // Unassigned placeholder keeps the slot visible and clickable
+                const title = `${shiftMeta.name||shift} ${shiftMeta.time?`(${shiftMeta.time})`:''} - nicht zugewiesen`;
+                return `<div class="staff-assignment unassigned" title="${title}" data-date="${dateStr}" data-shift="${shift}"><span class="badge">${shift}</span> —</div>`;
             }).join('');
+            cell.innerHTML = html;
         });
-        // Enable pill-click to open modal with preselected shift
+        // Enable pill-click to open modal with preselected shift (assigned or unassigned)
         document.querySelectorAll('.staff-assignment[data-date]').forEach(pill => {
             pill.addEventListener('click', (e)=>{
                 e.stopPropagation();
@@ -192,6 +329,65 @@ export class ScheduleUI {
                 this.openAssignModal(dateStr, shiftKey);
             });
         });
+        // Bind direct 'Wechseln' buttons
+        document.querySelectorAll('.swap-btn[data-date]').forEach(btn => {
+            btn.addEventListener('click', (e)=>{
+                e.stopPropagation();
+                const dateStr = btn.getAttribute('data-date');
+                const shiftKey = btn.getAttribute('data-shift');
+                this.openAssignModal(dateStr, shiftKey);
+            });
+        });
+    }
+
+    renderWeekendReport(month){
+        const host = document.getElementById('weekendReport');
+        if (!host) return;
+        const data = window.DEBUG?.state?.scheduleData?.[month] || {};
+        const [y, m] = month.split('-').map(Number);
+        // Count weekends in month
+        const daysInMonth = new Date(y, m, 0).getDate();
+        let weekendDays = new Set();
+        for (let d=1; d<=daysInMonth; d++){
+            const ds = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const dow = parseYMD(ds).getDay();
+            if (dow===0 || dow===6) weekendDays.add(ds);
+        }
+        const weekendCount = Math.ceil(weekendDays.size/2); // approx weekends in month
+        // Aggregate assignments by staff on weekend dates
+        const counts = {};
+        Array.from(weekendDays).forEach(ds => {
+            const assigns = data[ds]?.assignments || {};
+            Object.values(assigns).forEach(staffId => {
+                counts[staffId] = (counts[staffId]||0)+1;
+            });
+        });
+        const staffList = (window.DEBUG?.state?.staffData||[]);
+        const lines = staffList.map(s => {
+            const isPerm = s.role==='permanent';
+            const c = Math.floor((counts[s.id]||0)/2); // per-weekend count approx
+            const emoji = isPerm ? '🔹' : (c>=1 ? '✅' : '⚠️');
+            const suffix = isPerm ? 'Festangestellt (keine Anforderungen)' : '';
+            return `${emoji} ${s.name}\n${c}/${weekendCount} Wochenenden\n${suffix}`;
+        });
+        // Other staff vacations overlapping month
+        const others = (window.DEBUG?.state?.otherStaffData||[]);
+        const mm = Number(m);
+        const overlaps = [];
+        others.forEach(os => {
+            (os.vacations||[]).forEach(p => {
+                const s = parseYMD(p.start); const e = parseYMD(p.end);
+                if (!s || !e) return;
+                const startInMonth = (s.getFullYear()===y && (s.getMonth()+1)===mm);
+                const endInMonth = (e.getFullYear()===y && (e.getMonth()+1)===mm);
+                const spansMonth = s <= new Date(y, mm-1, 31) && e >= new Date(y, mm-1, 1);
+                if (spansMonth || startInMonth || endInMonth){
+                    overlaps.push(`${os.name}: ${p.start} – ${p.end}`);
+                }
+            });
+        });
+        const otherInfo = overlaps.length ? `\n\nWeitere Mitarbeitende (Urlaub):\n- ${overlaps.join('\n- ')}` : '';
+        host.innerHTML = `<div><strong>Wochenend-Verteilung für ${month}</strong><br/>Gesamt: ${weekendCount} Wochenenden im Monat</div><pre style="margin-top:8px; white-space:pre-wrap;">${lines.join('\n\n')}${otherInfo}</pre>`;
     }
 
     openAssignModal(dateStr, presetShift){
@@ -199,7 +395,7 @@ export class ScheduleUI {
         if (!modal) return;
         // Build shift list for that date based on SHIFTS and holiday/weekend detection
         const [y,m,d] = dateStr.split('-').map(Number);
-        const date = new Date(y, m-1, d);
+    const date = new Date(y, m-1, d);
         const isWeekend = [0,6].includes(date.getDay());
         const holName = window.DEBUG?.state?.holidays?.[String(y)]?.[dateStr] || null;
         const allShifts = Object.entries(SHIFTS).filter(([k,v]) => {
@@ -230,23 +426,56 @@ export class ScheduleUI {
         const updateCurrent = () => {
             const s = shiftSel.value;
             const sid = cur[s];
-            currentAssignment.textContent = sid ? `Aktuell: ${sid}` : 'Aktuell: —';
+            const staff = (window.DEBUG?.state?.staffData||[]).find(x=>x.id==sid);
+            currentAssignment.textContent = sid ? `Aktuell: ${staff?.name||sid}` : 'Aktuell: —';
+            // Expose current staff to modal for swap handler
+            modal.dataset.currentStaff = sid ? String(sid) : '';
         };
         shiftSel.onchange = updateCurrent; updateCurrent();
 
         // Build candidate list with scoring from engine
         const engine = new SchedulingEngine(month);
         const weekNum = engine.getWeekNumber(date);
-        const getCandidates = () => {
+        const getCandidates = (includePermanents=false) => {
+            const sh = shiftSel.value;
             const scheduledToday = new Set(Object.values(cur||{}));
-            return engine.findCandidatesForShift(dateStr, shiftSel.value, scheduledToday, weekNum);
+            const base = engine.findCandidatesForShift(dateStr, sh, scheduledToday, weekNum);
+            const mapById = new Map(base.map(c => [c.staff.id, c]));
+            // Always include currently assigned today to enable switching
+            const assignedIds = new Set(Object.values(cur||{}));
+            assignedIds.forEach(id => {
+                if (!mapById.has(Number(id))){
+                    const st = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==id);
+                    if (st) mapById.set(st.id, { staff: st, score: 0 });
+                }
+            });
+            // Permissive inclusion: include any staff with availability yes/prefer for this shift OR any permanent
+            (window.DEBUG?.state?.staffData||[]).forEach(s => {
+                const avail = appState.availabilityData?.[s.id]?.[dateStr]?.[sh];
+                const okAvail = (avail==='yes' || avail==='prefer');
+                const isPerm = s.role === 'permanent';
+                if ((okAvail || isPerm) && !mapById.has(s.id)){
+                    mapById.set(s.id, { staff: s, score: 0 });
+                }
+            });
+            const list = Array.from(mapById.values());
+            return list.sort((a,b)=>b.score-a.score);
         };
         const staffSel = document.getElementById('swapStaffSelect');
         const renderCandidates = () => {
-            const cands = getCandidates();
+            const includePermanents = document.getElementById('includePermanentsCheckbox')?.checked || false;
+            const cands = getCandidates(includePermanents);
             const sh = shiftSel.value;
             const validator = new ScheduleValidator(month);
             const simBase = JSON.parse(JSON.stringify(window.DEBUG?.state?.scheduleData?.[month] || {}));
+            // Ensure already-assigned staff for the date are also listed to allow switching
+            const assignedIds = new Set(Object.values(cur||{}));
+            assignedIds.forEach(id => {
+                if (!cands.some(c => c.staff.id === id)){
+                    const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==id);
+                    if (staff){ cands.push({ staff, score: 0 }); }
+                }
+            });
             // Build select options with blocker detection
             const options = cands.map(c => {
                 const s = c.staff;
@@ -256,9 +485,22 @@ export class ScheduleUI {
                 sim[dateStr].assignments[sh] = s.id;
                 const validated = validator.validateSchedule(sim);
                 const blocker = validated?.[dateStr]?.blockers?.[sh] || '';
-                const label = `${s.name} (Score: ${Math.round(c.score)})${blocker ? ' ❌' : ''}`;
-                const disabled = blocker ? ' disabled' : '';
-                const title = blocker ? ` title="${blocker}"` : '';
+                // Build tooltip with fairness/context
+                const state = window.DEBUG?.state;
+                const engine = new SchedulingEngine(month);
+                const weekNumLocal = engine.getWeekNumber(parseYMD(dateStr));
+                const weekendCount = (engine.weekendAssignmentsCount?.[s.id]) ?? 0;
+                const daytimeWeek = (engine.studentDaytimePerWeek?.[s.id]?.[weekNumLocal]) ?? 0;
+                const parts = [`Score: ${Math.round(c.score)}`];
+                if (isWeekend) parts.push(`WE bisher: ${weekendCount}`);
+                if (!isWeekend && (sh==='early'||sh==='midday') && s.role==='student') parts.push(`Tag (KW${weekNumLocal}): ${daytimeWeek}`);
+                if (blocker) parts.push(`Blocker: ${blocker}`);
+                const tooltip = parts.join(' | ');
+                const alreadyAssigned = assignedIds.has(s.id);
+                const assignedNote = alreadyAssigned ? ' – bereits zugewiesen' : '';
+                const label = `${s.name} (Score: ${Math.round(c.score)})${assignedNote}${blocker ? ' ⚠' : ''}`;
+                const disabled = '';
+                const title = ` title="${tooltip}"`;
                 return `<option value="${s.id}"${disabled}${title}>${label}</option>`;
             }).join('');
             staffSel.innerHTML = options;
@@ -276,6 +518,13 @@ export class ScheduleUI {
                 if (holName) parts.push('Feiertag');
                 else if (isWE) parts.push('Wochenende');
                 if (s.role === 'student' && (sh === 'evening' || sh === 'closing')) parts.push('Student+Abendbonus');
+                if (s.role === 'permanent' && (sh==='evening'||sh==='closing')){
+                    const volKey = `${s.id}::${dateStr}::${sh}`;
+                    const legacyKey = `${s.id}::${dateStr}`;
+                    if (appState.voluntaryEveningAvailability?.[volKey] || appState.voluntaryEveningAvailability?.[legacyKey]){
+                        parts.push(sh==='evening' ? 'Permanent+freiwillig Abend' : 'Permanent+freiwillig Spät');
+                    }
+                }
                 if (s.weekendPreference && isWE) parts.push('WE-Präferenz');
                 // Add blocker reason preview
                 const sim = JSON.parse(JSON.stringify(simBase));
@@ -289,8 +538,33 @@ export class ScheduleUI {
             }).join('<br/>');
             const notes = document.getElementById('candidateNotes');
             notes.innerHTML = `Hinweise:<br/>${hints}`;
+
+            // Consent UI: only relevant for permanent, weekend, no weekendPreference
+            const consentRow = document.getElementById('consentRow');
+            const consentCb = document.getElementById('consentCheckbox');
+            const consentHint = document.getElementById('consentHint');
+            const selectedId = parseInt(staffSel.value || 0);
+            const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==selectedId);
+            const isWeekend = [0,6].includes(parseYMD(dateStr).getDay());
+            const showConsent = !!(staff && staff.role==='permanent' && isWeekend && !staff.weekendPreference);
+            consentRow.style.display = showConsent ? '' : 'none';
+            consentHint.style.display = showConsent ? '' : 'none';
+            if (showConsent){
+                const year = String(parseYMD(dateStr).getFullYear());
+                const hasConsent = !!(window.DEBUG?.state?.permanentOvertimeConsent?.[selectedId]?.[year]?.[dateStr]);
+                consentCb.checked = !!hasConsent;
+            } else {
+                consentCb.checked = false;
+            }
         };
-        renderCandidates();
+    // Include-permanents toggle only shown for weekend days
+    const includeRow = document.getElementById('includePermanentsRow');
+    const includeCb = document.getElementById('includePermanentsCheckbox');
+    const weekend = [0,6].includes(parseYMD(dateStr).getDay());
+    includeRow.style.display = weekend ? '' : 'none';
+    includeCb.checked = false;
+    includeCb.onchange = () => renderCandidates();
+    renderCandidates();
         const notes = document.getElementById('candidateNotes');
         // Notes content set in renderCandidates
 
@@ -299,9 +573,224 @@ export class ScheduleUI {
         modal.dataset.shift = shiftSel.value;
         const syncShift = () => { modal.dataset.shift = shiftSel.value; renderCandidates(); updateCurrent(); };
         shiftSel.addEventListener('change', syncShift);
+        // React to staff selection changes to update consent row state
+        document.getElementById('swapStaffSelect').addEventListener('change', () => {
+            renderCandidates();
+        });
+
+        // Persist consent when user toggles it
+        const consentCb = document.getElementById('consentCheckbox');
+        consentCb?.addEventListener('change', (e)=>{
+            const selectedId = parseInt(document.getElementById('swapStaffSelect').value || 0);
+            const isWeekend = [0,6].includes(parseYMD(dateStr).getDay());
+            if (!selectedId || !isWeekend) return;
+            const year = String(parseYMD(dateStr).getFullYear());
+            const state = window.DEBUG?.state;
+            if (!state.permanentOvertimeConsent) state.permanentOvertimeConsent = {};
+            if (!state.permanentOvertimeConsent[selectedId]) state.permanentOvertimeConsent[selectedId] = {};
+            if (!state.permanentOvertimeConsent[selectedId][year]) state.permanentOvertimeConsent[selectedId][year] = {};
+            if (e.target.checked){
+                state.permanentOvertimeConsent[selectedId][year][dateStr] = true;
+            } else {
+                delete state.permanentOvertimeConsent[selectedId][year][dateStr];
+            }
+            // Also persist via appState if available
+            try{
+                const { appState } = window;
+                if (appState){
+                    appState.permanentOvertimeConsent = state.permanentOvertimeConsent;
+                    appState.save?.();
+                }
+            }catch{}
+            // Re-render to refresh blockers and scores
+            renderCandidates();
+        });
 
     // Show modal
     if (window.__openModal) window.__openModal('swapModal'); else modal.style.display = 'block';
+    }
+
+    // New: Search & Assign dialog separate from availability tab
+    openSearchAssignModal(dateStr){
+        const modal = document.getElementById('searchModal');
+        if (!modal) return;
+        const [y,m,d] = dateStr.split('-').map(Number);
+        const date = new Date(y, m-1, d);
+        const isWeekend = [0,6].includes(date.getDay());
+        const holName = window.DEBUG?.state?.holidays?.[String(y)]?.[dateStr] || null;
+        const allShifts = Object.entries(SHIFTS).filter(([k,v]) => {
+            if (holName) return v.type === 'holiday';
+            if (isWeekend) return v.type === 'weekend';
+            return v.type === 'weekday';
+        }).map(([k])=>k);
+        document.getElementById('searchTitle').textContent = `Suchen & Zuweisen – ${dateStr}`;
+        document.getElementById('searchDetail').textContent = holName ? `Feiertag: ${holName}` : isWeekend ? 'Wochenende' : 'Wochentag';
+        // Populate shifts
+        const shiftSel = document.getElementById('searchShiftSelect');
+        shiftSel.innerHTML = allShifts.map(s=>`<option value="${s}">${s}</option>`).join('');
+        const month = dateStr.substring(0,7);
+        const cur = window.DEBUG?.state?.scheduleData?.[month]?.[dateStr]?.assignments || {};
+        const engine = new SchedulingEngine(month);
+        const weekNum = engine.getWeekNumber(date);
+        const staffSel = document.getElementById('searchStaffSelect');
+        const filterInput = document.getElementById('searchFilterInput');
+        const consentRow = document.getElementById('searchConsentRow');
+        const consentCb = document.getElementById('searchConsentCheckbox');
+        const consentHint = document.getElementById('searchConsentHint');
+        const includeRow = document.getElementById('searchIncludePermanentsRow');
+        const includeCb = document.getElementById('searchIncludePermanentsCheckbox');
+        includeRow.style.display = isWeekend ? '' : 'none';
+        includeCb.checked = false;
+        const buildBaseCandidates = () => {
+            const sh = shiftSel.value;
+            const scheduledToday = new Set(Object.values(cur||{}));
+            const base = engine.findCandidatesForShift(dateStr, sh, scheduledToday, weekNum);
+            const mapById = new Map(base.map(c => [c.staff.id, c]));
+            // Always include already assigned (to allow replacement/switching)
+            const assignedIds = new Set(Object.values(cur||{}));
+            assignedIds.forEach(id => {
+                if (!mapById.has(Number(id))){
+                    const st = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==id);
+                    if (st) mapById.set(st.id, { staff: st, score: 0 });
+                }
+            });
+            // Permissive: include anyone with availability or permanents
+            (window.DEBUG?.state?.staffData||[]).forEach(s => {
+                const avail = appState.availabilityData?.[s.id]?.[dateStr]?.[sh];
+                const okAvail = (avail==='yes' || avail==='prefer');
+                const isPerm = s.role==='permanent';
+                const allowPerm = !isWeekend || includeCb.checked; // on weekends, gate permanents by toggle
+                if ((okAvail || (isPerm && allowPerm)) && !mapById.has(s.id)){
+                    mapById.set(s.id, { staff: s, score: 0 });
+                }
+            });
+            return Array.from(mapById.values()).sort((a,b)=>b.score-a.score);
+        };
+        const renderCandidates = () => {
+            const sh = shiftSel.value;
+            const validator = new ScheduleValidator(month);
+            const simBase = JSON.parse(JSON.stringify(window.DEBUG?.state?.scheduleData?.[month] || {}));
+            let cands = buildBaseCandidates();
+            // Filter
+            const q = (filterInput.value||'').toLowerCase();
+            if (q){
+                cands = cands.filter(c => {
+                    const s = c.staff;
+                    return String(s.name).toLowerCase().includes(q) || String(s.role||'').toLowerCase().includes(q);
+                });
+            }
+            const options = cands.map(c => {
+                const s = c.staff; const sim = JSON.parse(JSON.stringify(simBase));
+                if (!sim[dateStr]) sim[dateStr] = { assignments: {} };
+                if (!sim[dateStr].assignments) sim[dateStr].assignments = {};
+                sim[dateStr].assignments[sh] = s.id;
+                const validated = validator.validateSchedule(sim);
+                const blocker = validated?.[dateStr]?.blockers?.[sh] || '';
+                const label = `${s.name} (${s.role||''})${blocker?' ⚠':''}`;
+                const title = blocker ? ` title="Blocker: ${blocker}"` : '';
+                return `<option value="${s.id}"${title}>${label}</option>`;
+            }).join('');
+            staffSel.innerHTML = options;
+            // Consent UI
+            const selectedId = parseInt(staffSel.value||0);
+            const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==selectedId);
+            const showConsent = !!(staff && staff.role==='permanent' && isWeekend && !staff.weekendPreference);
+            consentRow.style.display = showConsent ? '' : 'none';
+            consentHint.style.display = showConsent ? '' : 'none';
+            if (showConsent){
+                const year = String(y);
+                const hasConsent = !!(window.DEBUG?.state?.permanentOvertimeConsent?.[selectedId]?.[year]?.[dateStr]);
+                consentCb.checked = !!hasConsent;
+            } else {
+                consentCb.checked = false;
+            }
+            // Notes
+            const notes = document.getElementById('searchCandidateNotes');
+            notes.innerHTML = cands.slice(0,8).map(c=>{
+                const s=c.staff; const avail = appState.availabilityData?.[s.id]?.[dateStr]?.[sh];
+                const parts=[];
+                if (avail==='prefer') parts.push('bevorzugt'); else if (avail==='yes') parts.push('verfügbar');
+                if (isWeekend) parts.push('Wochenende'); if (holName) parts.push('Feiertag');
+                return `${s.name}: ${parts.join(', ')||'—'}`;
+            }).join('<br/>');
+        };
+        // Bindings
+        shiftSel.onchange = renderCandidates;
+        filterInput.oninput = renderCandidates;
+        includeCb.onchange = renderCandidates;
+        staffSel.onchange = renderCandidates;
+        // Persist consent toggle
+        consentCb?.addEventListener('change', (e)=>{
+            const selectedId = parseInt(document.getElementById('searchStaffSelect').value||0);
+            if (!selectedId) return;
+            const year = String(y);
+            if (!window.DEBUG.state.permanentOvertimeConsent) window.DEBUG.state.permanentOvertimeConsent = {};
+            window.DEBUG.state.permanentOvertimeConsent[selectedId] = window.DEBUG.state.permanentOvertimeConsent[selectedId]||{};
+            window.DEBUG.state.permanentOvertimeConsent[selectedId][year] = window.DEBUG.state.permanentOvertimeConsent[selectedId][year]||{};
+            if (e.target.checked){
+                window.DEBUG.state.permanentOvertimeConsent[selectedId][year][dateStr] = true;
+            } else {
+                delete window.DEBUG.state.permanentOvertimeConsent[selectedId][year][dateStr];
+            }
+            try{ appState.permanentOvertimeConsent = window.DEBUG.state.permanentOvertimeConsent; appState.save?.(); }catch{}
+        });
+        // Initial render
+        renderCandidates();
+        // Stash context
+        modal.dataset.date = dateStr;
+        modal.style.display = 'block';
+        // Bind assign button
+        const execBtn = document.getElementById('executeSearchAssignBtn');
+        execBtn.onclick = () => {
+            const sh = shiftSel.value; const sid = parseInt(staffSel.value||0);
+            if (!sid){ alert('Bitte Mitarbeiter wählen'); return; }
+            const month = dateStr.substring(0,7);
+            // Weekend permanent consent/request check like swap modal
+            try{
+                const isWE = [0,6].includes(date.getDay());
+                const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==sid);
+                if (isWE && staff?.role==='permanent' && !staff?.weekendPreference){
+                    // Check if non-permanent candidates could fill instead
+                    const scheduledToday = new Set(Object.values(cur||{}));
+                    const cands = engine.findCandidatesForShift(dateStr, sh, scheduledToday, weekNum)
+                        .filter(c => c.staff.role !== 'permanent');
+                    const canBeFilledByRegular = cands.some(c => c.score > -999);
+                    if (!canBeFilledByRegular){
+                        if (!appState.overtimeRequests[month]) appState.overtimeRequests[month] = {};
+                        if (!Array.isArray(appState.overtimeRequests[month][dateStr])) appState.overtimeRequests[month][dateStr] = [];
+                        const exists = appState.overtimeRequests[month][dateStr].some(r => r.staffId===sid && r.shiftKey===sh && r.status==='requested');
+                        if (!exists){
+                            appState.overtimeRequests[month][dateStr].push({ staffId: sid, shiftKey: sh, status: 'requested', reason: 'Unbesetzbare Schicht' });
+                            try{
+                                if (!Array.isArray(appState.auditLog)) appState.auditLog = [];
+                                const staffName = (appState.staffData||[]).find(s=>String(s.id)===String(sid))?.name || String(sid);
+                                const shiftName = (window.SHIFTS?.[sh]?.name || sh);
+                                appState.auditLog.push({ timestamp: Date.now(), message: `Überstunden-Anfrage erstellt: ${staffName} – ${dateStr} (${shiftName})` });
+                            }catch{}
+                            appState.save();
+                            alert('Überstunden-Anfrage erstellt. Bitte im Anfragen-Panel bestätigen.');
+                        }
+                        return; // do not assign until consent
+                    }
+                }
+            }catch(e){ console.warn('Auto-request check failed', e); }
+            const schedule = appState.scheduleData[month] || (appState.scheduleData[month] = {});
+            if (!schedule[dateStr]) schedule[dateStr] = { assignments: {} };
+            const original = { ...schedule[dateStr].assignments };
+            schedule[dateStr].assignments[sh] = sid;
+            const validator = new ScheduleValidator(month);
+            const { schedule: consolidated } = validator.validateScheduleWithIssues(schedule);
+            const hasBlocker = consolidated[dateStr]?.blockers?.[sh];
+            if (hasBlocker){
+                schedule[dateStr].assignments = original;
+                alert(`Zuweisung nicht möglich: ${hasBlocker}`);
+                return;
+            }
+            appState.scheduleData[month] = consolidated; appState.save();
+            try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
+            this.updateCalendarFromSelect?.();
+            modal.style.display = 'none';
+        };
     }
 }
 

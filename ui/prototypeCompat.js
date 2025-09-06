@@ -35,8 +35,11 @@
   // Delegate to AppUI if present
   window.addStaff = function(){ if (window.appUI?.addStaff) return window.appUI.addStaff(); return noop('addStaff')(); };
   window.resetStaffForm = function(){ if (window.appUI?.resetStaffForm) return window.appUI.resetStaffForm(); return noop('resetStaffForm')(); };
+  // Staff form specific adders to avoid confusion with vacation tab
+  window.addStaffVacationPeriod = function(){ if (window.appUI?.addStaffVacationPeriod) return window.appUI.addStaffVacationPeriod(); return noop('addStaffVacationPeriod')(); };
+  window.addStaffIllnessPeriod = function(){ if (window.appUI?.addStaffIllnessPeriod) return window.appUI.addStaffIllnessPeriod(); return noop('addStaffIllnessPeriod')(); };
+  // Vacation tab handler
   window.addVacationPeriod = function(){ if (window.appUI?.addVacationPeriod) return window.appUI.addVacationPeriod(); return noop('addVacationPeriod')(); };
-  window.addIllnessPeriod = noop('addIllnessPeriod');
   window.displayVacationLedger = noop('displayVacationLedger');
   window.handleAvailabilityDisplay = function(){ if (window.appUI?.handleAvailabilityDisplay) return window.appUI.handleAvailabilityDisplay(); return noop('handleAvailabilityDisplay')(); };
   window.updateShiftOptionsForDate = noop('updateShiftOptionsForDate');
@@ -47,8 +50,10 @@
   window.exportSchedule = noop('exportSchedule');
   window.showHolidaysPopup = function(){ if (window.appUI?.showHolidaysPopup) return window.appUI.showHolidaysPopup(); return noop('showHolidaysPopup')(); };
   window.addHoliday = function(){ if (window.appUI?.addHoliday) return window.appUI.addHoliday(); return noop('addHoliday')(); };
-  window.addOtherStaff = noop('addOtherStaff');
-  window.addOtherVacationPeriod = noop('addOtherVacationPeriod');
+  window.addIcsSource = function(){ if (window.appUI?.addIcsSource) return window.appUI.addIcsSource(); return noop('addIcsSource')(); };
+  window.refreshAcademicTerms = function(){ if (window.appUI?.refreshAcademicTerms) return window.appUI.refreshAcademicTerms(); return noop('refreshAcademicTerms')(); };
+  window.addOtherStaff = function(){ if (window.appUI?.addOtherStaff) return window.appUI.addOtherStaff(); return noop('addOtherStaff')(); };
+  window.addOtherVacationPeriod = function(){ if (window.appUI?.addOtherVacationPeriod) return window.appUI.addOtherVacationPeriod(); return noop('addOtherVacationPeriod')(); };
   window.resetOtherStaffForm = noop('resetOtherStaffForm');
   window.onScheduleMonthChange = noop('onScheduleMonthChange');
   window.exportSchedule = function(){
@@ -86,6 +91,68 @@
     w.document.close();
     w.focus();
     w.print();
+  };
+  // Generate a formatted monthly PDF using jsPDF + AutoTable
+  window.exportPDF = function(){
+    try{
+      const month = document.getElementById('scheduleMonth')?.value;
+      if (!month){ alert('Bitte Monat wählen'); return; }
+      const data = window.DEBUG?.state?.scheduleData?.[month] || {};
+      const staffById = Object.fromEntries((window.DEBUG?.state?.staffData||[]).map(s=>[s.id, s]));
+      const { jsPDF } = window.jspdf || {};
+      if (!jsPDF || !window.jspdf || !window.jspdf.jsPDF){
+        alert('PDF Bibliothek nicht geladen');
+        return;
+      }
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const [y,m] = month.split('-').map(Number);
+      const monthLabel = new Date(y, m-1, 1).toLocaleString(undefined,{month:'long', year:'numeric'});
+      const headerTitle = `Dienstplan – ${monthLabel}`;
+      const printDate = new Date().toLocaleString();
+      doc.setFontSize(16); doc.text(headerTitle, 10, 12);
+      doc.setFontSize(9); doc.text(`Erstellt: ${printDate}`, 10, 18);
+      // Determine shift columns for weekday/weekend/holiday
+      const shiftKeys = Object.keys(window.SHIFTS||{});
+      const byType = { weekday: [], weekend: [], holiday: [] };
+      shiftKeys.forEach(k => { const t=(window.SHIFTS||{})[k]?.type; if (byType[t]) byType[t].push(k); });
+      // Build a per-day table with columns per shift: Date | [shift names]
+      const headers = ['Datum'].concat(byType.weekday.length?byType.weekday:byType.weekend);
+      const rows = [];
+      Object.keys(data).sort().forEach(dateStr => {
+        const assigns = data[dateStr]?.assignments || {};
+        // Pick appropriate shift set for this date
+        const dt = new Date(dateStr);
+        const isWE = [0,6].includes(dt.getDay());
+        const hol = window.DEBUG?.state?.holidays?.[String(dt.getFullYear())]?.[dateStr] || null;
+        const cols = hol ? byType.holiday : isWE ? byType.weekend : byType.weekday;
+        const base = [dateStr + (hol?` (${hol})`: '')];
+        cols.forEach(k => {
+          const sid = assigns[k];
+          const nm = sid ? (staffById[sid]?.name || String(sid)) : '—';
+          base.push(nm);
+        });
+        rows.push(base);
+      });
+      if (rows.length === 0){ rows.push(['—']); }
+      const pageWidth = doc.internal.pageSize.getWidth();
+      // AutoTable with zebra striping and compact style
+      doc.autoTable({
+        startY: 22,
+        head: [headers],
+        body: rows,
+        styles: { fontSize: 8, cellPadding: 1.5, lineWidth: 0.1 },
+        headStyles: { fillColor: [33, 150, 243], textColor: [255,255,255] },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        margin: { left: 10, right: 10 },
+        didDrawPage: (dataArg) => {
+          // Footer with page number
+          const str = `Seite ${doc.internal.getNumberOfPages()}`;
+          doc.setFontSize(8);
+          doc.text(str, pageWidth - 10, doc.internal.pageSize.getHeight() - 5, { align: 'right' });
+        }
+      });
+      doc.save(`dienstplan_${month}.pdf`);
+    }catch(e){ console.error('PDF export failed', e); alert('PDF Export fehlgeschlagen'); }
   };
   // If schedule UI exists, hook month change/select
   document.addEventListener('change', (e)=>{
