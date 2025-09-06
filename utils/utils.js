@@ -1,5 +1,5 @@
 import { appState } from '../modules/state.js';  // Fixed relative path from utils/
-import { ROLE_TYPES } from './types.js';
+import { ROLE_TYPES } from '../types.js';
 
 /**
  * Test data generation utilities
