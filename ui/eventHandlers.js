@@ -141,21 +141,13 @@ export class EventHandler {
                     .filter(c => c.staff.role !== 'permanent');
                 const canBeFilledByRegular = cands.some(c => c.score > -999); // heuristic: any candidate
                 if (!canBeFilledByRegular){
-                    if (!appState.overtimeRequests[month]) appState.overtimeRequests[month] = {};
-                    if (!Array.isArray(appState.overtimeRequests[month][dateStr])) appState.overtimeRequests[month][dateStr] = [];
-                    // Avoid duplicate requests
-                    const exists = appState.overtimeRequests[month][dateStr].some(r => r.staffId===newStaffId && r.shiftKey===shiftKey && r.status==='requested');
-                    if (!exists){
-                        appState.overtimeRequests[month][dateStr].push({ staffId: newStaffId, shiftKey, status: 'requested', reason: 'Unbesetzbare Schicht' });
-                        try{
-                            if (!Array.isArray(appState.auditLog)) appState.auditLog = [];
-                            const staffName = (appState.staffData||[]).find(s=>String(s.id)===String(newStaffId))?.name || String(newStaffId);
-                            const shiftName = (window.SHIFTS?.[shiftKey]?.name || shiftKey);
-                            appState.auditLog.push({ timestamp: Date.now(), message: `Überstunden-Anfrage erstellt: ${staffName} – ${dateStr} (${shiftName})` });
-                        }catch{}
-                        appState.save();
-                        alert('Überstunden-Anfrage erstellt. Bitte im Anfragen-Panel bestätigen.');
-                    }
+                                        try { if (!window.__services) { import('../src/services/index.js').then(m=> { window.__services = m.createServices({}); }); } } catch {}
+                                        const overtimeSvc = window.__services?.overtime;
+                                        const exists = overtimeSvc.listByDate(month,dateStr).some(r=> r.staffId===newStaffId && r.shiftKey===shiftKey && r.status==='requested');
+                                        if(!exists){
+                                            overtimeSvc.create(month, dateStr, { staffId: newStaffId, shiftKey, reason: 'Unbesetzbare Schicht' });
+                                            alert('Überstunden-Anfrage erstellt. Bitte im Anfragen-Panel bestätigen.');
+                                        }
                     return; // Do not assign until consent
                 }
             }

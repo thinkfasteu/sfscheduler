@@ -55,10 +55,10 @@ export class AppState {
   load() {
     // Only try to load from localStorage in browser environment
     if (typeof localStorage !== 'undefined') {
-      Object.keys(this).forEach(key => {
-        const stored = localStorage.getItem(key);
-        if (stored) {
-          this[key] = JSON.parse(stored);
+      Object.keys(localStorage).forEach(k => {
+        if (this.isDurableKey(k)) {
+          const stored = localStorage.getItem(k);
+          if (stored) { try { this[k] = JSON.parse(stored); } catch {} }
         }
       });
   // Run light migrations after load (idempotent)
@@ -73,8 +73,16 @@ export class AppState {
     // Only try to save to localStorage in browser environment
     if (typeof localStorage !== 'undefined') {
       try {
-        Object.entries(this).forEach(([key, value]) => {
-          localStorage.setItem(key, JSON.stringify(value));
+        // Persist only durable keys
+        Object.keys(this).forEach(key => {
+          if (this.isDurableKey(key)) {
+            try { localStorage.setItem(key, JSON.stringify(this[key])); } catch {}
+          } else {
+            if (localStorage.getItem(key) !== null) {
+              // Cleanup legacy persisted ephemeral keys
+              try { localStorage.removeItem(key); } catch {}
+            }
+          }
         });
       } catch (error) {
         console.error('Failed to save state:', error);
@@ -89,7 +97,27 @@ export class AppState {
 
   set(key, value) {
     this[key] = value;
+    if (!this.isDurableKey(key)) {
+      // Development hint; won't block runtime.
+      if (typeof console !== 'undefined' && !this._ephemeralWarned) {
+        console.warn('[persistence] Attempted to set non-durable key:', key);
+      }
+    }
     this.save();
+  }
+
+  // Whitelist helper for durable persistence
+  isDurableKey(key){
+    return [
+      'staffData',
+      'availabilityData',
+      'scheduleData',
+      'vacationsByStaff',
+      'illnessByStaff',
+      'overtimeRequests',
+      'vacationLedger',
+      'carryoverByStaffAndMonth'
+    ].includes(key);
   }
 
   // Migrations

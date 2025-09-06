@@ -741,7 +741,7 @@ export class ScheduleUI {
         modal.style.display = 'block';
         // Bind assign button
         const execBtn = document.getElementById('executeSearchAssignBtn');
-        execBtn.onclick = () => {
+    execBtn.onclick = async () => {
             const sh = shiftSel.value; const sid = parseInt(staffSel.value||0);
             if (!sid){ alert('Bitte Mitarbeiter wählen'); return; }
             const month = dateStr.substring(0,7);
@@ -756,33 +756,31 @@ export class ScheduleUI {
                         .filter(c => c.staff.role !== 'permanent');
                     const canBeFilledByRegular = cands.some(c => c.score > -999);
                     if (!canBeFilledByRegular){
-                        if (!appState.overtimeRequests[month]) appState.overtimeRequests[month] = {};
-                        if (!Array.isArray(appState.overtimeRequests[month][dateStr])) appState.overtimeRequests[month][dateStr] = [];
-                        const exists = appState.overtimeRequests[month][dateStr].some(r => r.staffId===sid && r.shiftKey===sh && r.status==='requested');
-                        if (!exists){
-                            appState.overtimeRequests[month][dateStr].push({ staffId: sid, shiftKey: sh, status: 'requested', reason: 'Unbesetzbare Schicht' });
-                            try{
-                                if (!Array.isArray(appState.auditLog)) appState.auditLog = [];
-                                const staffName = (appState.staffData||[]).find(s=>String(s.id)===String(sid))?.name || String(sid);
-                                const shiftName = (window.SHIFTS?.[sh]?.name || sh);
-                                appState.auditLog.push({ timestamp: Date.now(), message: `Überstunden-Anfrage erstellt: ${staffName} – ${dateStr} (${shiftName})` });
-                            }catch{}
-                            appState.save();
-                            alert('Überstunden-Anfrage erstellt. Bitte im Anfragen-Panel bestätigen.');
-                        }
+                                                try { if (!window.__services) { import('../src/services/index.js').then(m=> { window.__services = m.createServices({}); }); } } catch {}
+                                                const overtimeSvc = window.__services?.overtime;
+                                                const exists = overtimeSvc.listByDate(month,dateStr).some(r=> r.staffId===sid && r.shiftKey===sh && r.status==='requested');
+                                                if(!exists){
+                                                    overtimeSvc.create(month, dateStr, { staffId: sid, shiftKey: sh, reason: 'Unbesetzbare Schicht' });
+                                                    alert('Überstunden-Anfrage erstellt. Bitte im Anfragen-Panel bestätigen.');
+                                                }
                         return; // do not assign until consent
                     }
                 }
             }catch(e){ console.warn('Auto-request check failed', e); }
+            // Use schedule service adapter path (single migrated write path)
+            try { if (!window.__services) window.__services = (await import('../src/services/index.js')).createServices({}); } catch {}
+            const scheduleSvc = window.__services.schedule;
+            // Assign optimistically via adapter
+            scheduleSvc.assign(dateStr, sh, sid);
+            // Re-run validation on updated month
             const schedule = appState.scheduleData[month] || (appState.scheduleData[month] = {});
-            if (!schedule[dateStr]) schedule[dateStr] = { assignments: {} };
-            const original = { ...schedule[dateStr].assignments };
-            schedule[dateStr].assignments[sh] = sid;
+            if (!schedule[dateStr]) schedule[dateStr] = { assignments: {} }; // ensure shape
             const validator = new ScheduleValidator(month);
             const { schedule: consolidated } = validator.validateScheduleWithIssues(schedule);
             const hasBlocker = consolidated[dateStr]?.blockers?.[sh];
             if (hasBlocker){
-                schedule[dateStr].assignments = original;
+                // Rollback assignment
+                delete schedule[dateStr].assignments[sh]; appState.save();
                 alert(`Zuweisung nicht möglich: ${hasBlocker}`);
                 return;
             }
