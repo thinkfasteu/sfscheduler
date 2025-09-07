@@ -11,6 +11,10 @@ export class ScheduleUI {
             console.error('ScheduleUI: container not found', containerId);
             return;
         }
+    this.currentCalendarMonth = null; // track rendered month
+    if (!window.__perf) window.__perf = {}; // lightweight counters
+    window.__perf.calendarFullRenders = window.__perf.calendarFullRenders || 0;
+    window.__perf.calendarDiffUpdates = window.__perf.calendarDiffUpdates || 0;
         this.setupTabs();
     }
 
@@ -117,6 +121,12 @@ export class ScheduleUI {
         const el = document.getElementById('scheduleMonth');
         const month = el?.value;
         if (!month) return;
+        // If calendar already rendered for this month, skip full rebuild – just refresh assignments + weekend report
+        if (this.currentCalendarMonth === month && document.getElementById('scheduleGrid')) {
+            this.renderAssignments(month);
+            this.renderWeekendReport(month);
+            return;
+        }
         // Ensure schedule grid host
         let grid = document.getElementById('scheduleGrid');
         if (!grid) {
@@ -129,12 +139,12 @@ export class ScheduleUI {
         const startDay = (first.getDay() + 6) % 7; // Monday=0
         const daysInMonth = new Date(y, m, 0).getDate();
 
-        let html = '<div style="display:flex; justify-content: flex-end; flex-wrap:wrap; margin-bottom:8px; gap:8px;">'
+        let html = '<div class="flex flex-wrap jc-end gap-8 mb-8">'
             + '<button class="btn btn-secondary" id="openSearchAssignBtn">Suchen & Zuweisen (Datum wählen)</button>'
             + '<button class="btn btn-secondary" id="recoveryPreviewBtn" title="Offene kritische Schichten anzeigen">Lücken prüfen</button>'
-            + '<button class="btn btn-secondary" id="recoveryApplyBtn" style="display:none;" title="Versuchen kritische Lücken zu füllen (mit gelockerten Fairness-Penalties)">Lücken füllen</button>'
+            + '<button class="btn btn-secondary hidden" id="recoveryApplyBtn" title="Versuchen kritische Lücken zu füllen (mit gelockerten Fairness-Penalties)">Lücken füllen</button>'
             + '</div>'
-            + '<div id="recoveryReport" style="flex:1 0 100%; font-size:0.85em; line-height:1.3; margin-top:-4px;"></div>';
+            + '<div id="recoveryReport" class="full-width text-small mt-neg-4"></div>';
         html += '<div class="cal"><div class="cal-row cal-head">';
         const wk = ['Mo','Di','Mi','Do','Fr','Sa','So'];
         wk.forEach(d => html += `<div class="cal-cell cal-head-cell">${d}</div>`);
@@ -163,6 +173,8 @@ export class ScheduleUI {
         }
         html += '</div>';
         grid.innerHTML = html;
+    this.currentCalendarMonth = month;
+    window.__perf.calendarFullRenders++;
         // Track a selected date for the search modal
         let selectedDateForSearch = null;
         const setSelectedDate = (dateStr) => { selectedDateForSearch = dateStr; };
@@ -246,7 +258,7 @@ export class ScheduleUI {
                 }
             });
             appState.save?.();
-            recoveryReport.innerHTML += `<div style="margin-top:4px;"><strong>Angewendet:</strong> ${applied} Schichten gefüllt.</div>`;
+            recoveryReport.innerHTML += `<div class="mt-4"><strong>Angewendet:</strong> ${applied} Schichten gefüllt.</div>`;
             recoveryApplyBtn.style.display='none';
             this.updateCalendarFromSelect();
         });
@@ -311,7 +323,7 @@ export class ScheduleUI {
                     return `<div class="staff-assignment" title="${title}" data-date="${dateStr}" data-shift="${shift}">
                         <span class="badge">${shift}</span>
                         <span class="assignee-name">${name}</span>
-                        <button class="btn btn-secondary btn-sm swap-btn" data-date="${dateStr}" data-shift="${shift}" style="margin-left:6px;">Wechseln</button>
+                        <button class="btn btn-secondary btn-sm swap-btn ml-6" data-date="${dateStr}" data-shift="${shift}">Wechseln</button>
                     </div>`;
                 }
                 // Unassigned placeholder keeps the slot visible and clickable
@@ -343,7 +355,7 @@ export class ScheduleUI {
     renderWeekendReport(month){
         const host = document.getElementById('weekendReport');
         if (!host) return;
-        const data = window.DEBUG?.state?.scheduleData?.[month] || {};
+    const data = window.DEBUG?.state?.scheduleData?.[month] || {};
         const [y, m] = month.split('-').map(Number);
         // Count weekends in month
         const daysInMonth = new Date(y, m, 0).getDate();
@@ -387,7 +399,61 @@ export class ScheduleUI {
             });
         });
         const otherInfo = overlaps.length ? `\n\nWeitere Mitarbeitende (Urlaub):\n- ${overlaps.join('\n- ')}` : '';
-        host.innerHTML = `<div><strong>Wochenend-Verteilung für ${month}</strong><br/>Gesamt: ${weekendCount} Wochenenden im Monat</div><pre style="margin-top:8px; white-space:pre-wrap;">${lines.join('\n\n')}${otherInfo}</pre>`;
+    host.innerHTML = `<div><strong>Wochenend-Verteilung für ${month}</strong><br/>Gesamt: ${weekendCount} Wochenenden im Monat</div><pre class="mt-8 pre-wrap">${lines.join('\n\n')}${otherInfo}</pre>`;
+    }
+
+    // Incremental update: update a single date cell's assignments only
+    updateDay(dateStr){
+        if (!dateStr) return;
+        const month = dateStr.slice(0,7);
+        if (this.currentCalendarMonth !== month){
+            // fallback: month changed outside normal flow
+            this.updateCalendarFromSelect();
+            return;
+        }
+        const cell = document.querySelector(`.cal-body[data-date="${dateStr}"]`);
+        if (!cell){ return; }
+        this.renderAssignmentsForDate(month, cell, dateStr);
+        window.__perf.calendarDiffUpdates++;
+    }
+
+    renderAssignmentsForDate(month, cellEl, dateStr){
+        const type = cellEl.getAttribute('data-type');
+        const shifts = Object.entries(SHIFTS).filter(([_,v])=>v.type===type).map(([k])=>k);
+        const data = window.DEBUG?.state?.scheduleData?.[month] || {};
+        const assignments = data[dateStr]?.assignments || {};
+        const html = shifts.map(shift => {
+            const staffId = assignments[shift];
+            const shiftMeta = (window.SHIFTS||{})[shift] || {};
+            if (staffId){
+                const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==staffId);
+                const name = staff?.name || staffId;
+                const title = `${shiftMeta.name||shift} ${shiftMeta.time?`(${shiftMeta.time})`:''} - ${name}`;
+                return `<div class="staff-assignment" title="${title}" data-date="${dateStr}" data-shift="${shift}">
+                        <span class="badge">${shift}</span>
+                        <span class="assignee-name">${name}</span>
+                        <button class="btn btn-secondary btn-sm swap-btn ml-6" data-date="${dateStr}" data-shift="${shift}">Wechseln</button>
+                    </div>`;
+            }
+            const title = `${shiftMeta.name||shift} ${shiftMeta.time?`(${shiftMeta.time})`:''} - nicht zugewiesen`;
+            return `<div class="staff-assignment unassigned" title="${title}" data-date="${dateStr}" data-shift="${shift}"><span class="badge">${shift}</span> —</div>`;
+        }).join('');
+        cellEl.innerHTML = html;
+        // Re-bind events for this cell only
+        cellEl.querySelectorAll('.staff-assignment[data-date]').forEach(pill => {
+            pill.addEventListener('click', (e)=>{
+                e.stopPropagation();
+                const shiftKey = pill.getAttribute('data-shift');
+                this.openAssignModal(dateStr, shiftKey);
+            });
+        });
+        cellEl.querySelectorAll('.swap-btn[data-date]').forEach(btn => {
+            btn.addEventListener('click', (e)=>{
+                e.stopPropagation();
+                const shiftKey = btn.getAttribute('data-shift');
+                this.openAssignModal(dateStr, shiftKey);
+            });
+        });
     }
 
     openAssignModal(dateStr, presetShift){
@@ -786,7 +852,11 @@ export class ScheduleUI {
             }
             appState.scheduleData[month] = consolidated; appState.save();
             try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
-            this.updateCalendarFromSelect?.();
+            // Incremental update instead of full calendar rebuild
+            this.updateDay(dateStr);
+            // Weekend report can change fairness stats; refresh only if weekend or holiday
+            const dow = date.getDay();
+            if (dow===0 || dow===6){ this.renderWeekendReport(month); }
             modal.style.display = 'none';
         };
     }

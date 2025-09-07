@@ -1,7 +1,6 @@
 import { appState } from '../modules/state.js'; // TODO remove direct non-staff usage later
 import { APP_CONFIG, SHIFTS } from '../modules/config.js';
 import { toLocalISOMonth, toLocalISODate, pad2, parseYMD } from '../utils/dateUtils.js';
-import { staffService } from '../services/staffService.js';
 // Add audit message helper
 import { auditMsg } from '../src/services/auditMessages.js';
 // Services facade (migrating away from direct appState)
@@ -11,10 +10,36 @@ let __services = (typeof window!=='undefined' && window.__services) ? window.__s
 export class AppUI {
   constructor(scheduleUI){
     this.scheduleUI = scheduleUI;
+  // Track when async service hydration (Supabase) finished so we can avoid showing an empty state prematurely
+  this._servicesHydrated = false;
   }
 
   init(){
-    this.renderStaffList();
+    // If services not yet initialized (dynamic import still loading), defer setup
+    if (!__services){
+      let attempts = 0;
+      const spin = ()=>{
+        if (__services){ this._postServicesInit(); return; }
+        if (attempts++ < 60) { setTimeout(spin, 100); } else { console.warn('[UI] Services not initialized after timeout'); }
+      };
+      spin();
+      // Show placeholder meanwhile
+      const host = document.getElementById('staffList'); if (host) host.innerHTML = '<p>Lade Dienste…</p>';
+      return;
+    }
+    this._postServicesInit();
+  }
+
+  _postServicesInit(){
+    // If using async backend (supabase) and services not yet hydrated, defer initial staff render
+    const backendMode = (window.__CONFIG__ && window.__CONFIG__.BACKEND) || (window.CONFIG && window.CONFIG.BACKEND) || 'local';
+    if (backendMode === 'supabase' && __services?.ready) {
+      // Show temporary loading indicator
+      const host = document.getElementById('staffList'); if (host) host.innerHTML = '<p>Lade Mitarbeiter…</p>';
+      __services.ready.then(()=>{ try { this._servicesHydrated = true; this.renderStaffList(); } catch(e){ console.warn('Post-ready staff render failed', e); } });
+    } else {
+      this.renderStaffList();
+    }
     this.populateAvailabilitySelectors();
   this.populateVacationSelectors();
   this.renderVacationList();
@@ -25,11 +50,37 @@ export class AppUI {
   this.renderTempIllnessList();
   // Urlaub: Ledger init
   this.initVacationLedger();
+  // Register service event listeners (e.g., ledger conflicts)
+  try { this._attachServiceEventListeners(); } catch(e) { /* ignore */ }
   // Andere Mitarbeitende init
   this.renderOtherStaff();
-  // Reports init
-  this.initReports();
-  this.renderAuditLog();
+  // Reports init (wait for services to hydrate if async)
+  if (__services?.ready){
+    __services.ready.then(()=>{
+      this._servicesHydrated = true;
+      // Re-render staff + selectors now that remote data is available
+      try { this.renderStaffList(); this.populateAvailabilitySelectors(); } catch(e){ console.warn('Post-hydration staff render failed', e); }
+      try { this.initReports(); } catch(e){ console.warn('Reports init failed (delayed)', e); }
+    });
+  } else {
+    try { this.initReports(); } catch(e){ console.warn('Reports init failed', e); }
+   }
+   // After services.ready resolved OR if already resolved by the time we attach
+   if (__services?.staff?.list?.().length){
+     this._servicesHydrated = true;
+     try { this.renderStaffList(); this.populateAvailabilitySelectors(); } catch(e){ console.warn('[UI] late staff render failed', e); }
+   }
+   this.renderAuditLog();
+   // Fallback polling in case ready promise resolves before init or events missed
+   if (backendMode==='supabase' && __services?.ready){
+     let tries=0; const poll=()=>{ if (this._servicesHydrated) return; tries++; if ((__services?.staff?.list?.()||[]).length){ this._servicesHydrated=true; try{ this.renderStaffList(); }catch{} return; } if (tries<20) setTimeout(poll, 300); }; poll();
+   }
+  }
+
+  _attachServiceEventListeners(){
+    __services?.events?.on('ledgerConflict', (p)=>{ console.warn('[UI] ledger conflict', p); this.showLedgerConflictToast(p); });
+    __services?.events?.on('staff:hydrated', ()=>{ try { this._servicesHydrated = true; this.renderStaffList(); this.populateAvailabilitySelectors(); } catch(e){ console.warn('[UI] staff:hydrated render failed', e); } });
+    __services?.events?.on('staff:created', ()=>{ try { this.renderStaffList(); this.populateAvailabilitySelectors(); } catch(e){ console.warn('[UI] staff:created render failed', e); } });
   }
 
   // ==== Staff ====
@@ -51,8 +102,10 @@ export class AppUI {
     // Are we editing?
     const editIdEl = document.getElementById('staffIdToEdit');
     const editId = Number(editIdEl?.value || 0);
+    const staffSvc = __services?.staff; // unified service (local or supabase via HydratingStore)
+    if (!staffSvc){ alert('Dienstleistungen noch nicht initialisiert. Bitte kurz warten und erneut versuchen.'); return; }
     if (editId) {
-      const staff = staffService.update(editId, { name, role, contractHours, typicalWorkdays, weekendPreference, permanentPreferredShift });
+      const staff = staffSvc.update(editId, { name, role, contractHours, typicalWorkdays, weekendPreference, permanentPreferredShift });
       if (!staff) { alert('Mitarbeiter nicht gefunden'); return; }
       // Persist temp periods via service if available
       if (Array.isArray(appState.tempVacationPeriods)){
@@ -78,7 +131,7 @@ export class AppUI {
         }
       }
     } else {
-      const staff = staffService.create({ name, role, contractHours, typicalWorkdays, weekendPreference, permanentPreferredShift, alternativeWeekendDays: [] });
+      const staff = staffSvc.create({ name, role, contractHours, typicalWorkdays, weekendPreference, permanentPreferredShift, alternativeWeekendDays: [] });
       const nextId = staff.id;
       if (Array.isArray(appState.tempVacationPeriods) && appState.tempVacationPeriods.length){
         if (__services?.vacation){ appState.tempVacationPeriods.forEach(p=> __services.vacation.addVacation(nextId, p)); }
@@ -121,9 +174,9 @@ export class AppUI {
   showHolidaysPopup(){
     this.fetchAndShowHolidays().catch(()=>{
       // fallback to local modal if fetch fails
-      if (window.__openModal) return window.__openModal('holidaysModal');
-      const modal = document.getElementById('holidaysModal');
-      if (modal) modal.style.display = 'block';
+  if (window.__openModal) return window.__openModal('holidaysModal');
+  const modal = document.getElementById('holidaysModal');
+  if (modal){ modal.classList.add('open'); document.body.style.overflow='hidden'; }
       this.initHolidays();
     });
   }
@@ -244,8 +297,18 @@ export class AppUI {
   renderStaffList(){
     const host = document.getElementById('staffList');
     if (!host) return;
-    const staffList = staffService.list();
+    const staffSvc = __services?.staff;
+    if (!staffSvc){
+      host.innerHTML = '<p>Dienste werden initialisiert…</p>';
+      return;
+    }
+    const staffList = staffSvc.list();
+    // If hydration not yet finished and list is empty, show loading instead of empty state
     if (!staffList.length){
+      if (!this._servicesHydrated && __services?.ready){
+        host.innerHTML = '<p>Lade Mitarbeiter…</p>';
+        return;
+      }
       host.innerHTML = '<p>Keine Mitarbeiter hinzugefügt.</p>';
       return;
     }
@@ -300,7 +363,7 @@ export class AppUI {
     host.querySelectorAll('button[data-action="edit"]').forEach(btn=>{
       btn.addEventListener('click', (e)=>{
         const id = Number(e.currentTarget.dataset.id);
-  const s = staffService.list().find(x=>x.id===id);
+  const s = staffSvc.list().find(x=>x.id===id);
         if (!s) return;
         document.getElementById('staffName').value = s.name || '';
         document.getElementById('staffType').value = s.role || 'minijob';
@@ -323,12 +386,12 @@ export class AppUI {
     host.querySelectorAll('button[data-action="remove"]').forEach(btn=>{
       btn.addEventListener('click', (e)=>{
         const id = Number(e.currentTarget.dataset.id);
-  const staff = staffService.list().find(x=>x.id===id);
+  const staff = staffSvc.list().find(x=>x.id===id);
         if (!staff) return;
         const name = staff.name || id;
         const confirmed = window.confirm(`Mitarbeiter "${name}" wirklich löschen?\nDiese Aktion kann nicht rückgängig gemacht werden.`);
         if (!confirmed) return;
-  if (staffService.remove(id)){
+  if (staffSvc.remove(id)){
           // Deep cleanup of associated data
           try {
             // Availability
@@ -386,7 +449,7 @@ export class AppUI {
     host.querySelectorAll('input.wknd-pref').forEach(cb => {
       cb.addEventListener('change', (e)=>{
         const id = Number(e.currentTarget.getAttribute('data-id'));
-  const staff = staffService.list().find(x=>x.id===id);
+  const staff = staffSvc.list().find(x=>x.id===id);
         if (!staff) return;
         staff.weekendPreference = !!e.currentTarget.checked;
         if (!staff.weekendPreference) delete staff.alternativeWeekendDays;
@@ -399,7 +462,7 @@ export class AppUI {
       sel.addEventListener('change', (e)=>{
         const id = Number(e.currentTarget.getAttribute('data-id'));
         const idx = Number(e.currentTarget.getAttribute('data-idx'));
-  const staff = staffService.list().find(x=>x.id===id);
+  const staff = staffSvc.list().find(x=>x.id===id);
         if (!staff || !staff.weekendPreference) return;
         if (!Array.isArray(staff.alternativeWeekendDays)) staff.alternativeWeekendDays = [];
         const val = parseInt(e.currentTarget.value, 10);
@@ -423,6 +486,92 @@ export class AppUI {
     this.renderTempVacationList();
     if (startEl) startEl.value=''; if (endEl) endEl.value='';
   }
+  renderTempIllnessList(){ /* already defined later if duplicated, guard */ }
+
+  // ==== Vacation Ledger (summary panel) ==== 
+  initVacationLedger(){
+    // Basic setup: build year select for ledger table if present
+    const yearSel = document.getElementById('vacationYearSelect');
+    if (yearSel && (!yearSel.options || yearSel.options.length===0)){
+      const now = new Date();
+      for (let y = now.getFullYear()-1; y<= now.getFullYear()+1; y++){
+        const opt = document.createElement('option'); opt.value=String(y); opt.textContent=String(y); if (y===now.getFullYear()) opt.selected=true; yearSel.appendChild(opt);
+      }
+      yearSel.addEventListener('change', ()=>{ this.renderVacationSummaryTable(); });
+    }
+    this.renderVacationSummaryTable();
+  }
+
+  renderVacationSummaryTable(){
+    const tbody = document.getElementById('vacationLedgerTable');
+    const yearSel = document.getElementById('vacationYearSelect');
+    if (!tbody || !yearSel) return;
+    const year = Number(yearSel.value)|| (new Date()).getFullYear();
+    const staffList = (__services?.staff?.list ? __services.staff.list() : appState.staffData) || [];
+    const ledger = __services?.vacation?.getLedger ? __services.vacation.getLedger(year) : (appState.vacationLedger?.[year]||{});
+    const rows = staffList.map(s => {
+      const planned = this.countPlannedVacationDaysForYear ? this.countPlannedVacationDaysForYear(s.id, year) : 0;
+      const sick = this.countSickDaysForYear ? this.countSickDaysForYear(s.id, year) : 0;
+      const allowance = (ledger?.[s.id]?.allowance) ?? (s.role==='permanent'?30:0);
+      const takenManual = (ledger?.[s.id]?.takenManual) ?? 0;
+      const carryPrev = (ledger?.[s.id]?.carryPrev) ?? 0;
+      const remaining = allowance + carryPrev - takenManual - planned;
+  return `<tr><td class=\"text-left\">${s.name}</td><td>${allowance}</td><td>${takenManual}</td><td>${carryPrev}</td><td>${planned}</td><td>${remaining}</td><td>${sick}</td><td>–</td></tr>`;
+    }).join('');
+  tbody.innerHTML = rows || '<tr><td colspan=\"8\" class=\"text-center text-muted\">Keine Daten</td></tr>';
+  }
+  ensureToastContainer(){
+    if (document.getElementById('toastContainer')) return;
+    const div = document.createElement('div');
+    div.id='toastContainer';
+  div.className='toast-container';
+    document.body.appendChild(div);
+  }
+  showLedgerConflictToast(payload){
+    this.ensureToastContainer();
+    const wrap = document.createElement('div');
+    wrap.className='toast toast-warning';
+    wrap.innerHTML = `<div class=\"fw-600\">Ledger geändert</div><div class=\"fs-13\">Ledger changed remotely. Reload latest or retry.</div><div class=\"flex-gap-6\">`+
+      `<button class="btn btn-sm" data-act="reload">Reload</button>`+
+      `<button class="btn btn-sm btn-secondary" data-act="retry">Retry</button>`+
+      `<button class=\"btn btn-sm btn-danger ml-auto\" data-act=\"close\">✕</button>`+
+      `</div>`;
+    const container = document.getElementById('toastContainer');
+    container.appendChild(wrap);
+    const year = payload?.year || (new Date()).getFullYear();
+    wrap.querySelectorAll('button[data-act]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const act = btn.getAttribute('data-act');
+        if (act==='close'){ wrap.remove(); return; }
+        if (act==='reload'){
+          try { __services?.vacation?.getLedger(year); this.renderVacationSummaryTable(); } catch(e){ console.warn('reload failed', e); }
+          wrap.remove();
+        } else if (act==='retry'){
+          if (payload?.staffId){
+            const cur = __services?.vacation?.getLedger(year)?.[payload.staffId];
+            if (cur){ __services?.vacation?.upsertLedgerEntry({ staffId: payload.staffId, year, allowance:cur.allowance, takenManual:cur.takenManual, carryPrev:cur.carryPrev, meta:cur.meta }); }
+          }
+          setTimeout(()=> this.renderVacationSummaryTable(), 300);
+          wrap.remove();
+        }
+      });
+    });
+  setTimeout(()=>{ wrap.classList.add('fade-out'); setTimeout(()=>wrap.remove(), 600); }, 10000);
+  }
+
+  renderIllnessList(){
+    const host = document.getElementById('staffIllnessList');
+    if (!host) return;
+    // For current edit form context only; uses temp list if editing.
+    const list = appState.tempIllnessPeriods || [];
+    host.innerHTML = list.length ? list.map((p,idx)=>`<li class="list-item"><span>${p.start} bis ${p.end}</span><button class="btn btn-sm btn-danger" data-rm-ill="${idx}" title="Entfernen">✕</button></li>`).join('') : '<li class="list-item"><span>Keine Einträge</span></li>';
+    host.querySelectorAll('button[data-rm-ill]').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{
+        const i = Number(e.currentTarget.getAttribute('data-rm-ill'));
+        appState.tempIllnessPeriods.splice(i,1); appState.save(); this.renderIllnessList();
+      });
+    });
+  }
   renderTempVacationList(){
     const host = document.getElementById('staffVacationList');
     if (!host) return;
@@ -432,6 +581,18 @@ export class AppUI {
       btn.addEventListener('click', (e)=>{
         const i = Number(e.currentTarget.getAttribute('data-rm-vac'));
         appState.tempVacationPeriods.splice(i,1); appState.save(); this.renderTempVacationList();
+      });
+    });
+  }
+  renderTempIllnessList(){
+    const host = document.getElementById('staffIllnessList');
+    if (!host) return;
+    const list = appState.tempIllnessPeriods || [];
+    host.innerHTML = list.length ? list.map((p,idx)=>`<li class="list-item"><span>${p.start} bis ${p.end}</span><button class="btn btn-sm btn-danger" data-rm-ill="${idx}" title="Entfernen">✕</button></li>`).join('') : '<li class="list-item"><span>Keine Einträge</span></li>';
+    host.querySelectorAll('button[data-rm-ill]').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{
+        const i = Number(e.currentTarget.getAttribute('data-rm-ill'));
+        appState.tempIllnessPeriods.splice(i,1); appState.save(); this.renderTempIllnessList();
       });
     });
   }
@@ -489,9 +650,9 @@ export class AppUI {
     const isPermanent = staff?.role === 'permanent';
     let html = '<div class="avail-grid">';
     if (isPermanent){
-      html += '<div class="avail-row avail-head" style="grid-template-columns: 1.2fr 3.2fr 0.9fr 0.9fr 0.8fr"><div class="avail-cell">Datum</div><div class="avail-cell">Blockierte Schichten</div><div class="avail-cell">Freiwillig Abend</div><div class="avail-cell">Freiwillig Spät</div><div class="avail-cell">Frei</div></div>';
+      html += '<div class="avail-row avail-head avail-cols-permanent"><div class="avail-cell">Datum</div><div class="avail-cell">Blockierte Schichten</div><div class="avail-cell">Freiwillig Abend</div><div class="avail-cell">Freiwillig Spät</div><div class="avail-cell">Frei</div></div>';
     } else {
-      html += '<div class="avail-row avail-head" style="grid-template-columns: 1.2fr 4fr;"><div class="avail-cell">Datum</div><div class="avail-cell">Schichten</div></div>';
+      html += '<div class="avail-row avail-head avail-cols-regular"><div class="avail-cell">Datum</div><div class="avail-cell">Schichten</div></div>';
     }
     for (let d=1; d<=days; d++){
       const dateStr = `${y}-${pad2(m)}-${pad2(d)}`;
@@ -502,9 +663,9 @@ export class AppUI {
       const rowClasses = ['avail-row']; if (isWE) rowClasses.push('is-weekend'); if (holName) rowClasses.push('is-holiday');
       const flags = [ isWE ? '<span class="day-flag">Wochenende</span>' : '', holName ? `<span class="day-flag">${holName}</span>` : '' ].filter(Boolean).join('');
       const off = availSvc?.isDayOff(staffId, dateStr) || false;
-      html += `<div class="${rowClasses.join(' ')}" style="grid-template-columns: ${isPermanent ? '1.2fr 3.2fr 0.9fr 0.9fr 0.8fr' : '1.2fr 4fr'};">`;
-      html += `<div class="avail-cell"><strong>${pad2(d)}.${pad2(m)}.${y}</strong> ${flags}</div>`;
-      html += '<div class="avail-cell" style="text-align:left;">';
+  html += `<div class="${rowClasses.join(' ')} ${isPermanent ? 'avail-cols-permanent' : 'avail-cols-regular'}">`;
+  html += `<div class="avail-cell"><strong>${pad2(d)}.${pad2(m)}.${y}</strong> ${flags}</div>`;
+  html += '<div class="avail-cell text-left">';
       if (shiftsForDay.length===0){ html += '<span class="na-cell">—</span>'; }
       else {
         const detailedDay = availSvc?.getDay(staffId, dateStr) || {};
@@ -514,7 +675,7 @@ export class AppUI {
           const stateClass = isPermanent ? (isBlocked ? 'state-no' : 'state-unset') : (val ? `state-${val}` : 'state-unset');
           const meta = SHIFTS[k] || {}; const name = meta.name || k; const time = meta.time || '';
           const label = isPermanent ? (isBlocked ? '✗' : '—') : (val === 'prefer' ? '★' : val === 'yes' ? '✓' : val === 'no' ? '✗' : '—');
-          html += `<button class="avail-btn ${stateClass}" title="${name} ${time}" style="margin:2px 6px 2px 0;" data-date="${dateStr}" data-shift="${k}" ${off?'disabled':''}>${name}: ${label}</button>`;
+          html += `<button class="avail-btn ${stateClass} shift-btn" title="${name} ${time}" data-date="${dateStr}" data-shift="${k}" ${off?'disabled':''}>${name}: ${label}</button>`;
         });
       }
       html += '</div>';
@@ -522,8 +683,8 @@ export class AppUI {
         const isWeekday = !isWE && !holName;
         const vEven = isWeekday ? (availSvc?.isVoluntary(staffId, dateStr, 'evening')||false) : false;
         const vClose = isWeekday ? (availSvc?.isVoluntary(staffId, dateStr, 'closing')||false) : false;
-        html += `<div class="avail-cell">${isWeekday?`<label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" class="vol-evening" data-date="${dateStr}" ${vEven?'checked':''}/> <span>Abend</span></label>`:'<span class="na-cell">—</span>'}</div>`;
-        html += `<div class="avail-cell">${isWeekday?`<label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" class="vol-closing" data-date="${dateStr}" ${vClose?'checked':''}/> <span>Spät</span></label>`:'<span class="na-cell">—</span>'}</div>`;
+  html += `<div class="avail-cell">${isWeekday?`<label class="inline align-center gap-6"><input type="checkbox" class="vol-evening" data-date="${dateStr}" ${vEven?'checked':''}/> <span>Abend</span></label>`:'<span class="na-cell">—</span>'}</div>`;
+  html += `<div class="avail-cell">${isWeekday?`<label class="inline align-center gap-6"><input type="checkbox" class="vol-closing" data-date="${dateStr}" ${vClose?'checked':''}/> <span>Spät</span></label>`:'<span class="na-cell">—</span>'}</div>`;
       }
       if (isPermanent){ html += `<div class="avail-cell"><button class="btn ${off?'btn-secondary':''}" data-dayoff="1" data-date="${dateStr}" data-off="${off?1:0}">${off?'Freiwunsch':'Frei wünschen'}</button></div>`; }
       html += '</div>';
@@ -533,7 +694,7 @@ export class AppUI {
     try {
       const autoCarry = __services?.carryover?.auto ? __services.carryover.auto(staff, month, { getPrevMonthKey: this.getPrevMonthKey.bind(this), sumStaffHoursForMonth: this.sumStaffHoursForMonth.bind(this) }) : this.computeAutoCarryover(staff, month);
       const manualCarry = (__services?.carryover ? __services.carryover.get(staffId, month) : Number(appState.carryoverByStaffAndMonth?.[staffId]?.[month] ?? 0));
-      html += `\n<div class="card" style="margin-top:12px; padding:12px;">\n  <div style="font-weight:600; margin-bottom:4px;">Stundenübertrag (Vormonat → ${month})</div>\n  <div style="color:#677684; font-size:0.9em; margin-bottom:8px;">Ein positiver Wert erhöht das Monatsziel (z. B. +3h), ein negativer Wert verringert es (z. B. -3h).</div>\n  <div class="form-row" style="grid-template-columns: auto 120px auto auto; align-items:end; gap:10px;">\n    <label for="carryoverInput">Manueller Übertrag</label>\n    <input type="number" id="carryoverInput" value="${manualCarry}" step="0.25" style="width:120px;" />\n    <div style="color:#677684;">Auto (${autoCarry.toFixed(2)} h)</div>\n    <button class="btn" id="carryoverSaveBtn">Speichern</button>\n  </div>\n  <div style="color:#677684; font-size:0.85em; margin-top:6px;">Ergebnisse sind kumulativ; Ziel ist, den Übertrag bis zum Ende des Folgemonats auf 0 zu bringen.</div>\n</div>`;
+  html += `\n<div class="card mt-12 p-12">\n  <div class="fw-600 mb-4">Stundenübertrag (Vormonat → ${month})</div>\n  <div class="text-muted fs-90 mb-8">Ein positiver Wert erhöht das Monatsziel (z. B. +3h), ein negativer Wert verringert es (z. B. -3h).</div>\n  <div class="form-row grid-cols-auto-120px-auto-auto align-end gap-10">\n    <label for="carryoverInput">Manueller Übertrag</label>\n    <input type="number" id="carryoverInput" value="${manualCarry}" step="0.25" class="w-120" />\n    <div class="text-muted">Auto (${autoCarry.toFixed(2)} h)</div>\n    <button class="btn" id="carryoverSaveBtn">Speichern</button>\n  </div>\n  <div class="text-muted fs-85 mt-6">Ergebnisse sind kumulativ; Ziel ist, den Übertrag bis zum Ende des Folgemonats auf 0 zu bringen.</div>\n</div>`;
     } catch(e){ console.warn('Carryover panel render failed', e); }
     host.innerHTML = html;
 
@@ -701,15 +862,15 @@ export class AppUI {
   renderReports(){
     const sel = document.getElementById('reportsMonth');
     const month = sel?.value; if (!month) return;
-  __services?.report?.getOvertimeCredits(month);
-    this.renderMonthlyHoursReport(month);
-    this.renderStudentWeeklyReport(month);
-    this.computeAndRenderOvertimeReport(month);
+  try { __services?.report?.getOvertimeCredits(month); } catch {}
+  try { this.renderMonthlyHoursReport(month); } catch(e){ console.warn('renderMonthlyHoursReport failed', e); }
+  try { this.renderStudentWeeklyReport(month); } catch(e){ console.warn('renderStudentWeeklyReport failed', e); }
+  try { this.computeAndRenderOvertimeReport(month); } catch(e){ console.warn('computeAndRenderOvertimeReport failed', e); }
   }
 
   renderMonthlyHoursReport(month){
     const tbody = document.getElementById('monthlyHoursReport'); if (!tbody) return;
-    const earnings = __services.report.computeEarnings(month);
+  const earnings = __services?.report?.computeEarnings ? __services.report.computeEarnings(month) : {};
     const ot = appState.overtimeCredits?.[month] || {};
     const overtimeByStaff = Object.fromEntries(Object.entries(ot).map(([sid, weeks]) => [sid, Object.values(weeks||{}).reduce((a,b)=>a+Number(b||0),0)]));
     const rows = (appState.staffData||[]).map(s => {
@@ -722,37 +883,37 @@ export class AppUI {
         if (earn > cap + 1e-6) status = `> Minijob-Cap (${cap.toFixed(0)}€)`;
       }
       const otH = Number(overtimeByStaff[s.id]||0);
-      return `<tr><td style="text-align:left;">${s.name}</td><td>${s.role}</td><td>${h.toFixed(2)}</td><td>${otH>0?otH.toFixed(2):'—'}</td><td>${(Math.round(earn*100)/100).toFixed(2)} €</td><td>${status}</td></tr>`;
+  return `<tr><td class=\"text-left\">${s.name}</td><td>${s.role}</td><td>${h.toFixed(2)}</td><td>${otH>0?otH.toFixed(2):'—'}</td><td>${(Math.round(earn*100)/100).toFixed(2)} €</td><td>${status}</td></tr>`;
     }).join('');
-    tbody.innerHTML = rows || '<tr><td colspan="6" style="text-align:center; color:#677684;">Keine Daten</td></tr>';
+  tbody.innerHTML = rows || '<tr><td colspan=\"6\" class=\"text-center text-muted\">Keine Daten</td></tr>';
   }
 
   renderStudentWeeklyReport(month){
     const tbody = document.getElementById('studentWeeklyReport'); if (!tbody) return;
-    const weeks = __services.report.studentWeekly(month);
+  const weeks = __services?.report?.studentWeekly ? __services.report.studentWeekly(month) : {};
     const rows = [];
     Object.entries(weeks).forEach(([sid, wk]) => {
       const name = (appState.staffData||[]).find(s=>s.id==sid)?.name || sid;
       Object.entries(wk).sort(([a],[b])=>Number(a)-Number(b)).forEach(([w, agg]) => {
         const ratio = agg.total>0 ? Math.round((agg.nightWeekend/agg.total)*100) : 0;
         const monthExc = !!appState.studentExceptionMonths?.[month];
-        rows.push(`<tr><td style="text-align:left;">${name}</td><td>${w}</td><td>${agg.hours.toFixed(2)}</td><td>${ratio}%</td><td>${monthExc ? '✓' : '-'}</td></tr>`);
+  rows.push(`<tr><td class=\"text-left\">${name}</td><td>${w}</td><td>${agg.hours.toFixed(2)}</td><td>${ratio}%</td><td>${monthExc ? '✓' : '-'}</td></tr>`);
       });
     });
-    tbody.innerHTML = rows.join('') || '<tr><td colspan="5" style="text-align:center; color:#677684;">Keine Daten</td></tr>';
+  tbody.innerHTML = rows.join('') || '<tr><td colspan=\"5\" class=\"text-center text-muted\">Keine Daten</td></tr>';
   }
 
   computeAndRenderOvertimeReport(month){
     const tbody = document.getElementById('overtimeCreditsReport'); if (!tbody) return;
-  const creditsByStaffWeek = __services.report.getOvertimeCredits(month);
+  const creditsByStaffWeek = __services?.report?.getOvertimeCredits ? __services.report.getOvertimeCredits(month) : {};
     const rows = [];
     Object.entries(creditsByStaffWeek).forEach(([sid, weeks]) => {
       const name = (appState.staffData||[]).find(s=>s.id==sid)?.name || sid;
       Object.entries(weeks).sort(([a],[b])=>Number(a)-Number(b)).forEach(([w, h]) => {
-        rows.push(`<tr><td style="text-align:left;">${name}</td><td>${w}</td><td>${Number(h||0).toFixed(2)}</td></tr>`);
+  rows.push(`<tr><td class=\"text-left\">${name}</td><td>${w}</td><td>${Number(h||0).toFixed(2)}</td></tr>`);
       });
     });
-    tbody.innerHTML = rows.join('') || '<tr><td colspan="3" style="text-align:center; color:#677684;">Keine Daten</td></tr>';
+  tbody.innerHTML = rows.join('') || '<tr><td colspan=\"3\" class=\"text-center text-muted\">Keine Daten</td></tr>';
   }
 
   // Reports now fully powered by ReportService (no legacy fallbacks).
@@ -765,9 +926,9 @@ export class AppUI {
       const ts = entry?.timestamp ? new Date(entry.timestamp) : new Date();
       const tsStr = `${String(ts.getDate()).padStart(2,'0')}.${String(ts.getMonth()+1).padStart(2,'0')}.${ts.getFullYear()} ${String(ts.getHours()).padStart(2,'0')}:${String(ts.getMinutes()).padStart(2,'0')}:${String(ts.getSeconds()).padStart(2,'0')}`;
       const msg = entry?.message || '';
-      return `<tr><td style="text-align:left;">${tsStr}</td><td>${msg}</td></tr>`;
+  return `<tr><td class=\"text-left\">${tsStr}</td><td>${msg}</td></tr>`;
     }).join('');
-    tbody.innerHTML = rows || '<tr><td colspan="2" style="text-align:center; color:#677684;">Keine Einträge</td></tr>';
+  tbody.innerHTML = rows || '<tr><td colspan=\"2\" class=\"text-center text-muted\">Keine Einträge</td></tr>';
   }
 
   addVacationPeriod(){

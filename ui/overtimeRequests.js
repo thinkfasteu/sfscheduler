@@ -20,7 +20,7 @@ export class OvertimeRequestsUI {
       return { id: r.id || `${r.dateStr}:${r.staffId}:${r.shiftKey}`, staffId: Number(r.staffId), staffName: s?.name||String(r.staffId), dateStr: r.dateStr, shiftKey: r.shiftKey, status: r.status, lastError: r.lastError||'' };
     });
     if (requests.length === 0){
-      this.container.innerHTML = '<p style="color:#6c757d; font-style: italic;">Keine ausstehenden Überstunden-Anfragen</p>';
+    this.container.innerHTML = '<p class=\"text-muted italic\">Keine ausstehenden Überstunden-Anfragen</p>';
       return;
     }
     requests.sort((a,b)=> new Date(a.dateStr) - new Date(b.dateStr));
@@ -44,18 +44,18 @@ export class OvertimeRequestsUI {
       ? `<button class="btn btn-primary" data-assign-now data-id="${id}">Jetzt zuweisen</button>`
       : `<button class="btn btn-success" data-consent data-id="${id}">Zustimmen</button>
          <button class="btn btn-danger" data-decline data-id="${id}">Ablehnen</button>`;
-    const statusBadge = status === 'consented' ? '<span class="badge" style="background:#0dcaf0; color:#00303d;">Zugestimmt</span>' : '';
-    const errorNote = status === 'consented' && lastError ? `<div style="color:#b02a37; font-size:0.9em; margin-top:4px;">Letzter Fehler: ${lastError}</div>` : '';
+  const statusBadge = status === 'consented' ? '<span class="badge badge-info">Zugestimmt</span>' : '';
+  const errorNote = status === 'consented' && lastError ? `<div class="error-note">Letzter Fehler: ${lastError}</div>` : '';
     return `
-      <div class="staff-card" style="border-left:4px solid #ffc107; margin-bottom:10px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+      <div class="staff-card border-left-warning mb-8">
+        <div class="flex-between align-center flex-wrap gap-8">
           <div>
             <div><strong>${staffName}</strong> ${statusBadge}</div>
             <div><strong>Datum:</strong> ${dateDE}</div>
             <div><strong>Schicht:</strong> ${shift.name||shiftKey} ${shift.time?`(${shift.time})`:''}</div>
             ${errorNote}
           </div>
-          <div style="display:flex; gap:8px;">
+          <div class="flex-gap-8">
             ${actions}
           </div>
         </div>

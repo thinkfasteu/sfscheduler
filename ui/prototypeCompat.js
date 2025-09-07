@@ -162,8 +162,10 @@
   });
 
   // Modal UX: backdrop click closes; lock body scroll while open
+  let modalDepth = 0;
   function lockBody(lock){
-    document.body.style.overflow = lock ? 'hidden' : '';
+    if (lock){ modalDepth++; document.body.style.overflow='hidden'; }
+    else { modalDepth = Math.max(0, modalDepth-1); if (modalDepth===0) document.body.style.overflow=''; }
   }
   document.addEventListener('click', (e)=>{
     const tgt = e.target;
@@ -172,8 +174,8 @@
       lockBody(false);
     }
   });
-  const openModal = (id) => { const el = document.getElementById(id); if (el){ el.style.display='block'; lockBody(true);} };
-  const closeModal = (id) => { const el = document.getElementById(id); if (el){ el.style.display='none'; lockBody(false);} };
+  const openModal = (id) => { const el = document.getElementById(id); if (el){ el.classList.add('open'); lockBody(true);} };
+  const closeModal = (id) => { const el = document.getElementById(id); if (el){ el.classList.remove('open'); lockBody(false);} };
   window.__openModal = openModal;
   window.__closeModal = closeModal;
 

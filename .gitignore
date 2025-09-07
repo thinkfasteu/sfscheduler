@@ -1,0 +1,9 @@
+# Local development secrets (not committed)
+config.local.js
+.env
+.env.*
+# Node modules (if bundler added later)
+node_modules/
+# Build outputs
+/dist
+/build

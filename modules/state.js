@@ -116,7 +116,8 @@ export class AppState {
       'illnessByStaff',
       'overtimeRequests',
       'vacationLedger',
-      'carryoverByStaffAndMonth'
+  'carryoverByStaffAndMonth',
+  '__staffIdMap' // mapping of temp -> remote staff IDs for hydration & remap
     ].includes(key);
   }
 

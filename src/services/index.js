@@ -49,6 +49,12 @@ export function createStore({ backend } = {}){
 
 export function createServices({ store, backend } = {}){
   if (!store) store = createStore({ backend });
+  // Simple event emitter
+  const listeners = {};
+  const events = {
+    on(evt, fn){ (listeners[evt]||(listeners[evt]=[])).push(fn); return ()=>{ listeners[evt] = (listeners[evt]||[]).filter(f=>f!==fn); }; },
+    emit(evt, payload){ (listeners[evt]||[]).forEach(fn=>{ try{ fn(payload); }catch(e){ console.warn('[services.events] listener error', e); } }); }
+  };
   const services = {
     staff: createStaffService(store),
     schedule: createScheduleService(store),
@@ -60,7 +66,8 @@ export function createServices({ store, backend } = {}){
     holiday: createHolidayService(store),
     carryover: createCarryoverService(store),
     report: createReportService(store),
-    state: createStateFacadeService()
+  state: createStateFacadeService(),
+  events
   };
   // Expose readiness (HydratingStore provides readyPromise)
   services.ready = store.readyPromise ? store.readyPromise : Promise.resolve();

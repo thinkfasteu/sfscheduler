@@ -92,6 +92,18 @@ export class LocalStorageAdapter {
   listIllness(staffId){ return appState.illnessByStaff?.[staffId] || []; }
   addIllness(staffId, period){ if (!appState.illnessByStaff[staffId]) appState.illnessByStaff[staffId]=[]; appState.illnessByStaff[staffId].push(period); appState.save(); return true; }
   removeIllness(staffId, idx){ const arr = appState.illnessByStaff?.[staffId]; if (!arr||!arr[idx]) return false; arr.splice(idx,1); appState.save(); return true; }
+  // ---- Vacation Ledger (local) ----
+  getVacationLedgerYear(year){
+    if (!appState.vacationLedger[year]) appState.vacationLedger[year] = {};
+    return appState.vacationLedger[year];
+  }
+  upsertVacationLedgerEntry(year, staffId, patch){
+    if (!appState.vacationLedger[year]) appState.vacationLedger[year] = {};
+    const cur = appState.vacationLedger[year][staffId] || { staffId, year, version:0 };
+    const next = { ...cur, ...patch, version: (cur.version||0)+1 };
+    appState.vacationLedger[year][staffId] = next; appState.save();
+    return next;
+  }
 
   // ---- Overtime Requests ----
   listOvertimeRequests(){
