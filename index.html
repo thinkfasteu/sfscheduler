@@ -7,9 +7,33 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://aoryovdttdujfunectpx.supabase.co https: wss://aoryovdttdujfunectpx.supabase.co; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';" />
     <link rel="stylesheet" href="./ui/styles.css">
         <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <script type="module" src="./src/config/bootstrap.js"></script>
-    <script type="module" src="./src/ui/eventBindings.js"></script>
-    <script type="module" src="./main.js"></script>
+            <!-- Hashed bundle loader with graceful fallback -->
+            <script type="module">
+                (async()=>{
+                    async function fallback(){
+                        console.warn('[boot] fallback to raw modules');
+                        await import('./src/config/bootstrap.js');
+                        await import('./src/ui/eventBindings.js');
+                        await import('./main.js');
+                    }
+                    try {
+                        const res = await fetch('./dist/manifest.json', { cache:'no-store' });
+                        if (!res.ok) throw new Error('manifest fetch failed');
+                        const m = await res.json();
+                        if (!m.app) throw new Error('manifest missing app field');
+                        if (Array.isArray(m.chunks)){
+                            // Preload chunks sequentially (can be parallel; using dynamic import ensures execution order if needed)
+                            for (const c of m.chunks){
+                                try { await import('./dist/' + c + '?v=' + encodeURIComponent(m.built)); } catch(e){ console.warn('[boot] chunk load failed', c, e); }
+                            }
+                        }
+                        await import('./dist/' + m.app + '?v=' + encodeURIComponent(m.built));
+                    } catch(e){
+                        console.warn('[boot] manifest/bundle load error', e);
+                        await fallback();
+                    }
+                })();
+            </script>
 </head>
 <body>
     <div class="container">
@@ -111,6 +135,10 @@
                     <label class="inline align-center gap-6">
                         <input type="checkbox" id="studentExceptionCheckbox" />
                         <span>Kurzfristige Ausnahme zulassen (Werkstudent)</span>
+                    </label>
+                    <label class="inline align-center gap-6">
+                        <input type="checkbox" id="showChecklistToggle" checked />
+                        <span>Checkliste anzeigen</span>
                     </label>
                     <button id="generateScheduleBtn" class="btn btn-success">Dienstplan erstellen</button>
                     <button id="clearScheduleBtn" class="btn btn-danger">Plan löschen</button>
@@ -270,8 +298,7 @@
     </div>
 </body>
 <!-- PDF export libraries -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<!-- External libraries with SRI (integrity placeholders to be replaced with real hashes) -->
 <!-- Holidays Modal -->
 <div id="holidaysModal" class="modal">
     <div class="modal-content narrow">
@@ -362,6 +389,8 @@
 </div>
 </html>
 </html>
+    <!-- Scheduling Checklist Overlay Root -->
+    <div id="scheduleChecklistRoot" aria-live="polite"></div>
 <!-- Search & Assign Modal -->
 <div id="searchModal" class="modal">
     <div class="modal-content wide">

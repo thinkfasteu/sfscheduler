@@ -7,11 +7,13 @@ import { createAuditService } from './AuditService.js';
 import { createConfigService } from './ConfigService.js';
 import { createHolidayService } from './HolidayService.js';
 import { createReportService } from './ReportService.js';
+import { createChecklistService } from './ChecklistService.js';
 import { LocalStorageAdapter } from '../storage/LocalStorageAdapter.js';
 import { SupabaseAdapter } from '../storage/SupabaseAdapter.js';
 import { HydratingStore } from '../storage/HydratingStore.js';
 import { appState } from '../../modules/state.js';
 import { createCarryoverService } from './CarryoverService.js';
+import { applyRuntimeGuards } from '../config/env.js';
 
 function createStateFacadeService(){
   return {
@@ -66,11 +68,16 @@ export function createServices({ store, backend } = {}){
     holiday: createHolidayService(store),
     carryover: createCarryoverService(store),
     report: createReportService(store),
+    uiChecklist: null, // placeholder until after events is defined
   state: createStateFacadeService(),
   events
   };
+  // Checklist depends on events so instantiate after object creation
+  services.uiChecklist = createChecklistService(services);
   // Expose readiness (HydratingStore provides readyPromise)
   services.ready = store.readyPromise ? store.readyPromise : Promise.resolve();
   if (typeof window !== 'undefined') window.__services = services;
+  // Apply runtime guards (schema version check, client error batching) if supabase
+  try { if (store && store.remote) applyRuntimeGuards(store.remote); else if (store && store instanceof SupabaseAdapter) applyRuntimeGuards(store); } catch {}
   return services;
 }

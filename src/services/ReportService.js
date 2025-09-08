@@ -1,8 +1,9 @@
-import { appState } from '../../modules/state.js';
+import { appState as defaultAppState } from '../../modules/state.js';
 import { SHIFTS, APP_CONFIG } from '../../modules/config.js';
 import { parseYMD } from '../../utils/dateUtils.js';
 
-export function createReportService(store){
+export function createReportService(store, injectedState){
+  const appState = injectedState || (typeof global!=='undefined' && global.appState) || defaultAppState;
   // Performance caches (Sprint 5)
   const cache = {
     monthlyHours: new Map(),       // key: month -> { staffId: hours }
@@ -30,7 +31,8 @@ export function createReportService(store){
       const assigns = day?.assignments || {};
       Object.entries(assigns).forEach(([shiftKey, sid]) => {
         const h = Number((SHIFTS?.[shiftKey]||{}).hours || 0);
-        perStaff[sid] = (perStaff[sid]||0)+h;
+  const key = typeof sid === 'string' ? (sid.match(/^\d+$/)? Number(sid): sid) : sid;
+  perStaff[key] = (perStaff[key]||0)+h;
       });
     });
     cache.monthlyHours.set(month, perStaff);

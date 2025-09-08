@@ -21,39 +21,55 @@ export class SupabaseAdapter {
 
   async _rpc(path, options={}){
     if (this.disabled) throw new Error('Supabase disabled');
-    const res = await fetch(`${this.url}/rest/v1/${path}`, {
-      ...options,
-      headers: {
-        apikey: this.key,
-        Authorization: `Bearer ${this.key}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=representation',
-        ...(options.headers||{})
-      }
-    });
-    if (!res.ok){
-      const txt = await res.text();
-      const table = String(path).split('?')[0];
-      const permHint = (res.status===401 || res.status===403 || /permission denied|row level security|policy/i.test(txt));
-      if (permHint){
-        const msg = `Supabase RLS blocked this operation. Verify RLS policies for table ${table} allow anon in dev.`;
-        console.error(msg, { status: res.status, detail: txt });
-        try {
-          if (typeof window !== 'undefined' && window.CONFIG?.BACKEND==='supabase'){
-            if (!document.getElementById('rlsNotice')){
-              const div = document.createElement('div');
-              div.id = 'rlsNotice';
-              div.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2000;background:#ffc107;color:#222;padding:6px 10px;font:14px system-ui;box-shadow:0 2px 4px rgba(0,0,0,.2);';
-              div.textContent = msg;
-              document.body.appendChild(div);
-              setTimeout(()=>{ div.style.transition='opacity .6s'; div.style.opacity='0'; setTimeout(()=>div.remove(),4000); }, 6000);
-            }
+    const maxAttempts = 3;
+    let lastErr;
+    for (let attempt=1; attempt<=maxAttempts; attempt++){
+      try {
+        const res = await fetch(`${this.url}/rest/v1/${path}`, {
+          ...options,
+          headers: {
+            apikey: this.key,
+            Authorization: `Bearer ${this.key}`,
+            'Content-Type': 'application/json',
+            Prefer: 'return=representation',
+            ...(options.headers||{})
           }
-        } catch {}
+        });
+        if (!res.ok){
+          const txt = await res.text();
+          const table = String(path).split('?')[0];
+          const permHint = (res.status===401 || res.status===403 || /permission denied|row level security|policy/i.test(txt));
+          if (permHint){
+            const msg = `Supabase RLS blocked this operation. Verify RLS policies for table ${table} allow anon in dev.`;
+            console.error(msg, { status: res.status, detail: txt });
+            try {
+              if (typeof window !== 'undefined' && window.CONFIG?.BACKEND==='supabase'){
+                if (!document.getElementById('rlsNotice')){
+                  const div = document.createElement('div');
+                  div.id = 'rlsNotice';
+                  div.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2000;background:#ffc107;color:#222;padding:6px 10px;font:14px system-ui;box-shadow:0 2px 4px rgba(0,0,0,.2);';
+                  div.textContent = msg;
+                  document.body.appendChild(div);
+                  setTimeout(()=>{ div.style.transition='opacity .6s'; div.style.opacity='0'; setTimeout(()=>div.remove(),4000); }, 6000);
+                }
+              }
+            } catch {}
+          }
+          // Retry on 5xx or network-y codes except permission issues
+          if (res.status>=500 && attempt < maxAttempts){
+            await new Promise(r=> setTimeout(r, 400 * attempt));
+            continue;
+          }
+          throw new Error(`Supabase error ${res.status}: ${txt}`);
+        }
+        return res.json();
+      } catch(e){
+        lastErr = e;
+        if (attempt < maxAttempts){ await new Promise(r=> setTimeout(r, 300 * attempt)); continue; }
+        break;
       }
-      throw new Error(`Supabase error ${res.status}: ${txt}`);
     }
-    return res.json();
+    throw lastErr || new Error('Supabase request failed');
   }
 
   // ---- Staff (table: staff) dynamic columns (id, name, role, version plus optional workload prefs)
@@ -268,8 +284,17 @@ export class SupabaseAdapter {
   hasOvertimeConsent(){ return false; }
 
   // Audit (local only for now)
-  auditList(){ return []; }
-  auditLog(){ /* no-op */ }
+  auditList(){
+    if (this.disabled) return [];
+    // Return latest 200 entries (reverse chronological)
+    return this._rpc('audit_log?select=*&order=ts.desc&limit=200').then(rows=> rows.map(r=>({ id:r.id, timestamp: Date.parse(r.ts)||Date.now(), message:r.message, meta:r.meta||null })) ).catch(()=>[]);
+  }
+  async auditLog(message, meta){
+    if (this.disabled) return;
+    try {
+      await this._rpc('audit_log', { method:'POST', body: JSON.stringify([{ ts: new Date().toISOString(), message, meta: meta||null }]) });
+    } catch(e){ console.warn('[SupabaseAdapter] auditLog failed (non-fatal)', e); }
+  }
 
   // ---- Overtime Requests (tables: overtime_requests, overtime_consents) ----
   async listOvertimeRequests(){

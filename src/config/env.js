@@ -2,7 +2,7 @@
 // Precedence: window.CONFIG -> import.meta.env (Vite style) -> optional config.local.js (attached to window.CONFIG_LOCAL) -> fallback defaults.
 
 const PLACEHOLDER_REGEX = /your[-_]?supabase|example|changeme/i;
-export const EXPECTED_SCHEMA_VERSION = 1; // bump when DB schema changes
+export const EXPECTED_SCHEMA_VERSION = 6; // bump for strict RLS enforcement (007)
 
 function readGlobal(name){
   try { return (typeof window!=='undefined'? window[name] : global[name]); } catch { return undefined; }
@@ -69,12 +69,15 @@ class ClientErrorLogger {
     this.lastFlush = 0;
     this.intervalMs = 30000; // 30s throttle
     this.maxBatch = 20;
+  this.retryAttempts = 0;
+  this.maxRetries = 3;
   }
   init(adapter){
     if (!adapter || adapter.disabled) return;
     if (this._inited) return; this._inited = true;
     window.addEventListener('error', (e)=>{ this.push({ type:'error', msg:String(e.message), source:e.filename, line:e.lineno, stack: e.error && e.error.stack }); });
     window.addEventListener('unhandledrejection', (e)=>{ this.push({ type:'unhandledrejection', msg: String(e.reason), stack: e.reason && e.reason.stack }); });
+  window.addEventListener('beforeunload', ()=>{ try { this.forceFlush(); } catch {} });
     this.adapter = adapter;
   }
   push(evt){
@@ -99,9 +102,12 @@ class ClientErrorLogger {
         headers:{ apikey:this.adapter.key, Authorization:`Bearer ${this.adapter.key}`, 'Content-Type':'application/json', Prefer:'return=minimal' },
         body: JSON.stringify(rows)
       });
+      this.retryAttempts = 0;
     } catch {/* swallow */}
     this.lastFlush = Date.now();
+    if (this.queue.length){ this.schedule(); }
   }
+  forceFlush(){ if (this.timer){ clearTimeout(this.timer); this.timer=null; } return this.flush(); }
 }
 
 export const clientErrorLogger = new ClientErrorLogger();

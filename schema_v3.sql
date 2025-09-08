@@ -1,7 +1,9 @@
--- Master schema snapshot (version 2)
+-- Master schema snapshot (version 3)
 -- Re-generate after structural changes; keep in sync with EXPECTED_SCHEMA_VERSION in env.js
 
 begin;
+
+-- NOTE: Upgrading from v2: add created_by columns & backfill before enforcing strict policies.
 
 create table if not exists public.staff (
   id bigserial primary key,
@@ -11,11 +13,10 @@ create table if not exists public.staff (
   typical_workdays int,
   weekend_preference boolean,
   version bigint not null default 1,
+  created_by uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
--- Enforce uniqueness (case-insensitive) per role
 create unique index if not exists staff_name_role_unique on public.staff (lower(name), role);
 
 create table if not exists public.schedule_days (
@@ -23,6 +24,7 @@ create table if not exists public.schedule_days (
   month text not null,
   assignments jsonb not null default '{}'::jsonb,
   version bigint not null default 1,
+  created_by uuid,
   updated_at timestamptz not null default now()
 );
 
@@ -33,6 +35,7 @@ create table if not exists public.availability (
   shift_key text not null,
   status text not null,
   version bigint not null default 1,
+  created_by uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -47,6 +50,7 @@ create table if not exists public.vacation_ledger (
   carry_prev int not null default 0,
   meta jsonb not null default '{}'::jsonb,
   version bigint not null default 1,
+  created_by uuid,
   updated_at timestamptz not null default now(),
   unique(staff_id, year)
 );
@@ -58,6 +62,7 @@ create table if not exists public.absences (
   end_date date not null,
   type text not null check (type in ('vacation','illness')),
   version bigint not null default 1,
+  created_by uuid,
   created_at timestamptz not null default now()
 );
 create index if not exists absences_staff_type_idx on public.absences (staff_id, type);
@@ -72,6 +77,7 @@ create table if not exists public.overtime_requests (
   reason text,
   last_error text,
   version bigint not null default 1,
+  created_by uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -81,6 +87,7 @@ create table if not exists public.overtime_consents (
   staff_id bigint not null references public.staff(id) on delete cascade,
   date date not null,
   granted_at timestamptz not null default now(),
+  created_by uuid,
   primary key (staff_id, date)
 );
 
@@ -89,10 +96,6 @@ create table if not exists public.app_meta (
   value jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now()
 );
-
--- Seed schema version (idempotent)
-insert into public.app_meta(key,value) values ('schema_version', jsonb_build_object('v',2))
-  on conflict (key) do update set value = excluded.value, updated_at = now();
 
 create table if not exists public.client_errors (
   id bigserial primary key,
@@ -106,17 +109,21 @@ create table if not exists public.client_errors (
 );
 create index if not exists client_errors_ts_idx on public.client_errors (ts DESC);
 
--- Audit log (persisted application events)
 create table if not exists public.audit_log (
   id bigserial primary key,
   ts timestamptz not null,
   message text not null,
   meta jsonb,
+  created_by uuid,
   created_at timestamptz not null default now()
 );
 create index if not exists audit_log_ts_idx on public.audit_log (ts DESC);
 
--- Dev RLS (permissive) — tighten in later access-model sprint
+-- Seed / bump schema version
+insert into public.app_meta(key,value) values ('schema_version', jsonb_build_object('v',3))
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+
+-- Enable RLS
 alter table public.staff enable row level security;
 alter table public.schedule_days enable row level security;
 alter table public.availability enable row level security;
@@ -128,27 +135,28 @@ alter table public.app_meta enable row level security;
 alter table public.client_errors enable row level security;
 alter table public.audit_log enable row level security;
 
+-- Policies (owner-or-null transitional)
 do $$ begin
-  perform 1 from pg_policies where policyname='dev_all_staff';
-  if not found then create policy dev_all_staff on public.staff for all using (true) with check (true); end if;
-  perform 1 from pg_policies where policyname='dev_all_schedule_days';
-  if not found then create policy dev_all_schedule_days on public.schedule_days for all using (true) with check (true); end if;
-  perform 1 from pg_policies where policyname='dev_all_availability';
-  if not found then create policy dev_all_availability on public.availability for all using (true) with check (true); end if;
-  perform 1 from pg_policies where policyname='dev_all_vacation_ledger';
-  if not found then create policy dev_all_vacation_ledger on public.vacation_ledger for all using (true) with check (true); end if;
-  perform 1 from pg_policies where policyname='dev_all_absences';
-  if not found then create policy dev_all_absences on public.absences for all using (true) with check (true); end if;
-  perform 1 from pg_policies where policyname='dev_all_overtime_requests';
-  if not found then create policy dev_all_overtime_requests on public.overtime_requests for all using (true) with check (true); end if;
-  perform 1 from pg_policies where policyname='dev_all_overtime_consents';
-  if not found then create policy dev_all_overtime_consents on public.overtime_consents for all using (true) with check (true); end if;
-  perform 1 from pg_policies where policyname='dev_all_app_meta';
-  if not found then create policy dev_all_app_meta on public.app_meta for all using (true) with check (true); end if;
-  perform 1 from pg_policies where policyname='dev_all_client_errors';
-  if not found then create policy dev_all_client_errors on public.client_errors for all using (true) with check (true); end if;
-  perform 1 from pg_policies where policyname='dev_all_audit_log';
-  if not found then create policy dev_all_audit_log on public.audit_log for all using (true) with check (true); end if;
+  perform 1 from pg_policies where policyname='staff_owner_rw';
+  if not found then create policy staff_owner_rw on public.staff for all using (created_by is null or created_by = auth.uid()) with check (created_by is null or created_by = auth.uid()); end if;
+  perform 1 from pg_policies where policyname='schedule_owner_rw';
+  if not found then create policy schedule_owner_rw on public.schedule_days for all using (created_by is null or created_by = auth.uid()) with check (created_by is null or created_by = auth.uid()); end if;
+  perform 1 from pg_policies where policyname='availability_owner_rw';
+  if not found then create policy availability_owner_rw on public.availability for all using (created_by is null or created_by = auth.uid()) with check (created_by is null or created_by = auth.uid()); end if;
+  perform 1 from pg_policies where policyname='vacation_ledger_owner_rw';
+  if not found then create policy vacation_ledger_owner_rw on public.vacation_ledger for all using (created_by is null or created_by = auth.uid()) with check (created_by is null or created_by = auth.uid()); end if;
+  perform 1 from pg_policies where policyname='absences_owner_rw';
+  if not found then create policy absences_owner_rw on public.absences for all using (created_by is null or created_by = auth.uid()) with check (created_by is null or created_by = auth.uid()); end if;
+  perform 1 from pg_policies where policyname='overtime_requests_owner_rw';
+  if not found then create policy overtime_requests_owner_rw on public.overtime_requests for all using (created_by is null or created_by = auth.uid()) with check (created_by is null or created_by = auth.uid()); end if;
+  perform 1 from pg_policies where policyname='overtime_consents_owner_rw';
+  if not found then create policy overtime_consents_owner_rw on public.overtime_consents for all using (created_by is null or created_by = auth.uid()) with check (created_by is null or created_by = auth.uid()); end if;
+  perform 1 from pg_policies where policyname='audit_log_owner_rw';
+  if not found then create policy audit_log_owner_rw on public.audit_log for all using (created_by is null or created_by = auth.uid()) with check (created_by is null or created_by = auth.uid()); end if;
+  perform 1 from pg_policies where policyname='client_errors_insert';
+  if not found then create policy client_errors_insert on public.client_errors for insert with check (true); end if;
+  perform 1 from pg_policies where policyname='client_errors_select_dev';
+  if not found then create policy client_errors_select_dev on public.client_errors for select using (true); end if; -- tighten later
 end $$;
 
 commit;

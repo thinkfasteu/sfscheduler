@@ -1,0 +1,6 @@
+{
+  "appMaxBytes": 114200,
+  "totalJsBytes": 775000,
+  "created": "2025-09-08T00:00:00Z",
+  "notes": "Baseline derived from build on 2025-09-08 prior to size guard introduction."
+}

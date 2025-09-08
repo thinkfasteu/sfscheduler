@@ -6,6 +6,7 @@ import { APP_CONFIG, SHIFTS } from './modules/config.js';
 import { AppUI } from './ui/appUI.js';
 import { OvertimeRequestsUI } from './ui/overtimeRequests.js';
 import { triggerDownload, importBackupFile } from './src/utils/backup.js';
+import './ui/checklistOverlay.js';
 
 // Initialize application when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
@@ -191,6 +192,15 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const isDark = (document.documentElement.getAttribute('data-theme') === 'dark');
             btn.textContent = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+        }
+        // Persist checklist toggle
+        const checklistCb = document.getElementById('showChecklistToggle');
+        if (checklistCb){
+            const stored = localStorage.getItem('showChecklist');
+            if (stored !== null){ checklistCb.checked = stored === '1'; }
+            checklistCb.addEventListener('change', ()=>{
+                try { localStorage.setItem('showChecklist', checklistCb.checked ? '1':'0'); } catch {}
+            });
         }
     } catch {}
 });

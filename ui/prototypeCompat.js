@@ -92,9 +92,97 @@
     w.focus();
     w.print();
   };
+  // ===== Accessibility & Modal Enhancements =====
+  const modalSelectors = ['#holidaysModal','#swapModal','#searchModal'];
+  function initModalAccessibility(){
+    modalSelectors.forEach(sel => {
+      const m = qs(sel); if (!m) return;
+      m.setAttribute('role','dialog');
+      m.setAttribute('aria-modal','true');
+      // Derive label from first heading
+      const h = m.querySelector('h3,h2,h1'); if (h){
+        if (!h.id) h.id = sel.replace(/[#]/,'')+'-title';
+        m.setAttribute('aria-labelledby', h.id);
+      }
+      // Hide by default
+      if (!m.classList.contains('open')) m.setAttribute('aria-hidden','true');
+    });
+  }
+  function getFocusable(container){
+    return Array.from(container.querySelectorAll('a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])'))
+      .filter(el => !el.hasAttribute('disabled') && !el.getAttribute('aria-hidden'));
+  }
+  function trapFocus(modal){
+    const focusables = getFocusable(modal); if (!focusables.length) return;
+    const first = focusables[0]; const last = focusables[focusables.length-1];
+    function handler(e){
+      if (e.key === 'Tab'){
+        if (e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+      } else if (e.key === 'Escape'){ closeModal(modal); }
+    }
+    modal.__focusHandler = handler;
+    modal.addEventListener('keydown', handler);
+    setTimeout(()=> first.focus(), 0);
+  }
+  function openModal(modal){
+    modal.classList.add('open');
+    modal.removeAttribute('aria-hidden');
+    trapFocus(modal);
+    document.body.classList.add('no-scroll');
+  }
+  function closeModal(modal){
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden','true');
+    if (modal.__focusHandler){ modal.removeEventListener('keydown', modal.__focusHandler); }
+    // Focus back to first tab button for continuity
+    const firstTab = qs('.tabs .tab'); if (firstTab) firstTab.focus();
+    document.body.classList.remove('no-scroll');
+  }
+  // Expose generic helpers for other modules if needed
+  window.__modalA11y = { openModal, closeModal };
+  initModalAccessibility();
+
+  // ===== PDF Export (jsPDF + AutoTable) =====
   // Generate a formatted monthly PDF using jsPDF + AutoTable
-  window.exportPDF = function(){
+  // Preload on hover/focus for faster first paint
+  (function setupPdfPreload(){
+    const btn = document.getElementById('exportPdfBtn');
+    if (!btn) return;
+    let triggered = false;
+    async function preload(){
+      if (triggered) return; triggered = true;
+      if (window.jspdf?.jsPDF) return; // already loaded
+      try { await import('../vendor/pdfBundle.js'); } catch(e){ triggered=false; }
+    }
+    ['mouseover','focus'].forEach(ev => btn.addEventListener(ev, preload, { once:true }));
+  })();
+  window.exportPDF = async function(){
     try{
+      // Lazy load jsPDF libraries if not present
+      if (!window.jspdf || !window.jspdf.jsPDF){
+        const btn = document.getElementById('exportPdfBtn');
+        const oldLabel = btn ? btn.textContent : '';
+        if (btn) { btn.textContent = 'Lädt…'; btn.disabled = true; }
+        try {
+          // Prefer bundled dynamic import (tree-shaken, cached)
+          const mod = await import(/* @vite-ignore */ '../vendor/pdfBundle.js');
+          if (mod && mod.installPDFGlobals){ mod.installPDFGlobals(); }
+        } catch(bundledErr){
+          console.warn('[pdf] bundled import failed, fallback to CDN', bundledErr);
+          // Fallback to CDN script injection respecting CSP
+          const loadScript = (src, integrity)=> new Promise((resolve,reject)=>{
+            const s = document.createElement('script');
+            s.src = src; s.type='text/javascript'; s.async=true; s.crossOrigin='anonymous'; if (integrity) s.integrity=integrity;
+            s.onload=()=> resolve(); s.onerror=()=> reject(new Error('load fail '+src));
+            document.head.appendChild(s);
+          });
+          try {
+            await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js','sha256-mMzxeqEMILsTAXYmGPzJtqs6Tn8mtgcdZNC0EVTfOHU=');
+            await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js','sha256-J6nDthhDxjErh/FC1A/nfA8PBUyfPN7MxL/V8zIoWcg=');
+          } catch(e){ console.error('[pdf] dynamic load failed', e); alert('PDF Bibliothek konnte nicht geladen werden'); if (btn){ btn.textContent=oldLabel; btn.disabled=false; } return; }
+        } finally { if (btn){ btn.textContent=oldLabel || 'Export PDF'; btn.disabled=false; } }
+      }
       const month = document.getElementById('scheduleMonth')?.value;
       if (!month){ alert('Bitte Monat wählen'); return; }
       const data = window.DEBUG?.state?.scheduleData?.[month] || {};
@@ -174,10 +262,17 @@
       lockBody(false);
     }
   });
-  const openModal = (id) => { const el = document.getElementById(id); if (el){ el.classList.add('open'); lockBody(true);} };
-  const closeModal = (id) => { const el = document.getElementById(id); if (el){ el.classList.remove('open'); lockBody(false);} };
-  window.__openModal = openModal;
-  window.__closeModal = closeModal;
+  // Legacy compatibility helpers (distinct names to avoid shadowing earlier accessibility openModal/closeModal)
+  const legacyOpenModal = (id) => { const el = document.getElementById(id); if (el){ el.classList.add('open'); lockBody(true);} };
+  const legacyCloseModal = (id) => { const el = document.getElementById(id); if (el){ el.classList.remove('open'); lockBody(false);} };
+  window.__openModal = legacyOpenModal;
+  window.__closeModal = legacyCloseModal;
+
+  // Console banner with version & health hint
+  try {
+    const v = window.__APP_VERSION__ || 'dev';
+    console.info(`Scheduler App v${v} – type window.health() for status.`);
+  } catch {}
 
   // Simple demo generator: fills grid cells with placeholders (until real engine is connected)
   window.generateSchedule = function(){

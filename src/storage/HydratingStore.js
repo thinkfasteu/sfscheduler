@@ -433,5 +433,10 @@ export class HydratingStore {
     return !!appState.permanentOvertimeConsent?.[staffId]?.[year]?.[dateStr];
   }
   auditList(){ return Array.isArray(appState.auditLog)? appState.auditLog : []; }
-  auditLog(message, meta){ if (!Array.isArray(appState.auditLog)) appState.auditLog = []; appState.auditLog.push({ timestamp: Date.now(), message, meta }); appState.save?.(); }
+  auditLog(message, meta){
+    if (!Array.isArray(appState.auditLog)) appState.auditLog = [];
+    appState.auditLog.push({ timestamp: Date.now(), message, meta });
+    appState.save?.();
+    if (!this.remote.disabled){ this._enqueue('auditLog', async ()=> { await this.remote.auditLog(message, meta); }); }
+  }
 }

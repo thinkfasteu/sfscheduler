@@ -228,6 +228,29 @@ li { margin: 6px 0; }
 .toast-warning { background:#ffc107; color:#222; }
 .toast.fade-out { opacity:0; transition:opacity .6s; }
 
+/* Scheduling Checklist Overlay */
+#scheduleChecklistRoot { position:fixed; top:16px; right:16px; z-index:3200; max-width:340px; font:13px system-ui; }
+.checklist-panel { background: var(--card); color: var(--text); border:1px solid var(--border); box-shadow: var(--shadow); border-radius:10px; padding:14px 16px; display:flex; flex-direction:column; gap:10px; animation:cl-enter .4s ease; }
+@media (prefers-reduced-motion: reduce){ .checklist-panel { animation:none; } }
+@keyframes cl-enter { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+.checklist-header { display:flex; align-items:center; gap:8px; }
+.checklist-header h4 { margin:0; font-size:14px; flex:1; }
+.checklist-close { background:transparent; border:none; cursor:pointer; color:var(--muted); font-size:16px; line-height:1; padding:2px 4px; }
+.checklist-steps { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+.checklist-steps li { display:flex; align-items:flex-start; gap:6px; }
+.cl-step-label { flex:1; }
+.cl-step-status { font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+.cl-status-pending { color: var(--muted); }
+.cl-status-ok { color: var(--success); }
+.cl-status-error { color: var(--danger); }
+.cl-flags { background: rgba(245,158,11,.14); border:1px solid var(--warning); padding:8px; border-radius:8px; font-size:12px; max-height:140px; overflow:auto; }
+[data-theme="dark"] .cl-flags { background: rgba(245,158,11,.15); }
+.cl-flag-item { margin:0 0 4px 0; padding:0; line-height:1.3; }
+.cl-summary { font-size:12px; color:var(--muted); }
+.cl-progress { height:4px; background:rgba(0,0,0,.1); border-radius:3px; overflow:hidden; }
+.cl-progress-bar { height:100%; width:0%; background:linear-gradient(90deg,var(--brand),var(--brand-600)); transition:width .4s ease; }
+@media (prefers-reduced-motion: reduce){ .cl-progress-bar { transition:none; } }
+
 .modal .modal-content { border: 1px solid var(--border); box-shadow: var(--shadow); }
 .modal h3 { margin: 0; }
 .modal .form-row { margin-top: 8px; }

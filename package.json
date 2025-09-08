@@ -1,0 +1,24 @@
+{
+	"name": "scheduler-app",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "node tools/build.mjs --watch",
+		"build": "node tools/build.mjs",
+		"analyze": "node tools/build.mjs --analyze",
+		"verify": "node tools/verify.mjs",
+		"test": "node test/reportService.test.js && node test/backupValidation.test.js && node test/scheduleDiff.test.js && node test/errorHook.test.js && node test/clientErrorLogger.test.js && node test/clientErrorUnload.test.js && node test/businessRulesEdgeCases.test.js && node test/fairness.test.js",
+		"verify:db": "node tools/verify_db_integrity.mjs",
+		"size:check": "node tools/sizeGuard.mjs",
+		"ci": "npm run clean && npm run build && npm run size:check && npm run test && npm run verify",
+		"clean": "node -e \"import('fs').then(f=>{try{f.rmSync('dist',{recursive:true,force:true})}catch{}})\""
+	},
+	"devDependencies": {
+		"esbuild": "^0.21.5"
+	},
+	"dependencies": {
+		"jspdf": "^2.5.1",
+		"jspdf-autotable": "^3.8.2"
+	}
+}

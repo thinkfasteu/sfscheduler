@@ -86,13 +86,41 @@ export class EventHandler {
             alert('Bitte Monat auswählen');
             return;
         }
+        // Checklist start (driven by real events)
+        try {
+            if (window.__services?.uiChecklist && document.getElementById('showChecklistToggle')?.checked){
+                window.__services.uiChecklist.start({ month, mode:'generate' });
+            }
+            window.__services?.events?.emit('schedule:validate:start',{ month });
+        } catch {}
         try {
             const engine = new SchedulingEngine(month);
             const schedule = engine.generateSchedule();
+            // Fairness + overtime validations (reuse validator for flag extraction)
+            let flags=[]; try {
+                const validator = new (window.ScheduleValidator||window.ScheduleValidatorImported||require('../validation.js').ScheduleValidator)(month); // fallback dynamic
+                const { issues } = validator.validateScheduleWithIssues(schedule.data);
+                const sample = [];
+                Object.values(issues).forEach(arr=>{ (arr||[]).forEach(it=> sample.push(it)); });
+                flags = sample.slice(0,12).map(i=> i.message || `${i.type}`);
+                window.__services?.uiChecklist?.addFlags(flags);
+            } catch {}
+            window.__services?.events?.emit('schedule:validate:done',{ month, flags });
+            window.__services?.uiChecklist?.updateStep('validate','ok');
+            window.__services?.events?.emit('schedule:fairness:start',{ month });
+            window.__services?.uiChecklist?.updateStep('fairness','ok');
+            window.__services?.events?.emit('schedule:overtime:start',{ month });
+            window.__services?.uiChecklist?.updateStep('overtime','ok');
             // Persist without calling schedule.save() (which references saveData)
             appState.scheduleData[month] = schedule.data;
             appState.save();
+            window.__services?.events?.emit('schedule:save:done',{ month });
+            window.__services?.uiChecklist?.updateStep('save','ok');
             try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
+            window.__services?.events?.emit('schedule:reindex:start',{ month });
+            window.__services?.uiChecklist?.updateStep('reindex','ok');
+            window.__services?.uiChecklist?.complete({ message:'Plan erstellt', month, flagsCount: (flags||[]).length });
+            window.__services?.events?.emit('schedule:complete',{ month, flagsCount:(flags||[]).length });
             // Re-render calendar and assignments
             if (typeof this.ui.updateCalendarFromSelect === 'function') {
                 this.ui.updateCalendarFromSelect();
@@ -102,6 +130,7 @@ export class EventHandler {
         } catch (e) {
             console.error('Schedule generation failed', e);
             alert('Fehler beim Erstellen des Dienstplans. Details in der Konsole.');
+            try { window.__services?.uiChecklist?.updateStep('validate','error'); window.__services?.uiChecklist?.complete({ message:'Fehler bei Erstellung' }); } catch {}
         }
     }
 
