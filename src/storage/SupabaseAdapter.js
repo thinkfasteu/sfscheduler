@@ -276,11 +276,12 @@ export class SupabaseAdapter {
   async removeIllness(id){ if (this.disabled) return true; await this._rpc(`absences?id=eq.${id}`, { method:'DELETE' }); return true; }
 
   // Overtime placeholders
+  // NEXT: implement parity with LocalStorageAdapter using overtime_requests / overtime_consents tables
   listOvertimeRequests(){ return []; }
-  createOvertimeRequest(){ throw new Error('Not implemented'); }
-  updateOvertimeRequest(){ throw new Error('Not implemented'); }
-  transitionOvertimeRequest(){ throw new Error('Not implemented'); }
-  setOvertimeConsent(){ throw new Error('Not implemented'); }
+  createOvertimeRequest(){ throw new Error('Not implemented (overtime)'); }
+  updateOvertimeRequest(){ throw new Error('Not implemented (overtime)'); }
+  transitionOvertimeRequest(){ throw new Error('Not implemented (overtime)'); }
+  setOvertimeConsent(){ throw new Error('Not implemented (overtime)'); }
   hasOvertimeConsent(){ return false; }
 
   // Audit (local only for now)
@@ -312,6 +313,18 @@ export class SupabaseAdapter {
       createdAt: r.created_at,
       updatedAt: r.updated_at
     }));
+  }
+  listOvertimeByMonth(month){
+    if (this.disabled) return [];
+    return this._rpc(`overtime_requests?month=eq.${month}&select=*`).then(rows=> rows.map(r=>({
+      id:r.id, staffId:r.staff_id, shiftKey:r.shift_key, status:r.status, reason:r.reason, lastError:r.last_error, dateStr:r.date, month:r.month, createdAt:r.created_at, updatedAt:r.updated_at
+    })) ).catch(()=>[]);
+  }
+  listOvertimeByDate(month, dateStr){
+    if (this.disabled) return [];
+    return this._rpc(`overtime_requests?month=eq.${month}&date=eq.${dateStr}&select=*`).then(rows=> rows.map(r=>({
+      id:r.id, staffId:r.staff_id, shiftKey:r.shift_key, status:r.status, reason:r.reason, lastError:r.last_error, dateStr:r.date, month:r.month, createdAt:r.created_at, updatedAt:r.updated_at
+    })) ).catch(()=>[]);
   }
   async createOvertimeRequest(month, dateStr, req){
     if (this.disabled) return { ...req, dateStr, month };

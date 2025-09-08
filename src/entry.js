@@ -2,6 +2,8 @@
 // Imports existing modular script tags previously loaded individually.
 import './config/bootstrap.js';
 import './ui/eventBindings.js';
+// Include prototype compatibility early so console banner + polyfills show before main UI wiring
+import '../ui/prototypeCompat.js';
 import '../main.js';
 import { installGlobalErrorHandlers, getHealthSnapshot } from './utils/errors.js';
 

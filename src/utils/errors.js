@@ -2,8 +2,17 @@
 const errorBuffer = [];
 const MAX_BUFFER = 100;
 const listeners = [];
+// Ignore patterns (benign browser/extension noise)
+const IGNORE_ERROR_PATTERNS = [
+  /runtime\/sendMessage: The message port closed/i,
+  /chrome-extension:\/\//i
+];
 export function onError(fn){ if (typeof fn==='function') listeners.push(fn); }
 export function pushError(entry){
+  try {
+    const msg = String(entry.message||entry.msg||'');
+    if (IGNORE_ERROR_PATTERNS.some(r=> r.test(msg))) return; // skip benign noise
+  } catch {}
   errorBuffer.push(entry);
   if (errorBuffer.length > MAX_BUFFER) errorBuffer.shift();
   if (entry.severity==='fatal') console.error('[fatal]', entry);
@@ -22,11 +31,17 @@ export function installGlobalErrorHandlers(){
 }
 // Minimal health snapshot
 export function getHealthSnapshot(){
+  const backend = (window.CONFIG && window.CONFIG.BACKEND) || (window.__CONFIG__ && window.__CONFIG__.BACKEND) || 'local';
+  const hydrated = !!(window.__services && window.__services.staff && window.__services.staff.list && window.__services.staff.list().length >= 0);
   return {
+    ts: Date.now(),
     version: window.__APP_VERSION__ || 'dev',
+    ready: !!window.__APP_READY__,
+    backend,
+    hydrated,
+    lockOwner: window.__TAB_CAN_EDIT ? 'self' : (window.__TAB_CAN_EDIT===false ? 'other-or-none' : 'unknown'),
     lastError: errorBuffer[errorBuffer.length-1]?.message || null,
     errorCount: errorBuffer.length,
-  time: Date.now(),
-  recent: errorBuffer.slice(-5)
+    recent: errorBuffer.slice(-5)
   };
 }

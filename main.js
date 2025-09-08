@@ -1,5 +1,4 @@
 import { appState } from './modules/state.js';
-import './ui/prototypeCompat.js';
 import { ScheduleUI } from './ui/scheduleUI.js';  // Updated path
 import { EventHandler } from './ui/eventHandlers.js';  // Updated path
 import { APP_CONFIG, SHIFTS } from './modules/config.js';
@@ -8,8 +7,8 @@ import { OvertimeRequestsUI } from './ui/overtimeRequests.js';
 import { triggerDownload, importBackupFile } from './src/utils/backup.js';
 import './ui/checklistOverlay.js';
 
-// Initialize application when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
+function initApp(){
+    if (window.__APP_READY__) return; // idempotent guard
     appState.load();
         // --- Multi-tab synchronization & cooperative edit lock (Sprint 3) ---
         const TAB_ID = Math.random().toString(36).slice(2);
@@ -26,6 +25,32 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.classList.toggle('view-only', !canEdit);
         }
         function claimLock(){ if (currentLockOwner===TAB_ID) return; announce('lock-acquire'); }
+
+        // Unified toast helper (ensure available early so later handlers can use it)
+        if (!window.__toast){
+            window.__toast = (msg, opts={})=>{
+                try {
+                    const c = document.querySelector('.toast-container') || (()=>{ const div=document.createElement('div'); div.className='toast-container'; document.body.appendChild(div); return div; })();
+                    const el = document.createElement('div');
+                    el.className='toast'+(opts.variant? ' toast-'+opts.variant:'')+(opts.small?' toast-sm':'');
+                    el.textContent = msg;
+                    c.appendChild(el);
+                    setTimeout(()=>{ el.classList.add('fade-out'); setTimeout(()=>el.remove(),650); }, opts.ttl||4000);
+                } catch {}
+            };
+        }
+        // Unified banner helper (define early if not yet defined)
+        if (!window.__banner){
+            window.__banner = (id, text, variant='info', ttl=6000)=>{
+                if (document.getElementById(id)) return;
+                const div = document.createElement('div');
+                div.id=id; div.className='app-banner '+(variant==='warn'?'warn':variant==='error'?'error':'');
+                div.innerHTML = `<span>${text}</span>`;
+                const btn = document.createElement('button'); btn.className='close'; btn.textContent='×'; btn.onclick=()=>div.remove(); div.appendChild(btn);
+                document.body.appendChild(div);
+                if (ttl>0) setTimeout(()=>{ div.style.transition='opacity .6s'; div.style.opacity='0'; setTimeout(()=>div.remove(),650); }, ttl);
+            };
+        }
         if (bc){
             bc.addEventListener('message', ev=>{
                 const { data } = ev; if (!data || data.from===TAB_ID) return;
@@ -52,6 +77,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         setInterval(()=>{ claimLock(); showLockStatus(); }, 5000);
         claimLock();
+        // Single-tab fallback: if no peer grants lock within 300ms, self-assign so UI is editable.
+        setTimeout(()=>{
+            if (!currentLockOwner){
+                currentLockOwner = TAB_ID;
+                showLockStatus();
+                try { console.info('[lock] self-assigned (no competing tabs detected)'); } catch {}
+            }
+        }, 300);
         // Fallback via storage events if BroadcastChannel unavailable
         window.addEventListener('storage', (e)=>{
             if (!e.key || !appState.isDurableKey || !appState.isDurableKey(e.key)) return;
@@ -75,13 +108,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const editIds = new Set(['generateScheduleBtn','clearScheduleBtn','saveStaffBtn','addStaffVacationBtn','addStaffIllnessBtn','addVacationPeriodBtn','addOtherStaffBtn','addOtherVacationPeriodBtn','executeAssignBtn','executeSwapBtn','executeSearchAssignBtn']);
             if (editIds.has(id) || el.hasAttribute('data-editing')){
                 ev.preventDefault(); ev.stopPropagation();
-                if (!document.getElementById('viewOnlyToast')){
-                    const t = document.createElement('div');
-                    t.id='viewOnlyToast';
-                    t.style.cssText='position:fixed;bottom:44px;right:8px;background:#dc3545;color:#fff;font:12px system-ui;padding:6px 10px;border-radius:4px;z-index:3000;box-shadow:0 2px 4px rgba(0,0,0,.3)';
-                    t.textContent='Schreib-Lock in anderem Tab. Dort bearbeiten.';
-                    document.body.appendChild(t);
-                    setTimeout(()=>{ t.style.transition='opacity .6s'; t.style.opacity='0'; setTimeout(()=>t.remove(),700); }, 4000);
+                // Replace legacy inline toast with unified helper
+                if (!window.__TOAST_VIEWONLY_SHOWN){
+                    window.__TOAST_VIEWONLY_SHOWN = Date.now();
+                    window.__toast('Schreib-Lock in anderem Tab. Dort bearbeiten.', { variant:'error', small:true });
                 }
             }
         }, true);
@@ -149,18 +179,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // Expose to prototype compatibility shim
     window.handlers = eventHandler;
     window.appUI = appUI;
+    window.__APP_READY__ = true;
+    try { console.info('[app] UI initialized'); } catch {}
+    // Debug overlay once ready (auto-removes after 4s)
+    try {
+        if (!document.getElementById('appReadyOverlay')){
+            const o = document.createElement('div');
+            o.id='appReadyOverlay';
+            o.textContent='UI Ready';
+            o.style.cssText='position:fixed;top:8px;left:50%;transform:translateX(-50%);background:#198754;color:#fff;padding:4px 10px;font:12px system-ui;border-radius:4px;z-index:5000;box-shadow:0 2px 6px rgba(0,0,0,.3)';
+            document.body.appendChild(o);
+            setTimeout(()=>{ o.style.transition='opacity .6s'; o.style.opacity='0'; setTimeout(()=>o.remove(),700); }, 4000);
+        }
+    } catch {}
     // Backup API
     window.__backup = {
         export: ()=> triggerDownload(),
-        importFile: async (file)=>{ try { const res = await importBackupFile(file); console.info('[backup] restored', res); window.appUI && window.appUI.refreshAll && window.appUI.refreshAll(); toast('Backup importiert'); } catch(e){ console.error('[backup] import failed', e); toast('Import fehlgeschlagen','error'); } }
+        importFile: async (file)=>{ try { const res = await importBackupFile(file); console.info('[backup] restored', res); window.appUI && window.appUI.refreshAll && window.appUI.refreshAll(); window.__toast('Backup importiert'); } catch(e){ console.error('[backup] import failed', e); window.__toast('Import fehlgeschlagen', { variant:'error' }); } }
     };
-    function toast(msg, variant){
-        let t = document.createElement('div');
-        t.className='toast-msg';
-        t.style.cssText='position:fixed;top:8px;right:8px;background:'+(variant==='error'?'#dc3545':'#198754')+';color:#fff;padding:6px 10px;font:12px system-ui;border-radius:4px;z-index:4000;box-shadow:0 2px 6px rgba(0,0,0,.35)';
-        t.textContent=msg; document.body.appendChild(t);
-        setTimeout(()=>{ t.style.transition='opacity .6s'; t.style.opacity='0'; setTimeout(()=>t.remove(),650); }, 3500);
-    }
+    // (toast & banner helpers already defined earlier if absent)
     // Simple metrics instrumentation (in-memory, logs every 30s)
     (function metrics(){
         const M = { counters:{}, timings:{} };
@@ -203,18 +240,51 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     } catch {}
-});
+}
+
+// Initialize application when DOM is ready or immediately if already loaded
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp, { once:true });
+} else {
+    // DOM already parsed (late-loaded bundle) -> run immediately
+    initApp();
+}
 
 // Handle cleanup on page unload
 window.addEventListener('beforeunload', () => {
     appState.save(true);
 });
 
-// Export for console debugging
-window.DEBUG = {
-    state: appState,
-    APP_CONFIG,
-    SHIFTS
-};
-// Expose shifts for helpers like export without ESM imports in global scope
+// Export limited debug only in non-production (BUILD_ENV!='production')
+if (window.CONFIG?.ENV !== 'production'){
+    window.DEBUG = { state: appState, APP_CONFIG, SHIFTS };
+}
+// Expose shifts for helpers like export without ESM imports in global scope (safe)
 window.SHIFTS = SHIFTS;
+
+    // Backend fallback banner toggle (runs after services hydration if present)
+    try {
+        const evalBackendBanner = () => {
+            const requestedSupabase = window.CONFIG?.BACKEND === 'supabase';
+            const usingSupabase = !!(window.__services?.staff?.store?.remote || window.__services?.store?.remote);
+            if (requestedSupabase && !usingSupabase){
+                window.__banner && window.__banner('backendFallbackBanner', 'Hinweis: Verbindung zu Supabase nicht aktiv – lokale Speicherung wird verwendet.', 'warn', 0);
+            } else {
+                const existing = document.getElementById('backendFallbackBanner');
+                if (existing) existing.remove();
+            }
+        };
+        // Initial check (in case services already attached synchronously)
+        evalBackendBanner();
+        if (window.__services && window.__services.ready){
+            window.__services.ready.then(()=>{ evalBackendBanner(); });
+        } else {
+            // Fallback: retry a few times until services appear
+            let attempts = 0;
+            const t = setInterval(()=>{
+                attempts++;
+                evalBackendBanner();
+                if (window.__services && window.__services.ready || attempts>20){ clearInterval(t); }
+            }, 300);
+        }
+    } catch {}

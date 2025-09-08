@@ -4,17 +4,27 @@
   function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
 
   function showTab(evt, key){
-    // Toggle .tab active
-    qsa('.tabs .tab').forEach(b => b.classList.remove('active'));
-    if (evt && evt.currentTarget) evt.currentTarget.classList.add('active');
-    // Toggle sections with ids like #staff-tab, #schedule-tab, etc.
-    qsa('.section').forEach(sec => sec.classList.remove('active'));
-    const target = qs(`#${key}-tab`);
-    if (target) target.classList.add('active');
+    if (!key && evt?.currentTarget){ key = evt.currentTarget.getAttribute('data-tab'); }
+    if (!key) return;
+    // Remove old
+    qsa('.tabs .tab.active').forEach(b=> b.classList.remove('active'));
+    qsa('.section.active').forEach(sec=> sec.classList.remove('active'));
+    // Add new
+    const btn = qs(`.tabs .tab[data-tab="${key}"]`);
+    if (btn) btn.classList.add('active');
+    const sec = qs(`#${key}-tab`);
+    if (sec) sec.classList.add('active');
   }
 
   // Wire to window for prototype inline onclicks
   window.showTab = showTab;
+  // Ensure one tab active if none set yet
+  try {
+    if (!document.querySelector('.tabs .tab.active')){
+      const first = document.querySelector('.tabs .tab[data-tab]');
+      if (first){ showTab(null, first.getAttribute('data-tab')); }
+    }
+  } catch {}
 
   // Bridge to modular event handler if available
   function getHandler(){ return window.handlers; }

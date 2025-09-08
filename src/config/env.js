@@ -2,7 +2,7 @@
 // Precedence: window.CONFIG -> import.meta.env (Vite style) -> optional config.local.js (attached to window.CONFIG_LOCAL) -> fallback defaults.
 
 const PLACEHOLDER_REGEX = /your[-_]?supabase|example|changeme/i;
-export const EXPECTED_SCHEMA_VERSION = 6; // bump for strict RLS enforcement (007)
+export const EXPECTED_SCHEMA_VERSION = 7; // bumped to align with deployed DB schema
 
 function readGlobal(name){
   try { return (typeof window!=='undefined'? window[name] : global[name]); } catch { return undefined; }
@@ -27,19 +27,22 @@ export function isSupabaseConfigured(){
   return !!runtimeConfig.SUPABASE_URL && !!runtimeConfig.SUPABASE_ANON_KEY && !PLACEHOLDER_REGEX.test(runtimeConfig.SUPABASE_URL) && !PLACEHOLDER_REGEX.test(runtimeConfig.SUPABASE_ANON_KEY);
 }
 
-// Non-blocking banner utility
+// Banner shim: delegate to global unified helper if present
 export function showBanner(id, text, bg='#ffc107', ttl=8000){
-  if (typeof document==='undefined') return;
-  if (document.getElementById(id)) return;
+  if (typeof window !== 'undefined' && typeof window.__banner === 'function'){
+    // Map background color to variant heuristically
+    let variant = 'info';
+    if (/ffecb5|ffdede|ffc/.test(bg)) variant='warn';
+    if (/d1e7dd/.test(bg)) variant='info';
+    if (/ff|dc3545|danger/i.test(bg)) variant='error';
+    window.__banner(id, text, variant, ttl);
+    return;
+  }
+  // Fallback inline (rare: early boot before main.js)
+  if (typeof document==='undefined' || document.getElementById(id)) return;
   const div = document.createElement('div');
-  div.id = id;
-  div.textContent = text;
-  div.style.cssText='position:fixed;top:0;left:0;right:0;z-index:3000;padding:6px 10px;font:13px system-ui;display:flex;justify-content:space-between;align-items:center;color:#222;background:'+bg+';box-shadow:0 2px 4px rgba(0,0,0,.25)';
-  const close = document.createElement('button');
-  close.textContent='×';
-  close.style.cssText='background:transparent;border:none;font-size:16px;cursor:pointer;margin-left:12px;color:#222;';
-  close.onclick=()=>div.remove();
-  div.appendChild(close);
+  div.id=id; div.className='app-banner';
+  div.textContent=text;
   document.body.appendChild(div);
   if (ttl>0) setTimeout(()=>{ div.style.transition='opacity .6s'; div.style.opacity='0'; setTimeout(()=>div.remove(),650); }, ttl);
 }
@@ -55,8 +58,24 @@ export async function checkSchemaVersion(adapter){
     const rows = await res.json();
     const row = rows[0];
     const v = row && row.value && (row.value.v || row.value.version);
-    if (typeof v==='number' && v !== EXPECTED_SCHEMA_VERSION){
-      showBanner('schemaVersionNotice', `DB schema version mismatch (expected ${EXPECTED_SCHEMA_VERSION}, got ${v}); some features may be limited.`, '#ffecb5');
+    if (typeof v==='number'){
+      // Expose for ad‑hoc diagnostics
+      try { if (typeof window!=='undefined'){ window.__SCHEMA_EXPECTED__ = EXPECTED_SCHEMA_VERSION; window.__SCHEMA_DB__ = v; } } catch {}
+      if (v === EXPECTED_SCHEMA_VERSION){
+        if (typeof window!== 'undefined' && !window.__SCHEMA_VERSION_LOGGED__){
+          window.__SCHEMA_VERSION_LOGGED__ = true;
+          console.info(`[schema] OK (expected=${EXPECTED_SCHEMA_VERSION} db=${v})`);
+        }
+      } else if (v > EXPECTED_SCHEMA_VERSION){
+        // DB is ahead of frontend bundle – likely stale cached JS
+  showBanner('schemaVersionAhead', `Backend schema is newer (expected ${EXPECTED_SCHEMA_VERSION}, db ${v}). Hard refresh (Ctrl+Shift+R) or deploy updated bundle.`, '#d1e7dd');
+        console.warn('[schema] backend newer than bundle',{expected:EXPECTED_SCHEMA_VERSION,db:v});
+      } else { // v < expected
+  showBanner('schemaVersionNotice', `DB schema version mismatch (expected ${EXPECTED_SCHEMA_VERSION}, got ${v}); some features may be limited.`, '#ffecb5');
+        console.warn('[schema] backend older than expected',{expected:EXPECTED_SCHEMA_VERSION,db:v});
+      }
+    } else {
+      console.debug('[schema] could not determine numeric schema version from row', row);
     }
   } catch {/* silent */}
 }
@@ -115,7 +134,7 @@ export const clientErrorLogger = new ClientErrorLogger();
 // Boot hook used by services/index to finalize environment hardening
 export function applyRuntimeGuards(adapter){
   if (!isSupabaseConfigured()){
-    showBanner('configPlaceholder', 'Supabase config missing or placeholder – using local backend fallback.', '#ffdede');
+  showBanner('configPlaceholder', 'Supabase config missing or placeholder – using local backend fallback.', '#ffdede');
     if (typeof window!=='undefined'){ window.CONFIG = { ...(window.CONFIG||{}), BACKEND:'local' }; }
   }
   if (adapter && !adapter.disabled){

@@ -79,5 +79,30 @@ export function createServices({ store, backend } = {}){
   if (typeof window !== 'undefined') window.__services = services;
   // Apply runtime guards (schema version check, client error batching) if supabase
   try { if (store && store.remote) applyRuntimeGuards(store.remote); else if (store && store instanceof SupabaseAdapter) applyRuntimeGuards(store); } catch {}
+
+  // Post-hydration diagnostics: log backend mode & basic entity counts once ready
+  services.ready.then(()=>{
+    try {
+      const usingSupabase = !!(store && (store.remote || store instanceof SupabaseAdapter));
+      const backendMode = usingSupabase ? 'supabase' : 'local';
+      const staffList = services.staff?.list ? services.staff.list() : (services.staff?.getAll ? services.staff.getAll() : []);
+      const staffCount = Array.isArray(staffList) ? staffList.length : '?';
+      console.info(`[services] backend=${backendMode} staff=${staffCount}`);
+      if (!usingSupabase && (window.CONFIG?.BACKEND === 'supabase')){
+        console.warn('[services] Supabase requested but local fallback in use (missing or invalid keys)');
+      }
+      // Emit hydrated:all once (used for UI re-render triggers)
+      try { services.events.emit('hydrated:all', { backend: backendMode, staff: staffCount }); } catch {}
+      // If staff service exposes a refresh hook for UI, trigger when remote data present after an initially empty render
+      if (usingSupabase && staffCount > 0){
+        const listEl = document.getElementById('staffList');
+        if (listEl && listEl.children.length === 0 && window.appUI && typeof window.appUI.renderStaffList === 'function'){
+          window.appUI.renderStaffList();
+        }
+      }
+    } catch (e){
+      console.warn('[services] post-hydration diagnostics failed', e);
+    }
+  });
   return services;
 }

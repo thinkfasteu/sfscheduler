@@ -1,6 +1,14 @@
 function bind(id, evt, handler){ const el = document.getElementById(id); if (el) el.addEventListener(evt, handler); }
 
-document.addEventListener('DOMContentLoaded', () => {
+function __initEventBindings(){
+  // Debug instrumentation: log tab clicks until confirmed working
+  if (!window.__TAB_DEBUG_INSTALLED__){
+    window.__TAB_DEBUG_INSTALLED__=true;
+    document.addEventListener('click', (e)=>{
+      const t = e.target.closest('.tabs .tab[data-tab]');
+      if (t) console.info('[tabs] click', t.getAttribute('data-tab'));
+    }, true);
+  }
   // Tabs
   document.querySelectorAll('.tabs .tab[data-tab]').forEach(btn => {
     btn.addEventListener('click', e => { if (typeof window.showTab==='function') window.showTab(e, btn.getAttribute('data-tab')); });
@@ -40,4 +48,10 @@ document.addEventListener('DOMContentLoaded', () => {
   bind('importBackupBtn','click', ()=> { const inp=document.getElementById('backupFileInput'); if (inp) inp.click(); });
   const fileInput = document.getElementById('backupFileInput');
   if (fileInput){ fileInput.addEventListener('change', e=>{ const f=e.target.files && e.target.files[0]; if (f && window.__backup){ window.__backup.importFile(f); e.target.value=''; } }); }
-});
+}
+
+if (document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', __initEventBindings, { once:true });
+} else {
+  __initEventBindings();
+}

@@ -227,6 +227,13 @@ li { margin: 6px 0; }
 .toast { background:#333; color:#fff; padding:10px 14px; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,.25); font:14px system-ui; min-width:260px; display:flex; flex-direction:column; gap:6px; }
 .toast-warning { background:#ffc107; color:#222; }
 .toast.fade-out { opacity:0; transition:opacity .6s; }
+/* Compact toast variant */
+.toast-sm { font-size:12px; padding:6px 10px; min-width:auto; }
+/* Banners */
+.app-banner { position:fixed; top:0; left:50%; transform:translateX(-50%); background:var(--brand); color:#fff; padding:6px 14px; font:13px system-ui; border-radius:0 0 8px 8px; box-shadow:0 4px 10px rgba(0,0,0,.15); z-index:3600; display:flex; align-items:center; gap:8px; }
+.app-banner.warn { background:var(--warning); color:#222; }
+.app-banner.error { background:var(--danger); }
+.app-banner button.close { background:transparent; border:none; color:inherit; font-size:16px; cursor:pointer; line-height:1; }
 
 /* Scheduling Checklist Overlay */
 #scheduleChecklistRoot { position:fixed; top:16px; right:16px; z-index:3200; max-width:340px; font:13px system-ui; }
