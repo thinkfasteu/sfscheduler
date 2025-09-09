@@ -1,24 +1,32 @@
 // Boot loader with dev vs dist auto-detection; config.local.js (optional) loads first.
 (async()=>{
-  // 1. Load optional config.local.js (non-module) so it can define window.CONFIG early.
+  // 1. Ergonomic optional local config load (dev only).
+  //    Loads config.local.js ONLY when on localhost and either:
+  //    a) EXPECT_LOCAL_CONFIG === true (explicit opt‑in), OR
+  //    b) File actually exists (HEAD 200) even without flag (convenience auto-detect).
+  //    Never runs on production hosts; prevents 404 -> HTML parse errors in prod.
   async function loadLocalConfig(){
-  // Probe automatically; silent if missing.
-  if (window.CONFIG && window.CONFIG.EXPECT_LOCAL_CONFIG === false) {
-    return; // explicit skip (production runtime-config scenario)
-  }
-  window.CONFIG = window.CONFIG || {};
+    window.CONFIG = window.CONFIG || {};
+    const host = location.hostname;
+    const isLocalHost = ['localhost','127.0.0.1','::1'].includes(host);
+    if (!isLocalHost) return; // production/staging skip
+    const explicit = window.CONFIG.EXPECT_LOCAL_CONFIG === true;
+    // Probe existence (HEAD). If explicit flag set we still probe to give a helpful log if missing.
     let exists = false;
     try {
       const head = await fetch('./config.local.js', { method:'HEAD', cache:'no-store' });
       exists = head.ok;
     } catch {}
+    if (!explicit && !exists) return; // silent auto-skip
+    if (explicit && !exists){ console.info('[dev] EXPECT_LOCAL_CONFIG=true but config.local.js not found – skipping'); return; }
     if (exists){
       await new Promise(resolve=>{
         const s = document.createElement('script');
         s.src = './config.local.js';
-        s.onload = ()=>resolve();
-        s.onerror = ()=>resolve();
-        document.head.appendChild(s);
+        s.async = false;
+        s.onload = ()=>{ console.info('[dev] loaded config.local.js'); resolve(); };
+        s.onerror = ()=>{ console.info('[dev] failed to load config.local.js'); resolve(); };
+        (document.head||document.documentElement).appendChild(s);
       });
     }
   }
