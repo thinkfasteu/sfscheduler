@@ -3,6 +3,9 @@
   // 1. Load optional config.local.js (non-module) so it can define window.CONFIG early.
   async function loadLocalConfig(){
   // Probe automatically; silent if missing.
+  if (window.CONFIG && window.CONFIG.EXPECT_LOCAL_CONFIG === false) {
+    return; // explicit skip (production runtime-config scenario)
+  }
   window.CONFIG = window.CONFIG || {};
     let exists = false;
     try {

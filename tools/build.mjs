@@ -50,7 +50,7 @@ function writeRuntimeConfig(){
   try {
     const out = {};
     // Whitelist of keys exposed to client
-    const exposeKeys = ['BACKEND','SUPABASE_URL','SUPABASE_ANON_KEY','APP_ENV','ENV','APP_VERSION'];
+  const exposeKeys = ['BACKEND','SUPABASE_URL','SUPABASE_ANON_KEY','APP_ENV','ENV','APP_VERSION'];
     exposeKeys.forEach(k=>{ if (envVars[k]) out[k]=envVars[k]; });
     if (!out.BACKEND) out.BACKEND = (envVars.BACKEND||'local');
     // If BACKEND is supabase but keys missing, keep placeholders to trigger fallback banner
@@ -58,7 +58,9 @@ function writeRuntimeConfig(){
       if (!out.SUPABASE_URL) out.SUPABASE_URL='';
       if (!out.SUPABASE_ANON_KEY) out.SUPABASE_ANON_KEY='';
     }
-    const content = `// Auto-generated at build time.\n`+
+  // Mark that we do not expect a local config file in production deploys
+  out.EXPECT_LOCAL_CONFIG = false;
+  const content = `// Auto-generated at build time.\n`+
       `window.CONFIG = Object.assign(window.CONFIG||{}, ${JSON.stringify(out, null, 2)});\n`+
       `if (!window.__CONFIG__) window.__CONFIG__ = { ...window.CONFIG };\n`+
       `console.info('[runtime-config] BACKEND=' + window.CONFIG.BACKEND);\n`;
