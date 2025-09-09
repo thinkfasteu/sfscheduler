@@ -45,6 +45,26 @@ function validateEnv(){
   }
 }
 validateEnv();
+// Write a small runtime config JS file consumed before boot.js (no inline scripts allowed under CSP)
+function writeRuntimeConfig(){
+  try {
+    const out = {};
+    // Whitelist of keys exposed to client
+    const exposeKeys = ['BACKEND','SUPABASE_URL','SUPABASE_ANON_KEY','APP_ENV','ENV','APP_VERSION'];
+    exposeKeys.forEach(k=>{ if (envVars[k]) out[k]=envVars[k]; });
+    if (!out.BACKEND) out.BACKEND = (envVars.BACKEND||'local');
+    // If BACKEND is supabase but keys missing, keep placeholders to trigger fallback banner
+    if (out.BACKEND.toLowerCase()==='supabase'){
+      if (!out.SUPABASE_URL) out.SUPABASE_URL='';
+      if (!out.SUPABASE_ANON_KEY) out.SUPABASE_ANON_KEY='';
+    }
+    const content = `// Auto-generated at build time.\n`+
+      `window.CONFIG = Object.assign(window.CONFIG||{}, ${JSON.stringify(out, null, 2)});\n`+
+      `if (!window.__CONFIG__) window.__CONFIG__ = { ...window.CONFIG };\n`+
+      `console.info('[runtime-config] BACKEND=' + window.CONFIG.BACKEND);\n`;
+    writeFileSync('dist/runtime-config.js', content);
+  } catch(e){ console.warn('[build] failed to write runtime-config.js', e); }
+}
 // Prepare defines for both import.meta.env.* and process.env.* access
 const envDefine = Object.fromEntries(Object.entries(envVars)
   .filter(([k])=> /^(SUPABASE_|VITE_|APP_|BACKEND|ENV_|SCHED_)/.test(k))
@@ -122,6 +142,8 @@ async function bundle({watchMode=false}){
     manifest.integrities = integrities;
   } catch(e){ console.warn('[build] SRI generation failed', e); }
   writeFileSync('dist/manifest.json', JSON.stringify(manifest, null, 2));
+  // Always (re)write runtime config after manifest so latest env reaches deployment
+  writeRuntimeConfig();
   // Inject preload + integrity into index.html (idempotent markers)
   try {
     if (existsSync('index.html')){
@@ -144,6 +166,10 @@ async function bundle({watchMode=false}){
         // Insert before closing head
         html = html.replace(/<\/head>/i, newBlock + '\n</head>');
       }
+      // Ensure runtime-config.js script tag exists BEFORE boot.js (non-module) so window.CONFIG is ready early.
+      if (!/dist\/runtime-config\.js/.test(html)){
+        html = html.replace(/(\s*)<script type="module" src="\.\/boot\.js"><\/script>/, '$1<script src="./dist/runtime-config.js" data-generated="true"></script>\n$1<script type="module" src="./boot.js"></script>');
+      }
   // Deliberately NOT applying SRI to boot.js to avoid dev churn (boot changes often & isn't hashed).
   // Also remove any stale preload line referencing old app.*.js not equal to current manifest.app
   html = html.replace(/<link rel="modulepreload" href="\.\/dist\/app\.(?!${manifest.app.split('.')[1]})[a-f0-9]{10}\.js[^>]*>\n?/g,'');
@@ -156,7 +182,7 @@ async function bundle({watchMode=false}){
   // Prune stale hashed JS bundles (keep only current manifest referenced files) for non-watch builds
   if (!watchMode){
     try {
-      const allowed = new Set([manifest.app, ...manifest.chunks, 'manifest.json', 'meta.json']);
+  const allowed = new Set([manifest.app, ...manifest.chunks, 'manifest.json', 'meta.json', 'runtime-config.js']);
       const all = (await import('fs/promises')).readdir('dist').then(r=>r).catch(()=>[]);
       for (const f of await all) {
         // Skip chunks directory here (handled separately)
