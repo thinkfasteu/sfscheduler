@@ -670,11 +670,14 @@ export class AppUI {
       else {
         const detailedDay = availSvc?.getDay(staffId, dateStr) || {};
         shiftsForDay.forEach(k=>{
-          const val = detailedDay[k];
+          let val = detailedDay[k];
+          // Treat legacy 'no' for non-permanent as unset
+          if (!isPermanent && val === 'no') val = undefined;
           const isBlocked = isPermanent ? (val === 'no') : false;
           const stateClass = isPermanent ? (isBlocked ? 'state-no' : 'state-unset') : (val ? `state-${val}` : 'state-unset');
           const meta = SHIFTS[k] || {}; const name = meta.name || k; const time = meta.time || '';
-          const label = isPermanent ? (isBlocked ? '✗' : '—') : (val === 'prefer' ? '★' : val === 'yes' ? '✓' : val === 'no' ? '✗' : '—');
+          // Non-permanent: implicit not-available when no value. Only show ✓ (yes) or ★ (prefer).
+          const label = isPermanent ? (isBlocked ? '✗' : '—') : (val === 'prefer' ? '★' : val === 'yes' ? '✓' : '—');
           html += `<button class="avail-btn ${stateClass} shift-btn" title="${name} ${time}" data-date="${dateStr}" data-shift="${k}" ${off?'disabled':''}>${name}: ${label}</button>`;
         });
       }
@@ -703,10 +706,11 @@ export class AppUI {
       btn.addEventListener('click', e => {
         const b = e.currentTarget; const dateStr = b.dataset.date; const shiftKey = b.dataset.shift;
         const detailedDay = availSvc?.getDay(staffId, dateStr) || {};
-        const current = detailedDay[shiftKey];
+        let current = detailedDay[shiftKey];
+        if (staff?.role !== 'permanent' && current === 'no') current = undefined; // migrate legacy
         const next = (staff?.role === 'permanent')
-          ? (current === 'no' ? undefined : 'no')
-          : (current === 'yes' ? 'prefer' : current === 'prefer' ? 'no' : current === 'no' ? undefined : 'yes');
+          ? (current === 'no' ? undefined : 'no') // permanent keeps opt-out toggle
+          : (current === 'yes' ? 'prefer' : current === 'prefer' ? undefined : 'yes'); // undefined -> yes -> prefer -> undefined
         availSvc?.setShift(staffId, dateStr, shiftKey, next);
         this.handleAvailabilityDisplay();
       });
