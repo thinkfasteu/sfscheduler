@@ -14,17 +14,6 @@
             <script type="module" src="./boot.js"></script>
 
 </head>
-    
-        <!-- Dev-only config.local.js loader (gated) -->
-        <script>
-            if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-                const s = document.createElement('script');
-                s.src = 'config.local.js';
-                s.onerror = () => console.info('[dev] no local config');
-                document.head.appendChild(s);
-            }
-        </script>
-</head>
 <body>
     <div class="container">
         <div class="header">

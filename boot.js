@@ -57,7 +57,6 @@
     return originalWarn.apply(this,args);
   };
 
-  await loadLocalConfig();
   configLoaded = true;
   // If Supabase requested, validate keys presence early and show guidance if missing
   try {
