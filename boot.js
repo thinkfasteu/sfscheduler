@@ -27,12 +27,8 @@
   }
   async function loadDist(manifest){
     console.info('[boot] mode=dist');
-    // Pre-import chunks then entry
-    if (Array.isArray(manifest.chunks)){
-      for (const c of manifest.chunks){
-        try { await import('./dist/' + c + '?v=' + encodeURIComponent(manifest.built)); } catch(e){ console.warn('[boot] chunk load failed', c, e); }
-      }
-    }
+    // Do not pre-import chunks; let the hashed app bundle import its own chunk graph.
+    // This avoids 404s if a deploy updates chunks between client loads.
     try {
       await import('./dist/' + manifest.app + '?v=' + encodeURIComponent(manifest.built));
     } catch(e){
