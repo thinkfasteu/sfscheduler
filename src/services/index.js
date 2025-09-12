@@ -76,6 +76,9 @@ export function createServices({ store, backend } = {}){
   services.uiChecklist = createChecklistService(services);
   // Expose readiness (HydratingStore provides readyPromise)
   services.ready = store.readyPromise ? store.readyPromise : Promise.resolve();
+  // Expose store so UI can detect backend mode without guessing
+  services.store = store;
+  if (services.staff && !services.staff.store) try { services.staff.store = store; } catch {}
   if (typeof window !== 'undefined') window.__services = services;
   // Apply runtime guards (schema version check, client error batching) if supabase
   try { if (store && store.remote) applyRuntimeGuards(store.remote); else if (store && store instanceof SupabaseAdapter) applyRuntimeGuards(store); } catch {}
