@@ -516,9 +516,46 @@ export class AppUI {
       const takenManual = (ledger?.[s.id]?.takenManual) ?? 0;
       const carryPrev = (ledger?.[s.id]?.carryPrev) ?? 0;
       const remaining = allowance + carryPrev - takenManual - planned;
-  return `<tr><td class=\"text-left\">${s.name}</td><td>${allowance}</td><td>${takenManual}</td><td>${carryPrev}</td><td>${planned}</td><td>${remaining}</td><td>${sick}</td><td>–</td></tr>`;
+  return `<tr data-staff="${s.id}" data-planned="${planned}">
+    <td class="text-left">${s.name}</td>
+    <td><input type="number" class="ledger-input" data-field="allowance" value="${allowance}" min="0" step="1"/></td>
+    <td><input type="number" class="ledger-input" data-field="takenManual" value="${takenManual}" min="0" step="1"/></td>
+    <td><input type="number" class="ledger-input" data-field="carryPrev" value="${carryPrev}" min="0" step="1"/></td>
+    <td>${planned}</td>
+    <td class="remaining-cell">${remaining}</td>
+    <td>${sick}</td>
+    <td><button class="btn btn-sm" data-ledger-save="${s.id}">Speichern</button></td>
+  </tr>`;
     }).join('');
   tbody.innerHTML = rows || '<tr><td colspan=\"8\" class=\"text-center text-muted\">Keine Daten</td></tr>';
+
+    // Live recompute remaining on input changes
+    const recompute = (tr)=>{
+      if (!tr) return;
+      const planned = Number(tr.getAttribute('data-planned')) || 0;
+      const getVal = (field)=> Number(tr.querySelector(`input[data-field="${field}"]`)?.value || 0) || 0;
+      const allowance = getVal('allowance');
+      const taken = getVal('takenManual');
+      const carry = getVal('carryPrev');
+      const remaining = allowance + carry - taken - planned;
+      const cell = tr.querySelector('.remaining-cell'); if (cell) cell.textContent = String(remaining);
+    };
+    tbody.querySelectorAll('input.ledger-input').forEach(inp=>{
+      inp.addEventListener('input', (e)=>{ const tr = e.currentTarget.closest('tr'); recompute(tr); });
+    });
+    // Save handlers
+    tbody.querySelectorAll('button[data-ledger-save]').forEach(btn=>{
+      btn.addEventListener('click', async (e)=>{
+        const tr = e.currentTarget.closest('tr'); if (!tr) return;
+        const staffId = Number(e.currentTarget.getAttribute('data-ledger-save'));
+        const getVal = (field)=> Number(tr.querySelector(`input[data-field="${field}"]`)?.value || 0) || 0;
+        const payload = { allowance: getVal('allowance'), takenManual: getVal('takenManual'), carryPrev: getVal('carryPrev') };
+        try { await __services?.vacation?.upsertLedgerEntry({ staffId, year, ...payload }); }
+        catch(err){ console.warn('Ledger save failed', err); }
+        // Re-render to reflect any server-updated version or normalization
+        setTimeout(()=> this.renderVacationSummaryTable(), 50);
+      });
+    });
   }
   ensureToastContainer(){
     if (document.getElementById('toastContainer')) return;

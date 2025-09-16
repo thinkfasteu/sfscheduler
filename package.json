@@ -15,10 +15,10 @@
 		"clean": "node -e \"import('fs').then(f=>{try{f.rmSync('dist',{recursive:true,force:true})}catch{}})\""
 	},
 	"devDependencies": {
-		"esbuild": "^0.21.5"
+		"esbuild": "^0.25.9"
 	},
 	"dependencies": {
-		"jspdf": "^2.5.1",
+		"jspdf": "^2.5.2",
 		"jspdf-autotable": "^3.8.2"
 	}
 }

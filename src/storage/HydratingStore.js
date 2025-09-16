@@ -255,7 +255,25 @@ export class HydratingStore {
   }
 
   // Unimplemented (compat stubs)
-  availabilityUpsert(){ throw new Error('Not implemented in HydratingStore (supabase mode)'); }
+  availabilityUpsert(staffId, dateStr, shiftKey, status){
+    // Maintain local mirror synchronously
+    if (!appState.availabilityData) appState.availabilityData = {};
+    if (!appState.availabilityData[staffId]) appState.availabilityData[staffId] = {};
+    if (!appState.availabilityData[staffId][dateStr]) appState.availabilityData[staffId][dateStr] = {};
+    if (!status){
+      delete appState.availabilityData[staffId][dateStr][shiftKey];
+      if (Object.keys(appState.availabilityData[staffId][dateStr]).length===0) delete appState.availabilityData[staffId][dateStr];
+      if (Object.keys(appState.availabilityData[staffId]).length===0) delete appState.availabilityData[staffId];
+    } else {
+      appState.availabilityData[staffId][dateStr][shiftKey] = status;
+    }
+    appState.save?.();
+    // Queue remote write if applicable
+    if (!this.remote.disabled){
+      this._enqueue('availabilityUpsert', async ()=> { await this.remote.availabilityUpsert(staffId, dateStr, shiftKey, status); });
+    }
+    return true;
+  }
   availabilitySetDayOff(staffId, dateStr, isOff){
     const key = `staff:${staffId}`;
     if (!appState.availabilityData[key]) appState.availabilityData[key] = {};

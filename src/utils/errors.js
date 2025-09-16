@@ -45,3 +45,11 @@ export function getHealthSnapshot(){
     recent: errorBuffer.slice(-5)
   };
 }
+
+// Ensure a minimal diagnostic hook exists even when bundler entry isn't loaded.
+// This supports tests that import only this module and expect window.health.
+try {
+  if (typeof window !== 'undefined' && !window.health) {
+    window.health = () => getHealthSnapshot();
+  }
+} catch {}

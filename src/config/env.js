@@ -116,15 +116,20 @@ class ClientErrorLogger {
     const batch = this.queue.splice(0, this.queue.length);
     try {
       const rows = batch.map(b=>({ event_type: b.type, message: b.msg, source: b.source||null, line: b.line||null, stack: b.stack||null, ts: b.ts }));
-      await fetch(`${this.adapter.url}/rest/v1/client_errors`, {
+      const res = await fetch(`${this.adapter.url}/rest/v1/client_errors`, {
         method:'POST',
         headers:{ apikey:this.adapter.key, Authorization:`Bearer ${this.adapter.key}`, 'Content-Type':'application/json', Prefer:'return=minimal' },
         body: JSON.stringify(rows)
       });
+      if (!res.ok){
+        // If table is missing (404) or permission denied, stop further attempts to avoid console noise
+        if (res.status === 404){ this._disabledMissingTable = true; }
+        else if (res.status === 401 || res.status === 403){ this._disabledMissingTable = true; }
+      }
       this.retryAttempts = 0;
-    } catch {/* swallow */}
+    } catch {/* swallow network errors */}
     this.lastFlush = Date.now();
-    if (this.queue.length){ this.schedule(); }
+    if (this.queue.length && !this._disabledMissingTable){ this.schedule(); }
   }
   forceFlush(){ if (this.timer){ clearTimeout(this.timer); this.timer=null; } return this.flush(); }
 }
