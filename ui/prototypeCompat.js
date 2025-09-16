@@ -163,7 +163,7 @@
     async function preload(){
       if (triggered) return; triggered = true;
       if (window.jspdf?.jsPDF) return; // already loaded
-      try { await import('../vendor/pdfBundle.js'); } catch(e){ triggered=false; }
+      try { await import('../src/vendor/pdfBundle.js'); } catch(e){ triggered=false; }
     }
     ['mouseover','focus'].forEach(ev => btn.addEventListener(ev, preload, { once:true }));
   })();
@@ -176,7 +176,7 @@
         if (btn) { btn.textContent = 'Lädt…'; btn.disabled = true; }
         try {
           // Prefer bundled dynamic import (tree-shaken, cached)
-          const mod = await import(/* @vite-ignore */ '../vendor/pdfBundle.js');
+          const mod = await import('../src/vendor/pdfBundle.js');
           if (mod && mod.installPDFGlobals){ mod.installPDFGlobals(); }
         } catch(bundledErr){
           console.warn('[pdf] bundled import failed, fallback to CDN', bundledErr);

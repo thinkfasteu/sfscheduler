@@ -116,9 +116,10 @@ function initApp(){
             }
         }, true);
     // Seed demo data only once (if never seeded and no staff exist). Persist flag after first seed or after first manual modification.
+    // Do not seed in production environment to avoid confusing real deployments.
     const DEMO_FLAG_KEY = 'demoSeeded';
     const demoFlag = (typeof localStorage !== 'undefined') ? localStorage.getItem(DEMO_FLAG_KEY) : null;
-    if ((!Array.isArray(appState.staffData) || appState.staffData.length === 0) && !demoFlag) {
+    if (window.CONFIG?.ENV !== 'production' && (!Array.isArray(appState.staffData) || appState.staffData.length === 0) && !demoFlag) {
         appState.staffData = [
             { id: 1, name: 'Anna', role: 'minijob', contractHours: 10, typicalWorkdays: 3 },
             { id: 2, name: 'Ben', role: 'student', contractHours: 20, typicalWorkdays: 4 },

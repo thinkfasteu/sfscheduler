@@ -41,7 +41,7 @@ function __initEventBindings(){
   bind('executeSwapBtn','click', ()=> window.executeSwap && window.executeSwap());
   bind('executeAssignBtn','click', ()=> window.executeAssign && window.executeAssign());
   // Search modal
-  bind('searchModalCloseBtn','click', ()=> { const m=document.getElementById('searchModal'); if (m){ m.classList.remove('open'); document.body.style.overflow=''; } });
+  bind('searchModalCloseBtn','click', ()=> { const m=document.getElementById('searchModal'); if (!m) return; if (window.__modalA11y?.closeModal) window.__modalA11y.closeModal(m); else { m.classList.remove('open'); m.style.display='none'; document.body.style.overflow=''; } });
   bind('executeSearchAssignBtn','click', ()=> window.executeSearchAssign && window.executeSearchAssign());
   // Backup / Restore
   bind('exportBackupBtn','click', ()=> window.__backup && window.__backup.export());
