@@ -800,11 +800,11 @@ export class ScheduleUI {
             }
             try{ appState.permanentOvertimeConsent = window.DEBUG.state.permanentOvertimeConsent; appState.save?.(); }catch{}
         });
-        // Initial render
+    // Initial render
         renderCandidates();
         // Stash context
         modal.dataset.date = dateStr;
-        modal.style.display = 'block';
+    if (window.__openModal) window.__openModal('searchModal'); else modal.style.display = 'block';
         // Bind assign button
         const execBtn = document.getElementById('executeSearchAssignBtn');
     execBtn.onclick = async () => {

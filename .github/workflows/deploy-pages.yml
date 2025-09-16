@@ -36,6 +36,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           APP_VERSION: ${{ github.sha }}
+          ENV: production
         run: npm run build
 
       - name: Upload artifact
