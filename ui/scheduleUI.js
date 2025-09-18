@@ -520,7 +520,11 @@ export class ScheduleUI {
                 const avail = appState.availabilityData?.[s.id]?.[dateStr]?.[sh];
                 const okAvail = (avail==='yes' || avail==='prefer');
                 const isPerm = s.role === 'permanent';
-                if ((okAvail || isPerm) && !mapById.has(s.id)){
+                // Exclude absence and explicit off-day
+                const vac = (appState.vacationsByStaff?.[s.id]||[]).some(p=>{ if(!p?.start||!p?.end) return false; const t=parseYMD(dateStr).getTime(); const st=parseYMD(p.start).getTime(); const en=parseYMD(p.end).getTime(); return t>=st && t<=en; });
+                const ill = (appState.illnessByStaff?.[s.id]||[]).some(p=>{ if(!p?.start||!p?.end) return false; const t=parseYMD(dateStr).getTime(); const st=parseYMD(p.start).getTime(); const en=parseYMD(p.end).getTime(); return t>=st && t<=en; });
+                const dayOff = appState.availabilityData?.[`staff:${s.id}`]?.[dateStr] === 'off';
+                if (!(vac||ill||dayOff) && (okAvail || isPerm) && !mapById.has(s.id)){
                     mapById.set(s.id, { staff: s, score: 0 });
                 }
             });
@@ -634,6 +638,20 @@ export class ScheduleUI {
         const notes = document.getElementById('candidateNotes');
         // Notes content set in renderCandidates
 
+        // Add explicit 'Leave blank' option (unassign)
+        const leaveBtn = document.getElementById('leaveBlankBtn');
+        if (leaveBtn){
+            leaveBtn.onclick = ()=>{
+                const sh = shiftSel.value;
+                const month = dateStr.substring(0,7);
+                const schedule = window.DEBUG?.state?.scheduleData?.[month] || (window.DEBUG.state.scheduleData[month] = {});
+                if (!schedule[dateStr]) schedule[dateStr] = { assignments: {} };
+                delete schedule[dateStr].assignments[sh];
+                appState.scheduleData = window.DEBUG.state.scheduleData; appState.save?.();
+                this.updateDay(dateStr);
+                modal.style.display = 'none';
+            };
+        }
         // Stash selection into modal dataset for handler
         modal.dataset.date = dateStr;
         modal.dataset.shift = shiftSel.value;
@@ -726,7 +744,10 @@ export class ScheduleUI {
                 const okAvail = (avail==='yes' || avail==='prefer');
                 const isPerm = s.role==='permanent';
                 const allowPerm = !isWeekend || includeCb.checked; // on weekends, gate permanents by toggle
-                if ((okAvail || (isPerm && allowPerm)) && !mapById.has(s.id)){
+                const vac = (appState.vacationsByStaff?.[s.id]||[]).some(p=>{ if(!p?.start||!p?.end) return false; const t=parseYMD(dateStr).getTime(); const st=parseYMD(p.start).getTime(); const en=parseYMD(p.end).getTime(); return t>=st && t<=en; });
+                const ill = (appState.illnessByStaff?.[s.id]||[]).some(p=>{ if(!p?.start||!p?.end) return false; const t=parseYMD(dateStr).getTime(); const st=parseYMD(p.start).getTime(); const en=parseYMD(p.end).getTime(); return t>=st && t<=en; });
+                const dayOff = appState.availabilityData?.[`staff:${s.id}`]?.[dateStr] === 'off';
+                if (!(vac||ill||dayOff) && (okAvail || (isPerm && allowPerm)) && !mapById.has(s.id)){
                     mapById.set(s.id, { staff: s, score: 0 });
                 }
             });
@@ -802,6 +823,19 @@ export class ScheduleUI {
         });
     // Initial render
         renderCandidates();
+        // Add explicit 'Leave blank' action
+        const searchLeaveBtn = document.getElementById('searchLeaveBlankBtn');
+        if (searchLeaveBtn){
+            searchLeaveBtn.onclick = ()=>{
+                const sh = shiftSel.value; const month = dateStr.substring(0,7);
+                const schedule = window.DEBUG?.state?.scheduleData?.[month] || (window.DEBUG.state.scheduleData[month] = {});
+                if (!schedule[dateStr]) schedule[dateStr] = { assignments:{} };
+                delete schedule[dateStr].assignments[sh];
+                appState.scheduleData = window.DEBUG.state.scheduleData; appState.save?.();
+                this.updateDay(dateStr);
+                modal.style.display = 'none';
+            };
+        }
         // Stash context
         modal.dataset.date = dateStr;
     if (window.__openModal) window.__openModal('searchModal'); else modal.style.display = 'block';

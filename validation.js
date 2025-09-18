@@ -15,6 +15,7 @@ export class ScheduleValidator {
         const issues = {
             workload: this.validateWorkloadLimits(schedule),
             rest: this.validateRestPeriods(schedule),
+            overlaps: this.validateOverlaps(schedule),
             weekends: this.validateWeekendDistribution(schedule),
             students: this.validateStudentRules(schedule),
             permanentConsent: this.validatePermanentWeekendConsent(schedule),
@@ -153,6 +154,7 @@ export class ScheduleValidator {
         const issues = {
             workload: this.validateWorkloadLimits(schedule),
             rest: this.validateRestPeriods(schedule),
+            overlaps: this.validateOverlaps(schedule),
             weekends: this.validateWeekendDistribution(schedule),
             students: this.validateStudentRules(schedule),
             permanentConsent: this.validatePermanentWeekendConsent(schedule),
@@ -314,11 +316,36 @@ export class ScheduleValidator {
             Object.entries(day.assignments || {}).forEach(([shiftKey, staffId])=>{
                 const vac = appState.vacationsByStaff?.[staffId] || [];
                 const ill = appState.illnessByStaff?.[staffId] || [];
+                const dayOff = appState.availabilityData?.[`staff:${staffId}`]?.[dateStr] === 'off';
                 if (inPeriods(dateStr, vac)){
                     issues.push({ type:'absence', severity:'error', staffId, dateStr, shiftKey, message:'Assignment on vacation day' });
                 }
                 if (inPeriods(dateStr, ill)){
                     issues.push({ type:'absence', severity:'error', staffId, dateStr, shiftKey, message:'Assignment on sick day' });
+                }
+                if (dayOff){
+                    issues.push({ type:'absence', severity:'error', staffId, dateStr, shiftKey, message:'Assignment on requested off day' });
+                }
+            });
+        });
+        return issues;
+    }
+
+    // Hard blocker: a staff member assigned to more than one shift on the same day
+    validateOverlaps(schedule){
+        const issues = [];
+        Object.entries(schedule).forEach(([dateStr, day])=>{
+            const byStaff = {};
+            Object.entries(day.assignments || {}).forEach(([shiftKey, staffId])=>{
+                if (!byStaff[staffId]) byStaff[staffId] = [];
+                byStaff[staffId].push(shiftKey);
+            });
+            Object.entries(byStaff).forEach(([staffId, shifts])=>{
+                if (shifts.length > 1){
+                    // Multiple shifts same day: treat as error regardless of exact times
+                    shifts.forEach(shiftKey => {
+                        issues.push({ type:'overlap', severity:'error', staffId: Number(staffId), dateStr, shiftKey, message:'Multiple shifts on same day' });
+                    });
                 }
             });
         });
