@@ -51,6 +51,9 @@ const BUSINESS_RULES = {
             const [startTime] = SHIFTS[shiftKey].time.split('-');
             const start = engine.parseShiftTime(dateStr, startTime);
             const diffH = (start - last) / (3600 * 1000);
+            // If the "last" end time lies in the future relative to this start (can happen when
+            // seeding from later-in-month assignments), ignore it for rest-period checks.
+            if (diffH < 0) return true;
             const min = APP_CONFIG?.MIN_REST_HOURS ?? 11;
             return diffH >= min;
         }

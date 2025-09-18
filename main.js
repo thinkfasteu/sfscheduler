@@ -263,6 +263,127 @@ if (window.CONFIG?.ENV !== 'production'){
 // Expose shifts for helpers like export without ESM imports in global scope (safe)
 window.SHIFTS = SHIFTS;
 
+// Collect CSP violations for triage (no-op if browser doesn’t support)
+try{
+    if (!window.__csp) window.__csp = { events:[], summarize(){
+        const groups = {};
+        this.events.forEach(e=>{ const k = `${e.violatedDirective} -> ${e.blockedURI||'inline'}`; groups[k]=(groups[k]||0)+1; });
+        return groups;
+    }};
+    window.addEventListener('securitypolicyviolation', (e)=>{
+        try{
+            window.__csp.events.push({ ts: Date.now(), violatedDirective: e.violatedDirective, effectiveDirective: e.effectiveDirective, blockedURI: e.blockedURI, sourceFile: e.sourceFile, lineNumber: e.lineNumber, columnNumber: e.columnNumber });
+            // Keep last 200 only
+            if (window.__csp.events.length>200) window.__csp.events.shift();
+        }catch{}
+    });
+}catch{}
+
+// Lightweight console helpers gated by ?debug=1 (safe in production)
+try{
+    const url = new URL(location.href);
+    const enableDebug = url.searchParams.get('debug') === '1';
+    if (enableDebug){
+        // Provide a small help index
+        window.help = function(){
+            console.info('Debug helpers available:', Object.keys(window.debug||{}));
+            console.info('Examples:\n  window.debug.candidates("2025-09-10","early")\n  window.debug.ruleCheck(1,"2025-09-10","early")\n  window.debug.lastEnds()\n  window.debug.errors()\n  window.debug.csp()');
+        };
+        window.debug = window.debug || {};
+        // Errors snapshot
+        window.debug.errors = function(){ try { return (window.__ERRORS__ && window.__ERRORS__.recent) ? window.__ERRORS__.recent.slice() : []; } catch{ return []; } };
+        // CSP snapshot summary
+        window.debug.csp = function(){ try { return window.__csp ? { count: window.__csp.events.length, groups: window.__csp.summarize() } : { count:0, groups:{} }; } catch{ return { count:0, groups:{} }; } };
+        // Scheduling helpers are loaded lazily to avoid upfront cost
+        window.debug.candidates = async function(dateStr, shiftKey){
+            const mod = await import('./scheduler.js');
+            const { SchedulingEngine } = mod;
+            const month = (dateStr||'').slice(0,7);
+            const eng = new SchedulingEngine(month);
+            const weekNum = eng.getWeekNumber(new Date(dateStr));
+            const scheduledToday = new Set(Object.values(appState.scheduleData?.[month]?.[dateStr]?.assignments||{}));
+            const list = eng.findCandidatesForShift(dateStr, shiftKey, scheduledToday, weekNum);
+            return list.map(c=>({ id:c.staff.id, name:(appState.staffData||[]).find(s=>s.id==c.staff.id)?.name||String(c.staff.id), role:c.staff.role, score:c.score }));
+        };
+        window.debug.ruleCheck = async function(staffId, dateStr, shiftKey){
+            const mod = await import('./scheduler.js');
+            const { SchedulingEngine, BUSINESS_RULES } = mod;
+            const month = (dateStr||'').slice(0,7);
+            const eng = new SchedulingEngine(month);
+            const staff = (appState.staffData||[]).find(s=>s.id==staffId);
+            if (!staff) return { ok:false, error:'staff not found' };
+            const hours = SHIFTS[shiftKey]?.hours||0;
+            const failures = [];
+            for (const r of Object.values(BUSINESS_RULES)){
+                try{
+                    const ok = r.validate(dateStr, shiftKey, staff, hours, eng);
+                    if (!ok) failures.push(r.id);
+                }catch(e){ failures.push(r.id+':'+(e?.message||'err')); }
+            }
+            return { ok: failures.length===0, failures };
+        };
+        window.debug.lastEnds = function(staffId){
+            const out = {};
+            const month = Object.keys(appState.scheduleData||{})[0] || (new Date().toISOString().slice(0,7));
+            const { SchedulingEngine } = window.__sched_mod || {};
+            const build = async ()=>{
+                if (!window.__sched_mod){ window.__sched_mod = await import('./scheduler.js'); }
+                const { SchedulingEngine } = window.__sched_mod;
+                const eng = new SchedulingEngine(month);
+                // After seeding, expose lastShiftEndTimes
+                return Object.fromEntries(Object.entries(eng.lastShiftEndTimes||{}).map(([k,v])=>[k, v?.toISOString?.()||String(v)]));
+            };
+            return build();
+        };
+                // Dry-run schedule generation summary (no mutations)
+                window.debug.simulate = async function(monthKey, opts={}){
+                    const mod = await import('./scheduler.js');
+                    const { SchedulingEngine } = mod;
+                    const month = monthKey || (document.getElementById('scheduleMonth')?.value) || (new Date().toISOString().slice(0,7));
+                    // Shallow clone appState fields we read to avoid accidental mutation
+                    const backup = { scheduleData: appState.scheduleData, auditLog: appState.auditLog };
+                    try{
+                        // Work on a local copy for the target month schedule only
+                        const originalMonth = appState.scheduleData?.[month];
+                        const cloneMonth = originalMonth ? JSON.parse(JSON.stringify(originalMonth)) : {};
+                        if (!appState.scheduleData) appState.scheduleData = {}; // ensure defined
+                        appState.scheduleData[month] = cloneMonth;
+                        const eng = new SchedulingEngine(month);
+                        const sched = eng.generateSchedule();
+                        const data = sched?.data || (appState.scheduleData?.[month]||{});
+                        const unfilled = [];
+                        // Scan per day what shifts exist and which remain empty
+                        const days = Object.keys(data).length ? Object.keys(data) : (()=>{ const out=[]; const [y,m]=month.split('-').map(Number); const daysInMonth=new Date(y,m,0).getDate(); for(let d=1; d<=daysInMonth; d++){ const ds=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; out.push(ds);} return out; })();
+                        days.sort();
+                        for (const ds of days){
+                            const assigns = data[ds]?.assignments || {};
+                            const shifts = sched ? sched.getShiftsForDate(ds) : (Object.keys(SHIFTS||{}));
+                            for (const sh of shifts){
+                                // Only consider defined shifts for this date type
+                                const isDayShift = !!(SHIFTS[sh]);
+                                if (!isDayShift) continue;
+                                const needs = (sched ? sched.getShiftsForDate(ds) : []).includes(sh);
+                                if (!needs) continue;
+                                if (assigns[sh]) continue;
+                                // Re-run candidate search to get reasonability context
+                                const weekNum = eng.getWeekNumber(new Date(ds));
+                                const scheduledToday = new Set(Object.values(assigns));
+                                const cands = eng.findCandidatesForShift(ds, sh, scheduledToday, weekNum);
+                                unfilled.push({ date: ds, shift: sh, candidates: cands.slice(0,5).map(c=>({ id:c.staff.id, name:(appState.staffData||[]).find(s=>s.id==c.staff.id)?.name||String(c.staff.id), score:c.score })) });
+                            }
+                        }
+                        // Return compact summary
+                        const filledCount = Object.values(data).reduce((acc,day)=> acc + Object.keys(day?.assignments||{}).length, 0);
+                        return { month, filledCount, days: days.length, unfilledCount: unfilled.length, unfilled };
+                    } finally {
+                        // Restore references; do not persist changes
+                        appState.scheduleData = backup.scheduleData;
+                        appState.auditLog = backup.auditLog;
+                    }
+                };
+    }
+}catch{}
+
     // Backend fallback banner toggle (runs after services hydration if present)
     try {
         const evalBackendBanner = () => {

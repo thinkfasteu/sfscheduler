@@ -95,7 +95,9 @@ export const APP_CONFIG = {
     STUDENT_EVENING_PRIORITY_ENABLED: true
     ,
     // Recovery pass configuration (manual gap fill)
-    RECOVERY_MIN_SCORE_FLOOR: -800 // lowest candidate score accepted in recovery fill
+    RECOVERY_MIN_SCORE_FLOOR: -800, // lowest candidate score accepted in recovery fill
+    // Availability defaults: when true, non-permanent staff without explicit availability entries are treated as implicitly available
+    NON_PERMANENT_DEFAULT_AVAILABLE: true
 };
 
 export const SHIFTS = {

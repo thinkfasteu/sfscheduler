@@ -25,6 +25,15 @@ import { SHIFTS, APP_CONFIG } from '../modules/config.js';
     const eng=new SchedulingEngine(month); eng.lastShiftEndTimes[2]=eng.parseShiftTime('2025-09-01','22:15');
     return BUSINESS_RULES.REST_PERIOD.validate('2025-09-02','midday', appState.staffData[0], SHIFTS.midday.hours, eng) === true;
   });
+  runIsolated('REST_PERIOD ignores future lastShiftEndTimes', () => {
+    appState.reset();
+    appState.staffData=[{id:21, role:'student', typicalWorkdays:5, contractHours:20}];
+    const eng=new SchedulingEngine(month);
+    // Seed last end time to a future date relative to the evaluated shift start
+    eng.lastShiftEndTimes[21]=eng.parseShiftTime('2025-09-20','22:15');
+    // Validating on an earlier date should not be blocked by REST_PERIOD
+    return BUSINESS_RULES.REST_PERIOD.validate('2025-09-05','early', appState.staffData[0], SHIFTS.early.hours, eng) === true;
+  });
 
   // MAX_CONSECUTIVE_DAYS
   runIsolated('MAX_CONSECUTIVE_DAYS negative', ()=>{
