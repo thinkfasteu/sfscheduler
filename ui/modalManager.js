@@ -6,7 +6,8 @@ export class ModalManager {
     closeModal(id) {
         const modal = document.getElementById(id);
         if (modal) {
-            modal.style.display = 'none';
+                            modal.classList.remove('open');
+                            document.body.classList.remove('no-scroll');
         }
     }
 }

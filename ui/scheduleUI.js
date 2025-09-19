@@ -12,6 +12,7 @@ export class ScheduleUI {
             return;
         }
     this.currentCalendarMonth = null; // track rendered month
+    this._hydratedMonths = new Set(); // availability hydration cache per month
     if (!window.__perf) window.__perf = {}; // lightweight counters
     window.__perf.calendarFullRenders = window.__perf.calendarFullRenders || 0;
     window.__perf.calendarDiffUpdates = window.__perf.calendarDiffUpdates || 0;
@@ -99,7 +100,9 @@ export class ScheduleUI {
             }
         }
         // Re-render on change
-        el.addEventListener('change', () => this.updateCalendarFromSelect());
+        el.addEventListener('change', () => { this.updateCalendarFromSelect(); const v = el.value; if (v) this.prehydrateAvailability(v).catch(()=>{}); });
+        // Initial pre-hydration for default value
+        if (el.value) { this.prehydrateAvailability(el.value).catch(()=>{}); }
         // Hook student exception toggle
         const exc = document.getElementById('studentExceptionCheckbox');
         if (exc){
@@ -139,7 +142,8 @@ export class ScheduleUI {
         const startDay = (first.getDay() + 6) % 7; // Monday=0
         const daysInMonth = new Date(y, m, 0).getDate();
 
-        let html = '<div class="flex flex-wrap jc-end gap-8 mb-8">'
+        let html = '<div id="scheduleStatus" class="status-line hidden"><span class="spinner"></span><span id="scheduleStatusText">Synchronisiere Verfügbarkeiten…</span></div>'
+            + '<div class="flex flex-wrap jc-end gap-8 mb-8"'
             + '<button class="btn btn-secondary" id="openSearchAssignBtn">Suchen & Zuweisen (Datum wählen)</button>'
             + '<button class="btn btn-secondary" id="recoveryPreviewBtn" title="Offene kritische Schichten anzeigen">Lücken prüfen</button>'
             + '<button class="btn btn-secondary hidden" id="recoveryApplyBtn" title="Versuchen kritische Lücken zu füllen (mit gelockerten Fairness-Penalties)">Lücken füllen</button>'
@@ -214,7 +218,7 @@ export class ScheduleUI {
         };
         const dryRunRecovery = () => {
             const gaps = collectCriticalGaps();
-            if (!gaps.length){ recoveryReport.innerHTML = '<em>Keine offenen kritischen Schichten.</em>'; recoveryApplyBtn.style.display='none'; return; }
+            if (!gaps.length){ recoveryReport.innerHTML = '<em>Keine offenen kritischen Schichten.</em>'; recoveryApplyBtn.classList.add('hidden'); return; }
             const engine = new SchedulingEngine(monthKey);
             const preview = [];
             gaps.forEach(g => {
@@ -229,9 +233,9 @@ export class ScheduleUI {
                     preview.push({ ...g, staffId: best.staff.id, name: best.staff.name, score: best.score, adjScore: best.adjScore });
                 }
             });
-            if (!preview.length){ recoveryReport.innerHTML = '<em>Keine geeigneten Kandidaten für offene kritische Schichten.</em>'; recoveryApplyBtn.style.display='none'; return; }
+            if (!preview.length){ recoveryReport.innerHTML = '<em>Keine geeigneten Kandidaten für offene kritische Schichten.</em>'; recoveryApplyBtn.classList.add('hidden'); return; }
             recoveryReport.innerHTML = '<strong>Vorschau Füllung:</strong><br/>' + preview.map(p=> `${p.dateStr} – ${p.shiftKey} → ${p.name} (Score ${Math.round(p.score)} / adj ${Math.round(p.adjScore)})`).join('<br/>');
-            recoveryApplyBtn.style.display='inline-block';
+            recoveryApplyBtn.classList.remove('hidden');
             recoveryApplyBtn.dataset.preview = JSON.stringify(preview);
         };
         recoveryPreviewBtn?.addEventListener('click', dryRunRecovery);
@@ -259,7 +263,7 @@ export class ScheduleUI {
             });
             appState.save?.();
             recoveryReport.innerHTML += `<div class="mt-4"><strong>Angewendet:</strong> ${applied} Schichten gefüllt.</div>`;
-            recoveryApplyBtn.style.display='none';
+            recoveryApplyBtn.classList.add('hidden');
             this.updateCalendarFromSelect();
         });
         // Click handlers
@@ -299,6 +303,60 @@ export class ScheduleUI {
         this.renderAssignments(month);
     // Render weekend distribution report
     this.renderWeekendReport(month);
+        // Fire-and-forget availability hydration for this month; show status, re-render when done
+        this.setStatus('Synchronisiere Verfügbarkeiten…', true);
+            this.prehydrateAvailability(month).then(()=>{
+      if (this.currentCalendarMonth === month){
+        this.renderAssignments(month);
+        this.renderWeekendReport(month);
+      }
+                // brief confirmation
+                this.setStatus('Synchronisiert ✓', true, false);
+                setTimeout(()=>{ this.clearStatus(); }, 900);
+        }).catch((e)=>{ console.warn(e); this.clearStatus(); });
+    }
+
+    async prehydrateAvailability(month){
+        try {
+            if (!month || this._hydratedMonths.has(month)) return;
+            // Ensure services are available
+            if (!window.__services){
+                const mod = await import('../src/services/index.js');
+                window.__services = mod.createServices({});
+            }
+            await window.__services.ready;
+            const store = window.__services?.store;
+            const usingRemote = !!(store && (store.remote || (store.constructor && store.constructor.name==='SupabaseAdapter')));
+            if (!usingRemote) { this._hydratedMonths.add(month); return; }
+            const staffList = window.__services.staff?.list() || [];
+            if (!staffList.length) { this._hydratedMonths.add(month); return; }
+            const [y,m] = month.split('-').map(Number);
+            const fromDate = `${y}-${String(m).padStart(2,'0')}-01`;
+            const toDate = `${y}-${String(m).padStart(2,'0')}-${String(new Date(y, m, 0).getDate()).padStart(2,'0')}`;
+            const avail = window.__services.availability;
+            if (!avail) { this._hydratedMonths.add(month); return; }
+            const btns = this.disableScheduleControls(true);
+            for (const s of staffList){
+                try { await avail.listRange(s.id, fromDate, toDate); } catch {}
+            }
+            this._hydratedMonths.add(month);
+            this.disableScheduleControls(false, btns);
+        } catch(e){ console.warn('[ScheduleUI] prehydrateAvailability failed', e); }
+    }
+
+    setStatus(text, show=true, withSpinner=true){
+        const bar = document.getElementById('scheduleStatus'); const txt = document.getElementById('scheduleStatusText'); const sp = bar?.querySelector?.('.spinner');
+        if (!bar || !txt) return;
+        txt.textContent = text || '';
+        bar.classList.toggle('hidden', !show);
+        if (sp) sp.classList.toggle('hidden', !withSpinner);
+    }
+    clearStatus(){ this.setStatus('', false); }
+    disableScheduleControls(disabled=true, snapshot=null){
+        const ids = ['openSearchAssignBtn','recoveryPreviewBtn','recoveryApplyBtn','generateScheduleBtn','clearScheduleBtn','exportScheduleBtn','exportPdfBtn','printScheduleBtn'];
+        if (!snapshot){ snapshot = {}; }
+        ids.forEach(id=>{ const el = document.getElementById(id); if (!el) return; if (disabled){ snapshot[id] = el.disabled; el.disabled = true; } else if (snapshot && id in snapshot){ el.disabled = snapshot[id]; } else { el.disabled = false; } });
+        return snapshot;
     }
     
 
@@ -617,8 +675,8 @@ export class ScheduleUI {
             const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==selectedId);
             const isWeekend = [0,6].includes(parseYMD(dateStr).getDay());
             const showConsent = !!(staff && staff.role==='permanent' && isWeekend && !staff.weekendPreference);
-            consentRow.style.display = showConsent ? '' : 'none';
-            consentHint.style.display = showConsent ? '' : 'none';
+            consentRow.classList.toggle('hidden', !showConsent);
+            consentHint.classList.toggle('hidden', !showConsent);
             if (showConsent){
                 const year = String(parseYMD(dateStr).getFullYear());
                 const hasConsent = !!(window.DEBUG?.state?.permanentOvertimeConsent?.[selectedId]?.[year]?.[dateStr]);
@@ -631,7 +689,7 @@ export class ScheduleUI {
     const includeRow = document.getElementById('includePermanentsRow');
     const includeCb = document.getElementById('includePermanentsCheckbox');
     const weekend = [0,6].includes(parseYMD(dateStr).getDay());
-    includeRow.style.display = weekend ? '' : 'none';
+    includeRow.classList.toggle('hidden', !weekend);
     includeCb.checked = false;
     includeCb.onchange = () => renderCandidates();
     renderCandidates();
@@ -649,7 +707,7 @@ export class ScheduleUI {
                 delete schedule[dateStr].assignments[sh];
                 appState.scheduleData = window.DEBUG.state.scheduleData; appState.save?.();
                 this.updateDay(dateStr);
-                modal.style.display = 'none';
+                if (window.__closeModal) window.__closeModal('swapModal'); else { modal.classList.remove('open'); document.body.classList.remove('no-scroll'); }
             };
         }
         // Stash selection into modal dataset for handler
@@ -691,7 +749,7 @@ export class ScheduleUI {
         });
 
     // Show modal
-    if (window.__openModal) window.__openModal('swapModal'); else modal.style.display = 'block';
+    if (window.__openModal) window.__openModal('swapModal'); else { modal.classList.add('open'); document.body.classList.add('no-scroll'); }
     }
 
     // New: Search & Assign dialog separate from availability tab
@@ -723,7 +781,7 @@ export class ScheduleUI {
         const consentHint = document.getElementById('searchConsentHint');
         const includeRow = document.getElementById('searchIncludePermanentsRow');
         const includeCb = document.getElementById('searchIncludePermanentsCheckbox');
-        includeRow.style.display = isWeekend ? '' : 'none';
+    includeRow.classList.toggle('hidden', !isWeekend);
         includeCb.checked = false;
         const buildBaseCandidates = () => {
             const sh = shiftSel.value;
@@ -782,8 +840,8 @@ export class ScheduleUI {
             const selectedId = parseInt(staffSel.value||0);
             const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==selectedId);
             const showConsent = !!(staff && staff.role==='permanent' && isWeekend && !staff.weekendPreference);
-            consentRow.style.display = showConsent ? '' : 'none';
-            consentHint.style.display = showConsent ? '' : 'none';
+            consentRow.classList.toggle('hidden', !showConsent);
+            consentHint.classList.toggle('hidden', !showConsent);
             if (showConsent){
                 const year = String(y);
                 const hasConsent = !!(window.DEBUG?.state?.permanentOvertimeConsent?.[selectedId]?.[year]?.[dateStr]);
@@ -833,12 +891,12 @@ export class ScheduleUI {
                 delete schedule[dateStr].assignments[sh];
                 appState.scheduleData = window.DEBUG.state.scheduleData; appState.save?.();
                 this.updateDay(dateStr);
-                modal.style.display = 'none';
+                if (window.__closeModal) window.__closeModal('searchModal'); else { modal.classList.remove('open'); document.body.classList.remove('no-scroll'); }
             };
         }
         // Stash context
         modal.dataset.date = dateStr;
-    if (window.__openModal) window.__openModal('searchModal'); else modal.style.display = 'block';
+    if (window.__openModal) window.__openModal('searchModal'); else { modal.classList.add('open'); document.body.classList.add('no-scroll'); }
         // Bind assign button
         const execBtn = document.getElementById('executeSearchAssignBtn');
     execBtn.onclick = async () => {
@@ -891,7 +949,7 @@ export class ScheduleUI {
             // Weekend report can change fairness stats; refresh only if weekend or holiday
             const dow = date.getDay();
             if (dow===0 || dow===6){ this.renderWeekendReport(month); }
-            modal.style.display = 'none';
+            if (window.__closeModal) window.__closeModal('searchModal'); else { modal.classList.remove('open'); document.body.classList.remove('no-scroll'); }
         };
     }
 }

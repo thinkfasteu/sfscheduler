@@ -262,13 +262,13 @@
   // Modal UX: backdrop click closes; lock body scroll while open
   let modalDepth = 0;
   function lockBody(lock){
-    if (lock){ modalDepth++; document.body.style.overflow='hidden'; }
-    else { modalDepth = Math.max(0, modalDepth-1); if (modalDepth===0) document.body.style.overflow=''; }
+    if (lock){ modalDepth++; document.body.classList.add('no-scroll'); }
+    else { modalDepth = Math.max(0, modalDepth-1); if (modalDepth===0) document.body.classList.remove('no-scroll'); }
   }
   document.addEventListener('click', (e)=>{
     const tgt = e.target;
     if (tgt && tgt.classList && tgt.classList.contains('modal')){
-      tgt.style.display = 'none';
+  tgt.classList.remove('open');
       lockBody(false);
     }
   });

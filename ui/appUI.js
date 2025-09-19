@@ -176,7 +176,7 @@ export class AppUI {
       // fallback to local modal if fetch fails
   if (window.__openModal) return window.__openModal('holidaysModal');
   const modal = document.getElementById('holidaysModal');
-  if (modal){ modal.classList.add('open'); document.body.style.overflow='hidden'; }
+  if (modal){ modal.classList.add('open'); document.body.classList.add('no-scroll'); }
       this.initHolidays();
     });
   }
@@ -272,7 +272,7 @@ export class AppUI {
       }
     }
   // Open modal and render
-    if (window.__openModal) window.__openModal('holidaysModal'); else document.getElementById('holidaysModal').style.display='block';
+  if (window.__openModal) window.__openModal('holidaysModal'); else { const m=document.getElementById('holidaysModal'); if(m){ m.classList.add('open'); document.body.classList.add('no-scroll'); } }
     this.initHolidays();
   // Also refresh availability grid if visible
   try { this.handleAvailabilityDisplay(); } catch {}
@@ -678,6 +678,27 @@ export class AppUI {
     const staff = staffList.find(s=>s.id===staffId);
     const month = monthSel.value;
     if (!staffId || !month){ host.innerHTML = '<p>Bitte Mitarbeiter und Monat auswählen.</p>'; return; }
+    // Pre-hydrate availability for this staff/month if using remote backend
+    (async ()=>{
+      try {
+        if (!availSvc?.listRange) return;
+        if (!window.__services || !window.__services.ready) return;
+        await window.__services.ready;
+        const store = window.__services.store; const remote = !!(store && (store.remote || (store.constructor && store.constructor.name==='SupabaseAdapter')));
+        if (!remote) return;
+        const [yy,mm] = month.split('-').map(Number);
+        const fromDate = `${yy}-${String(mm).padStart(2,'0')}-01`;
+        const toDate = `${yy}-${String(mm).padStart(2,'0')}-${String(new Date(yy, mm, 0).getDate()).padStart(2,'0')}`;
+        // Show inline spinner/status in host while syncing
+        const old = host.innerHTML;
+        host.innerHTML = '<div class="status-line"><span class="spinner"></span><span>Verfügbarkeiten laden…</span></div>' + old;
+        const selDisabled = { s: staffSel.disabled, m: monthSel.disabled };
+        staffSel.disabled = true; monthSel.disabled = true;
+        try { await availSvc.listRange(staffId, fromDate, toDate); } finally { staffSel.disabled = selDisabled.s; monthSel.disabled = selDisabled.m; }
+        // Brief confirmation
+        const status = host.querySelector('.status-line'); if (status){ const sp=status.querySelector('.spinner'); if (sp) sp.classList.add('hidden'); status.querySelector('span:last-child').textContent = 'Synchronisiert ✓'; setTimeout(()=>{ status.remove(); }, 900); }
+      } catch(e){ console.warn('[Availability] pre-hydration failed', e); }
+    })();
     const [y,m] = month.split('-').map(Number);
     const days = new Date(y, m, 0).getDate();
 
@@ -738,7 +759,7 @@ export class AppUI {
     } catch(e){ console.warn('Carryover panel render failed', e); }
     host.innerHTML = html;
 
-    // Shift buttons
+  // Shift buttons
     host.querySelectorAll('button.avail-btn').forEach(btn => {
       btn.addEventListener('click', e => {
         const b = e.currentTarget; const dateStr = b.dataset.date; const shiftKey = b.dataset.shift;

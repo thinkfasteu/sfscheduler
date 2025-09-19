@@ -289,3 +289,8 @@ li { margin: 6px 0; }
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme]) { background: #0f172a; }
 }
+
+/* Loading & status UI */
+.spinner { width:14px; height:14px; border:2px solid rgba(0,0,0,.15); border-top-color: var(--brand); border-radius:50%; display:inline-block; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.status-line { display:flex; align-items:center; gap:8px; color: var(--muted); font-size: 0.9em; margin: 6px 0 10px; }

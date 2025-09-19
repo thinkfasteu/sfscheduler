@@ -32,16 +32,16 @@ function __initEventBindings(){
   bind('addOtherStaffBtn','click', ()=> window.addOtherStaff && window.addOtherStaff());
   bind('addOtherVacationPeriodBtn','click', ()=> window.addOtherVacationPeriod && window.addOtherVacationPeriod());
   // Holidays modal
-  bind('holidaysModalCloseBtn','click', ()=> { const m=document.getElementById('holidaysModal'); if (m){ m.classList.remove('open'); document.body.style.overflow=''; } });
+  bind('holidaysModalCloseBtn','click', ()=> { const m=document.getElementById('holidaysModal'); if (!m) return; if (window.__modalA11y?.closeModal) window.__modalA11y.closeModal(m); else { m.classList.remove('open'); document.body.classList.remove('no-scroll'); } });
   bind('addHolidayBtn','click', ()=> window.addHoliday && window.addHoliday());
   bind('addIcsSourceBtn','click', ()=> window.addIcsSource && window.addIcsSource());
   bind('refreshAcademicTermsBtn','click', ()=> window.refreshAcademicTerms && window.refreshAcademicTerms());
   // Swap modal
-  bind('swapModalCloseBtn','click', ()=> { const m=document.getElementById('swapModal'); if (m){ m.classList.remove('open'); document.body.style.overflow=''; } });
+  bind('swapModalCloseBtn','click', ()=> { const m=document.getElementById('swapModal'); if (!m) return; if (window.__modalA11y?.closeModal) window.__modalA11y.closeModal(m); else { m.classList.remove('open'); document.body.classList.remove('no-scroll'); } });
   bind('executeSwapBtn','click', ()=> window.executeSwap && window.executeSwap());
   bind('executeAssignBtn','click', ()=> window.executeAssign && window.executeAssign());
   // Search modal
-  bind('searchModalCloseBtn','click', ()=> { const m=document.getElementById('searchModal'); if (!m) return; if (window.__modalA11y?.closeModal) window.__modalA11y.closeModal(m); else { m.classList.remove('open'); m.style.display='none'; document.body.style.overflow=''; } });
+  bind('searchModalCloseBtn','click', ()=> { const m=document.getElementById('searchModal'); if (!m) return; if (window.__modalA11y?.closeModal) window.__modalA11y.closeModal(m); else { m.classList.remove('open'); document.body.classList.remove('no-scroll'); } });
   bind('executeSearchAssignBtn','click', ()=> window.executeSearchAssign && window.executeSearchAssign());
   // Backup / Restore
   bind('exportBackupBtn','click', ()=> window.__backup && window.__backup.export());
