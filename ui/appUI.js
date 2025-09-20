@@ -292,22 +292,18 @@ export class AppUI {
   async fetchAndShowHolidays(){
     const now = new Date();
     const year = now.getFullYear();
-    // Load if not present
-    if (!appState.holidays[String(year)] || Object.keys(appState.holidays[String(year)]).length===0){
-      const stateCode = APP_CONFIG?.HOLIDAY_API_STATE || 'HE';
-      const url = `https://date.nager.at/api/v3/PublicHolidays/${year}/DE`;
-      try{
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
-        const allGerman = await response.json();
-        const filtered = allGerman.filter(h => !h.counties || (Array.isArray(h.counties) && h.counties.includes(`DE-${stateCode}`)) );
-        appState.holidays[String(year)] = {};
-        filtered.forEach(h => { appState.holidays[String(year)][h.date] = h.localName; });
-        appState.save();
-      }catch(e){
-        console.error('Could not fetch holidays:', e);
-        alert(`Fehler beim Laden der Feiertage für ${year}. Bitte versuchen Sie es später erneut.`);
+    
+    try {
+      // Use the enhanced holiday service from __services
+      const holidayService = __services?.holiday;
+      if (holidayService && holidayService.fetchHolidaysForYear) {
+        await holidayService.fetchHolidaysForYear(year);
+      } else {
+        console.warn('Holiday service not available in __services, holidays may not be loaded');
       }
+    } catch(e) {
+      console.error('Could not fetch holidays:', e);
+      alert(`Fehler beim Laden der Feiertage für ${year}. Bitte versuchen Sie es später erneut.`);
     }
   // Open modal and render
   if (window.__openModal) window.__openModal('holidaysModal'); else { const m=document.getElementById('holidaysModal'); if(m){ m.classList.add('open'); document.body.classList.add('no-scroll'); } }
