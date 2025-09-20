@@ -8,6 +8,7 @@ import { createConfigService } from './ConfigService.js';
 import { createHolidayService } from './HolidayService.js';
 import { createReportService } from './ReportService.js';
 import { createChecklistService } from './ChecklistService.js';
+import { createMonitoringService } from './MonitoringService.js';
 import { LocalStorageAdapter } from '../storage/LocalStorageAdapter.js';
 import { SupabaseAdapter } from '../storage/SupabaseAdapter.js';
 import { HydratingStore } from '../storage/HydratingStore.js';
@@ -68,6 +69,7 @@ export function createServices({ store, backend } = {}){
     holiday: createHolidayService(store),
     carryover: createCarryoverService(store),
     report: createReportService(store),
+    monitoring: createMonitoringService(),
     uiChecklist: null, // placeholder until after events is defined
   state: createStateFacadeService(),
   events

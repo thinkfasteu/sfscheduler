@@ -91,6 +91,11 @@ export class AppUI {
     const daysEl = document.getElementById('typicalWorkdays');
     const prefEl = document.getElementById('weekendPreference');
     const permPrefEl = document.getElementById('permanentPreferredShift');
+    // Practical limits fields
+    const minPracticalEl = document.getElementById('weeklyHoursMinPractical');
+    const maxPracticalEl = document.getElementById('weeklyHoursMaxPractical');
+    const notesEl = document.getElementById('notesPracticalCaps');
+    
     if (!nameEl || !roleEl) return;
     const name = nameEl.value?.trim();
     if (!name) { alert('Bitte Name eingeben'); return; }
@@ -99,13 +104,46 @@ export class AppUI {
     const typicalWorkdays = Number(daysEl?.value || 0);
     const weekendPreference = !!prefEl?.checked;
     const permanentPreferredShift = role === 'permanent' ? (permPrefEl?.value || 'none') : 'none';
+    
+    // Practical limits (only for minijob/student)
+    const weeklyHoursMinPractical = (role === 'minijob' || role === 'student') ? 
+      (minPracticalEl?.value ? Number(minPracticalEl.value) : undefined) : undefined;
+    const weeklyHoursMaxPractical = (role === 'minijob' || role === 'student') ? 
+      (maxPracticalEl?.value ? Number(maxPracticalEl.value) : undefined) : undefined;
+    const notesPracticalCaps = (role === 'minijob' || role === 'student') ? 
+      (notesEl?.value?.trim() || undefined) : undefined;
+    
+    // Validate practical limits
+    if (role === 'minijob' || role === 'student') {
+      if (weeklyHoursMinPractical !== undefined && (weeklyHoursMinPractical < 0 || weeklyHoursMinPractical > 50)) {
+        alert('Praktische Min-Stunden müssen zwischen 0 und 50 liegen'); return;
+      }
+      if (weeklyHoursMaxPractical !== undefined && (weeklyHoursMaxPractical < 0 || weeklyHoursMaxPractical > 50)) {
+        alert('Praktische Max-Stunden müssen zwischen 0 und 50 liegen'); return;
+      }
+      if (weeklyHoursMinPractical !== undefined && weeklyHoursMaxPractical !== undefined && 
+          weeklyHoursMinPractical > weeklyHoursMaxPractical) {
+        alert('Praktische Min-Stunden dürfen nicht größer als Max-Stunden sein'); return;
+      }
+      if (role === 'student' && weeklyHoursMaxPractical > 20) {
+        const confirm = window.confirm('Werkstudenten dürfen normalerweise max. 20h/Woche arbeiten. Trotzdem fortfahren?');
+        if (!confirm) return;
+      }
+    }
+    
     // Are we editing?
     const editIdEl = document.getElementById('staffIdToEdit');
     const editId = Number(editIdEl?.value || 0);
     const staffSvc = __services?.staff; // unified service (local or supabase via HydratingStore)
     if (!staffSvc){ alert('Dienstleistungen noch nicht initialisiert. Bitte kurz warten und erneut versuchen.'); return; }
+    
+    const staffData = { 
+      name, role, contractHours, typicalWorkdays, weekendPreference, permanentPreferredShift,
+      weeklyHoursMinPractical, weeklyHoursMaxPractical, notesPracticalCaps
+    };
+    
     if (editId) {
-      const staff = staffSvc.update(editId, { name, role, contractHours, typicalWorkdays, weekendPreference, permanentPreferredShift });
+      const staff = staffSvc.update(editId, staffData);
       if (!staff) { alert('Mitarbeiter nicht gefunden'); return; }
       // Persist temp periods via service if available
       if (Array.isArray(appState.tempVacationPeriods)){
@@ -131,7 +169,7 @@ export class AppUI {
         }
       }
     } else {
-      const staff = staffSvc.create({ name, role, contractHours, typicalWorkdays, weekendPreference, permanentPreferredShift, alternativeWeekendDays: [] });
+      const staff = staffSvc.create({ ...staffData, alternativeWeekendDays: [] });
       const nextId = staff.id;
       if (Array.isArray(appState.tempVacationPeriods) && appState.tempVacationPeriods.length){
         if (__services?.vacation){ appState.tempVacationPeriods.forEach(p=> __services.vacation.addVacation(nextId, p)); }
@@ -279,10 +317,11 @@ export class AppUI {
   }
 
   resetStaffForm(){
-    ['staffName','contractHours','typicalWorkdays'].forEach(id=>{ const el=document.getElementById(id); if (el) el.value=''; });
+    ['staffName','contractHours','typicalWorkdays','weeklyHoursMinPractical','weeklyHoursMaxPractical','notesPracticalCaps'].forEach(id=>{ const el=document.getElementById(id); if (el) el.value=''; });
     const roleEl = document.getElementById('staffType'); if (roleEl) roleEl.value='minijob';
     const prefEl = document.getElementById('weekendPreference'); if (prefEl) prefEl.checked = false;
     const permPrefRow = document.getElementById('permanentPreferredRow'); if (permPrefRow) permPrefRow.style.display = 'none';
+    const practicalRow = document.getElementById('practicalLimitsRow'); if (practicalRow) practicalRow.style.display = 'none';
     const permPrefSel = document.getElementById('permanentPreferredShift'); if (permPrefSel) permPrefSel.value = 'none';
     const editIdEl = document.getElementById('staffIdToEdit'); if (editIdEl) editIdEl.value = '';
     const saveBtn = document.getElementById('saveStaffBtn'); if (saveBtn) saveBtn.textContent = 'Arbeitskraft speichern';
@@ -371,7 +410,12 @@ export class AppUI {
         document.getElementById('typicalWorkdays').value = s.typicalWorkdays || '';
         const prefEl = document.getElementById('weekendPreference'); if (prefEl) prefEl.checked = !!s.weekendPreference;
         const permPrefRow = document.getElementById('permanentPreferredRow'); if (permPrefRow) permPrefRow.style.display = s.role==='permanent' ? '' : 'none';
+        const practicalRow = document.getElementById('practicalLimitsRow'); if (practicalRow) practicalRow.style.display = (s.role==='minijob' || s.role==='student') ? '' : 'none';
         const permPrefSel = document.getElementById('permanentPreferredShift'); if (permPrefSel) permPrefSel.value = s.permanentPreferredShift || 'none';
+        // Populate practical limits fields
+        const minPracticalEl = document.getElementById('weeklyHoursMinPractical'); if (minPracticalEl) minPracticalEl.value = s.weeklyHoursMinPractical || '';
+        const maxPracticalEl = document.getElementById('weeklyHoursMaxPractical'); if (maxPracticalEl) maxPracticalEl.value = s.weeklyHoursMaxPractical || '';
+        const notesEl = document.getElementById('notesPracticalCaps'); if (notesEl) notesEl.value = s.notesPracticalCaps || '';
         const editIdEl = document.getElementById('staffIdToEdit'); if (editIdEl) editIdEl.value = String(id);
         const saveBtn = document.getElementById('saveStaffBtn'); if (saveBtn) saveBtn.textContent = 'Änderungen speichern';
         const cancelBtn = document.getElementById('cancelEditBtn'); if (cancelBtn) cancelBtn.style.display = '';
@@ -940,12 +984,21 @@ export class AppUI {
       const h = Math.round(rec.hours*100)/100;
       const earn = rec.earnings;
       let status = 'OK';
+      
+      // Practical limits status for Minijob and Student roles
+      let practicalLimitsInfo = '';
+      if ((s.role === 'minijob' || s.role === 'student') && (s.weekly_hours_min_practical || s.weekly_hours_max_practical)) {
+        const min = Number(s.weekly_hours_min_practical || 0);
+        const max = Number(s.weekly_hours_max_practical || 0);
+        practicalLimitsInfo = ` (Prakt: ${min ? min + '–' : ''}${max ? max + 'h' : ''})`;
+      }
+      
       if (s.role==='minijob'){
         const cap = Number(APP_CONFIG?.MINIJOB_MAX_EARNING ?? 556);
         if (earn > cap + 1e-6) status = `> Minijob-Cap (${cap.toFixed(0)}€)`;
       }
       const otH = Number(overtimeByStaff[s.id]||0);
-  return `<tr><td class=\"text-left\">${s.name}</td><td>${s.role}</td><td>${h.toFixed(2)}</td><td>${otH>0?otH.toFixed(2):'—'}</td><td>${(Math.round(earn*100)/100).toFixed(2)} €</td><td>${status}</td></tr>`;
+  return `<tr><td class=\"text-left\">${s.name}${practicalLimitsInfo}</td><td>${s.role}</td><td>${h.toFixed(2)}</td><td>${otH>0?otH.toFixed(2):'—'}</td><td>${(Math.round(earn*100)/100).toFixed(2)} €</td><td>${status}</td></tr>`;
     }).join('');
   tbody.innerHTML = rows || '<tr><td colspan=\"6\" class=\"text-center text-muted\">Keine Daten</td></tr>';
   }
@@ -1048,12 +1101,16 @@ export class AppUI {
   }
 }
 
-// Attach role change handler to toggle permanent preferred row
+// Attach role change handler to toggle permanent preferred row and practical limits
 document.addEventListener('DOMContentLoaded', () => {
   const roleEl = document.getElementById('staffType');
-  const row = document.getElementById('permanentPreferredRow');
-  if (roleEl && row){
-    const sync = () => { row.style.display = roleEl.value === 'permanent' ? '' : 'none'; };
+  const permRow = document.getElementById('permanentPreferredRow');
+  const practicalRow = document.getElementById('practicalLimitsRow');
+  if (roleEl && permRow && practicalRow){
+    const sync = () => { 
+      permRow.style.display = roleEl.value === 'permanent' ? '' : 'none'; 
+      practicalRow.style.display = (roleEl.value === 'minijob' || roleEl.value === 'student') ? '' : 'none';
+    };
     roleEl.addEventListener('change', sync);
     sync();
   }

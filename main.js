@@ -4,6 +4,8 @@ import { EventHandler } from './ui/eventHandlers.js';  // Updated path
 import { APP_CONFIG, SHIFTS } from './modules/config.js';
 import { AppUI } from './ui/appUI.js';
 import { OvertimeRequestsUI } from './ui/overtimeRequests.js';
+import { MonitoringDashboard } from './ui/monitoringDashboard.js';
+import { publicAPI } from './src/api/public.js';
 import { triggerDownload, importBackupFile } from './src/utils/backup.js';
 import './ui/checklistOverlay.js';
 
@@ -170,6 +172,13 @@ function initApp(){
     // Overtime Requests panel
     const overtimeUI = new OvertimeRequestsUI('#overtimeRequestsList');
     overtimeUI.render();
+    // Monitoring Dashboard
+    const monitoringDashboard = new MonitoringDashboard('#monitoring-dashboard');
+    monitoringDashboard.render();
+    
+    // Initialize Public API namespace for external integrations
+    publicAPI.init();
+    
     // Re-render requests list on simple schedule updates
         const _origSave = appState.save.bind(appState);
         appState.save = function(immediate){

@@ -64,11 +64,44 @@ export class EventHandler {
         // Validate the change
         const validated = validator.validateSchedule(schedule);
         const hasBlocker = validated[dateStr]?.blockers?.[shiftKey];
+        const hasWarning = validated[dateStr]?.warnings?.[shiftKey];
 
         if (hasBlocker) {
             schedule[dateStr].assignments = originalAssignments;
             alert(`Tausch nicht möglich: ${hasBlocker}`);
             return;
+        }
+
+        // Check for Minijob earnings warnings and allow manager override
+        if (hasWarning && hasWarning.includes('Minijob earnings risk')) {
+            const newStaff = (appState.staffData || []).find(s => s.id === newStaffId);
+            const staffName = newStaff?.name || `Staff ${newStaffId}`;
+            const confirmed = window.confirm(
+                `⚠️ Warnung: ${hasWarning}\n\n` +
+                `Dieser Tausch könnte dazu führen, dass ${staffName} die Minijob-Verdienstgrenze überschreitet.\n\n` +
+                `Trotzdem fortfahren?`
+            );
+            
+            if (!confirmed) {
+                schedule[dateStr].assignments = originalAssignments;
+                return;
+            }
+            
+            // Record monitoring data for manager override of minijob warning
+            if (window.__services?.monitoring) {
+                window.__services.monitoring.recordAssignmentOperation('swap', {
+                    violationOverridden: false,
+                    minijobWarningIgnored: true
+                });
+            }
+        } else {
+            // Record regular swap operation
+            if (window.__services?.monitoring) {
+                window.__services.monitoring.recordAssignmentOperation('swap', {
+                    violationOverridden: false,
+                    minijobWarningIgnored: false
+                });
+            }
         }
 
         // Apply validated schedule
@@ -122,8 +155,27 @@ export class EventHandler {
             const t0 = performance.now?.()||0;
             await ensureAvailabilityHydrated();
             const t1 = performance.now?.()||0; if ((t1-t0)>5) console.info(`[gen] availability hydrated in ${Math.round(t1-t0)}ms`);
+            
+            // Start monitoring schedule generation
+            const genStartTime = performance.now();
+            let generationSuccessful = false;
+            let unfilledShifts = 0;
+            let constraintViolations = 0;
+            
             const engine = new SchedulingEngine(month);
             const schedule = engine.generateSchedule();
+            
+            // Count unfilled shifts for monitoring
+            Object.values(schedule.data).forEach(day => {
+                const shifts = day.shifts || ['early', 'midday', 'evening', 'closing'];
+                const assignments = day.assignments || {};
+                shifts.forEach(shift => {
+                    if (!assignments[shift]) {
+                        unfilledShifts++;
+                    }
+                });
+            });
+            
             // Fairness + overtime validations (reuse validator for flag extraction)
             let flags=[]; try {
                 const validator = new (window.ScheduleValidator||window.ScheduleValidatorImported||require('../validation.js').ScheduleValidator)(month); // fallback dynamic
@@ -131,8 +183,30 @@ export class EventHandler {
                 const sample = [];
                 Object.values(issues).forEach(arr=>{ (arr||[]).forEach(it=> sample.push(it)); });
                 flags = sample.slice(0,12).map(i=> i.message || `${i.type}`);
+                constraintViolations = sample.length;
+                
+                // Record validation issues for monitoring
+                if (window.__services?.monitoring) {
+                    window.__services.monitoring.recordValidationIssues(issues);
+                }
+                
                 window.__services?.uiChecklist?.addFlags(flags);
             } catch {}
+            
+            generationSuccessful = true;
+            
+            // Record performance metrics
+            const genEndTime = performance.now();
+            const generationDuration = genEndTime - genStartTime;
+            if (window.__services?.monitoring) {
+                window.__services.monitoring.recordPerformance('schedule_generation', generationDuration, {
+                    success: generationSuccessful,
+                    unfilledShifts,
+                    constraintViolations,
+                    month
+                });
+            }
+            
             window.__services?.events?.emit('schedule:validate:done',{ month, flags });
             window.__services?.uiChecklist?.updateStep('validate','ok');
             window.__services?.events?.emit('schedule:fairness:start',{ month });

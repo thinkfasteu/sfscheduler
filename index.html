@@ -59,6 +59,7 @@
             <button class="tab" data-tab="schedule">Dienstplan</button>
             <button class="tab" data-tab="vacation">Urlaub</button>
             <button class="tab" data-tab="reports">Berichte</button>
+            <button class="tab" data-tab="monitoring">Monitoring</button>
             <button class="tab" data-tab="logs">Protokolle</button>
         </div>
 
@@ -91,6 +92,23 @@
                             <input type="checkbox" id="weekendPreference" />
                             <span>Bevorzugt Wochenendschichten</span>
                         </label>
+                    </div>
+                    <div class="form-row hidden" id="practicalLimitsRow">
+                        <h4>Praktische Grenzen (Minijob/Werkstudent)</h4>
+                        <div class="grid-cols-1fr-1fr gap-16">
+                            <div>
+                                <label>Min. Std/Woche (praktisch)</label>
+                                <input type="number" id="weeklyHoursMinPractical" placeholder="z.B. 8" step="0.5" min="0" max="40" />
+                            </div>
+                            <div>
+                                <label>Max. Std/Woche (praktisch)</label>
+                                <input type="number" id="weeklyHoursMaxPractical" placeholder="z.B. 20" step="0.5" min="0" max="40" />
+                            </div>
+                        </div>
+                        <div>
+                            <label>Notizen zu Beschränkungen</label>
+                            <textarea id="notesPracticalCaps" placeholder="z.B. Prüfungszeiten, Semesterferien..." rows="2"></textarea>
+                        </div>
                     </div>
                     <h4>Urlaubszeiträume</h4>
                     <div class="form-row grid-cols-1fr-1fr-auto align-end">
@@ -280,6 +298,13 @@
                             <tbody id="overtimeCreditsReport"></tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+
+            <div id="monitoring-tab" class="section">
+                <h2>System-Monitoring</h2>
+                <div id="monitoring-dashboard">
+                    <!-- MonitoringDashboard will be rendered here -->
                 </div>
             </div>
 

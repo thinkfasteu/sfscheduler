@@ -193,6 +193,44 @@ class SchedulingEngine {
         return weekly * (weekdayCount / 5);
     }
 
+    // Get effective weekly hour limits using practical limits where available
+    getEffectiveWeeklyLimits(staff){
+        const contractHours = Number(staff?.weeklyHours ?? staff?.contractHours ?? 0) || 0;
+        
+        // For Minijob and Student, prefer practical limits over contract hours
+        if (staff.role === 'minijob' || staff.role === 'student') {
+            const practicalMin = staff.weeklyHoursMinPractical;
+            const practicalMax = staff.weeklyHoursMaxPractical;
+            
+            const hasPracticalLimits = Number.isFinite(practicalMin) || Number.isFinite(practicalMax);
+            const min = Number.isFinite(practicalMin) ? practicalMin : 0;
+            const max = Number.isFinite(practicalMax) ? practicalMax : contractHours;
+            
+            // Target is average of min/max when both practical limits exist, otherwise use max
+            let target;
+            if (Number.isFinite(practicalMin) && Number.isFinite(practicalMax)) {
+                target = Math.round((practicalMin + practicalMax) / 2);
+            } else {
+                target = max;
+            }
+            
+            return {
+                min,
+                max,
+                target,
+                hasPracticalLimits
+            };
+        }
+        
+        // For permanent staff, use contract hours
+        return {
+            min: 0,
+            max: contractHours,
+            target: contractHours,
+            hasPracticalLimits: false
+        };
+    }
+
     // Dynamic critical determination: All shifts are critical EXCEPT 'evening' on configured optional days (Tue/Thu by default)
     isShiftCritical(dateStr, shiftKey){
         if (shiftKey !== 'evening') return true;
@@ -326,9 +364,27 @@ class SchedulingEngine {
                 }
             }
             const weeklyTargetBase = staff.weeklyHours ?? staff.contractHours ?? 0;
+            const weeklyLimits = this.getEffectiveWeeklyLimits(staff);
             const absHWeek = this.absenceHoursByWeek?.[staff.id]?.[weekNum] || 0;
-            const weeklyTarget = Math.max(0, weeklyTargetBase - absHWeek);
-            if (weekH + hours <= weeklyTarget) score += 50; else score -= (weekH + hours - weeklyTarget)*10;
+            
+            // Use practical limits for target calculation
+            const weeklyTarget = Math.max(0, weeklyLimits.target - absHWeek);
+            
+            // Scoring based on practical limits
+            if (weeklyLimits.hasPracticalLimits) {
+                // For staff with practical limits, prefer staying within the band
+                if (weekH + hours >= weeklyLimits.min && weekH + hours <= weeklyLimits.max) {
+                    score += 60; // Bonus for staying in practical range
+                } else if (weekH + hours < weeklyLimits.min) {
+                    score -= (weeklyLimits.min - (weekH + hours)) * 15; // Penalty for under-utilization
+                } else {
+                    score -= ((weekH + hours) - weeklyLimits.max) * 20; // Stronger penalty for exceeding practical max
+                }
+            } else {
+                // Traditional scoring for permanent staff
+                if (weekH + hours <= weeklyTarget) score += 50; 
+                else score -= (weekH + hours - weeklyTarget) * 10;
+            }
             // Calendar-aware monthly target (before absence adjustment). Use base weekly hours not reduced weeklyTarget
             const monthlyTarget = this.computeMonthlyTargetHours(staff);
             const carryIn = this.carryoverIn[staff.id] || 0;
@@ -512,11 +568,17 @@ class SchedulingEngine {
         });
     }
 
-    seedTrackersFromExistingSchedule(){
+    seedTrackersFromExistingSchedule(cutoffDate = null){
         const monthData = appState.scheduleData?.[this.month] || {};
         const dates = Object.keys(monthData).sort();
+        
+        // Filter dates to only include those before the cutoff (for rest-period bug fix)
+        const filteredDates = cutoffDate ? 
+            dates.filter(dateStr => dateStr < cutoffDate) : 
+            dates;
+            
         const workedToday = {};
-        dates.forEach(dateStr => {
+        filteredDates.forEach(dateStr => {
             const day = monthData[dateStr];
             const weekNum = this.getWeekNumber(parseYMD(dateStr));
             const assigns = day?.assignments || {};
@@ -554,7 +616,7 @@ class SchedulingEngine {
         });
         // Reconstruct consecutive-day streaks up to last scheduled day
         let streak = {};
-        dates.forEach(dateStr => {
+        filteredDates.forEach(dateStr => {
             const set = workedToday[dateStr] || new Set();
             (appState.staffData||[]).forEach(s=>{
                 if (set.has(s.id)) streak[s.id] = (streak[s.id]||0)+1; else streak[s.id]=0;
@@ -589,6 +651,12 @@ class SchedulingEngine {
             const date = new Date(this.year, this.monthNum-1, day);
             const dateStr = this.toLocalISODate(date);
             const weekNum = this.getWeekNumber(date);
+            
+            // CRITICAL FIX: Re-seed trackers to only include shifts from days before this candidate date
+            // This ensures lastShiftEndTimes only contains end times from previous days for rest-period calculations
+            this.lastShiftEndTimes = {}; // Reset
+            this.seedTrackersFromExistingSchedule(dateStr);
+            
             if (weekNum !== currentWeek){ currentWeek = weekNum; (appState.staffData||[]).forEach(s=>{ this.daysWorkedThisWeek[s.id]=0; }); }
             // Order shifts: dynamic critical (all except Tue/Thu evening) first
             const allShifts = schedule.getShiftsForDate(dateStr);

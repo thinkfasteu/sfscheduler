@@ -6,6 +6,9 @@
  * @property {number} typicalDays - Typical workdays per week
  * @property {boolean} weekendPreference - Prefers weekend shifts
  * @property {number} [hourlyWage] - Optional override for minijob wage
+ * @property {number} [weeklyHoursMinPractical] - Practical minimum weekly hours for scheduling
+ * @property {number} [weeklyHoursMaxPractical] - Practical maximum weekly hours for scheduling
+ * @property {string} [notesPracticalCaps] - Notes about practical scheduling limitations
  */
 
 /**
