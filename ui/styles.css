@@ -294,3 +294,216 @@ li { margin: 6px 0; }
 .spinner { width:14px; height:14px; border:2px solid rgba(0,0,0,.15); border-top-color: var(--brand); border-radius:50%; display:inline-block; animation:spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .status-line { display:flex; align-items:center; gap:8px; color: var(--muted); font-size: 0.9em; margin: 6px 0 10px; }
+
+/* Pilot Mode Monitoring Styles */
+.pilot-badge {
+    background: #ff6b35;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: bold;
+    margin-left: 10px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+.btn-pilot {
+    background: #ff6b35;
+    color: white;
+    border: none;
+}
+
+.btn-pilot:hover {
+    background: #e55a2b;
+}
+
+.pilot-alerts {
+    margin: 15px 0;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #ff6b35;
+}
+
+.pilot-alerts.success {
+    background: #f8f9fa;
+    border-color: #28a745;
+}
+
+.pilot-alerts.has-warnings {
+    background: #fff3cd;
+    border-color: #ffc107;
+}
+
+.pilot-alerts.has-critical {
+    background: #f8d7da;
+    border-color: #dc3545;
+}
+
+.pilot-alert {
+    margin: 10px 0;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+}
+
+.pilot-alert.warning {
+    background: #fff3cd;
+    border-color: #ffeaa7;
+}
+
+.pilot-alert.critical {
+    background: #f8d7da;
+    border-color: #f5c6cb;
+}
+
+.alert-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    font-weight: bold;
+}
+
+.alert-icon {
+    margin-right: 8px;
+    font-size: 16px;
+}
+
+.alert-title {
+    flex: 1;
+    margin-right: 10px;
+}
+
+.alert-time {
+    font-size: 12px;
+    color: #666;
+    font-weight: normal;
+}
+
+.alert-message {
+    margin: 8px 0;
+    color: #444;
+}
+
+.alert-actions {
+    margin-top: 10px;
+}
+
+.btn-xs {
+    padding: 4px 8px;
+    font-size: 11px;
+    border-radius: 3px;
+}
+
+.btn-help {
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: help;
+}
+
+.pilot-metrics-section {
+    margin: 20px 0;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.section-header h3 {
+    margin: 0;
+    flex: 1;
+}
+
+.pilot-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.pilot-metric {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.metric-icon {
+    font-size: 24px;
+    margin-right: 12px;
+}
+
+.metric-info {
+    flex: 1;
+}
+
+.metric-title {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.metric-value {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 2px;
+}
+
+.metric-value.success {
+    color: #28a745;
+}
+
+.metric-value.warning {
+    color: #ffc107;
+}
+
+.metric-value.error {
+    color: #dc3545;
+}
+
+.metric-detail {
+    font-size: 11px;
+    color: #999;
+}
+
+.alerts-container {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .pilot-metrics-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .alert-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .alert-time {
+        margin-top: 4px;
+    }
+}
