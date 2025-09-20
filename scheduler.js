@@ -14,6 +14,11 @@ class Schedule {
         this.daysInMonth = new Date(y, m, 0).getDate();
     }
     getShiftsForDate(dateStr){
+        // Christmas Day (December 25) and New Year's Day (January 1) are non-business days
+        if (dateStr.endsWith('-12-25') || dateStr.endsWith('-01-01')) {
+            return []; // No shifts available on Christmas or New Year
+        }
+        
         const d = parseYMD(dateStr);
         const isWeekend = [0,6].includes(d.getDay());
         const isHoliday = appState.holidays[this.year]?.[dateStr];
@@ -100,6 +105,20 @@ const BUSINESS_RULES = {
             const year = String(parseYMD(dateStr).getFullYear());
             const consent = appState.permanentOvertimeConsent?.[staff.id]?.[year]?.[dateStr];
             return !!consent;
+        }
+    },
+    NON_BUSINESS_DAYS: {
+        id: 'NON_BUSINESS_DAYS', description: 'No scheduling on Christmas and New Year',
+        validate: (dateStr, _shiftKey, _staff, _hours, _engine) => {
+            // Christmas Day (December 25) and New Year's Day (January 1) are non-business days
+            // No shifts should be scheduled on these days regardless of holiday shift availability
+            if (dateStr.endsWith('-12-25')) {
+                return false; // Christmas Day - no scheduling
+            }
+            if (dateStr.endsWith('-01-01')) {
+                return false; // New Year's Day - no scheduling  
+            }
+            return true;
         }
     },
     NON_PERMANENT_WEEKEND_MAX: {

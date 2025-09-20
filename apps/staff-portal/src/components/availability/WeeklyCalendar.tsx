@@ -35,6 +35,7 @@ interface AvailabilityCell {
   isHoliday?: boolean // Add holiday flag
   holidayName?: string // Holiday name for display
   dayType?: 'holiday' | 'weekend' | 'weekday' // Day type classification
+  isNonBusinessDay?: boolean // Christmas and New Year - no scheduling
 }
 
 const SHIFTS = ['morning', 'evening', 'night'] as const
@@ -81,11 +82,17 @@ function WeeklyCalendar({
     const dayIsHoliday = isHoliday(dateStr)
     const holidayName = getHolidayName(dateStr)
     const dayType = getDayType(dateStr)
+    const isChristmas = dateStr.endsWith('-12-25')
+    const isNewYear = dateStr.endsWith('-01-01')
+    const isNonBusinessDay = isChristmas || isNewYear
     
     // Handle role-based default states
     let status: AvailabilityStatus | undefined
     
-    if (isPermanent) {
+    // Christmas and New Year are complete non-business days - no availability needed
+    if (isNonBusinessDay) {
+      status = undefined // No scheduling on these days
+    } else if (isPermanent) {
       // Permanent: available by default, can opt-out with 'no'
       status = found?.status || undefined // undefined = default available
     } else {
@@ -100,7 +107,8 @@ function WeeklyCalendar({
       notes: found?.notes || '',
       isHoliday: dayIsHoliday,
       holidayName: holidayName || undefined,
-      dayType
+      dayType,
+      isNonBusinessDay // Add flag for Christmas/New Year
     }
   }, [availability, isPermanent, isHoliday, getHolidayName, getDayType])
 
@@ -155,10 +163,14 @@ function WeeklyCalendar({
           const dayIsHoliday = isHoliday(dateStr)
           const holidayName = getHolidayName(dateStr)
           const dayType = getDayType(dateStr)
+          const isChristmas = dateStr.endsWith('-12-25')
+          const isNewYear = dateStr.endsWith('-01-01')
+          const isNonBusinessDay = isChristmas || isNewYear
           
           return (
             <div key={date.toISOString()} className="text-center">
               <div className={`text-xs font-medium ${
+                isNonBusinessDay ? 'text-red-700' :
                 dayIsHoliday ? 'text-orange-700' : 
                 dayType === 'weekend' ? 'text-blue-700' : 
                 'text-gray-900'
@@ -166,13 +178,20 @@ function WeeklyCalendar({
                 {format(date, 'EEEEEE', { locale: de })}
               </div>
               <div className={`text-xs ${
+                isNonBusinessDay ? 'text-red-600' :
                 dayIsHoliday ? 'text-orange-600' : 
                 dayType === 'weekend' ? 'text-blue-600' : 
                 'text-gray-600'
               }`}>
                 {format(date, 'dd.MM')}
               </div>
-              {dayIsHoliday && holidayName && (
+              {isNonBusinessDay ? (
+                <div className="text-xs text-red-600 mt-1 leading-tight">
+                  <span className="bg-red-100 px-1 py-0.5 rounded text-red-800">
+                    {isChristmas ? 'Weihnachten' : 'Neujahr'}
+                  </span>
+                </div>
+              ) : dayIsHoliday && holidayName && (
                 <div className="text-xs text-orange-600 mt-1 leading-tight" title={holidayName}>
                   <span className="bg-orange-100 px-1 py-0.5 rounded text-orange-800">
                     {holidayName.length > 8 ? `${holidayName.substring(0, 8)}...` : holidayName}
@@ -201,34 +220,50 @@ function WeeklyCalendar({
 
               return (
                 <div key={`${date.toISOString()}-${shift}`} className="space-y-2">
-                  {/* Holiday indicator */}
-                  {cell.isHoliday && (
-                    <div className="text-xs text-orange-700 font-medium mb-1">
-                      <span className="bg-orange-100 px-1 py-0.5 rounded border border-orange-200">
-                        Feiertag
-                      </span>
+                  {/* Non-business day indicator (Christmas/New Year) */}
+                  {cell.isNonBusinessDay ? (
+                    <div className="text-center py-4">
+                      <div className="text-xs text-red-700 font-medium mb-1">
+                        <span className="bg-red-100 px-2 py-1 rounded border border-red-200">
+                          Geschäftsfrei
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Keine Schichten
+                      </div>
                     </div>
-                  )}
+                  ) : (
+                    <>
+                      {/* Holiday indicator (for other holidays) */}
+                      {cell.isHoliday && (
+                        <div className="text-xs text-orange-700 font-medium mb-1">
+                          <span className="bg-orange-100 px-1 py-0.5 rounded border border-orange-200">
+                            Feiertag
+                          </span>
+                        </div>
+                      )}
 
-                  {/* Status buttons */}
-                  <div className="flex flex-col space-y-1">
-                    {(['yes', 'prefer', 'no'] as const).map(status => (
-                      <button
-                        key={status}
-                        type="button"
-                        disabled={readOnly}
-                        onClick={() => handleStatusChange(date, shift, status)}
-                        className={`${getStatusStyles(status, cell.status || 'no')} ${
-                          cell.isHoliday ? 'opacity-75' : ''
-                        }`}
-                        title={`${t(`availability.availabilityStatus.${status}`)}${
-                          cell.isHoliday && cell.holidayName ? ` (${cell.holidayName})` : ''
-                        }`}
-                      >
-                        {t(`availability.availabilityStatus.${status}`)}
-                      </button>
-                    ))}
-                  </div>
+                      {/* Status buttons */}
+                      <div className="flex flex-col space-y-1">
+                        {(['yes', 'prefer', 'no'] as const).map(status => (
+                          <button
+                            key={status}
+                            type="button"
+                            disabled={readOnly}
+                            onClick={() => handleStatusChange(date, shift, status)}
+                            className={`${getStatusStyles(status, cell.status || 'no')} ${
+                              cell.isHoliday ? 'opacity-75' : ''
+                            }`}
+                            title={`${t(`availability.availabilityStatus.${status}`)}${
+                              cell.isHoliday && cell.holidayName ? ` (${cell.holidayName})` : ''
+                            }`}
+                          >
+                            {t(`availability.availabilityStatus.${status}`)}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
 
                   {/* Notes toggle */}
                   {showNotes && (
