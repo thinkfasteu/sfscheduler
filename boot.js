@@ -76,7 +76,7 @@
   }
 
   // Test hook: allow early exit before network mode detection.
-  if (window.CONFIG.__BOOT_TEST_ONLY){
+  if (window.CONFIG && window.CONFIG.__BOOT_TEST_ONLY){
     console.info('[boot] test-only early exit');
     console.warn = originalWarn;
     return;
