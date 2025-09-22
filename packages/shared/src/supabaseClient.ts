@@ -11,14 +11,14 @@ let supabaseClient: ReturnType<typeof createClient> | null = null
 export function createSupabaseClient(config?: SupabaseConfig) {
   // Use provided config or fall back to environment variables
   const url = config?.url || 
-               (typeof window !== 'undefined' ? window.__CONFIG__?.SUPABASE_URL : undefined) ||
-               import.meta.env?.VITE_SUPABASE_URL ||
-               process.env?.SUPABASE_URL
+               (typeof window !== 'undefined' ? (window as any).__CONFIG__?.SUPABASE_URL : undefined) ||
+               (typeof process !== 'undefined' && process.env?.SUPABASE_URL) ||
+               ''
 
   const anonKey = config?.anonKey || 
-                  (typeof window !== 'undefined' ? window.__CONFIG__?.SUPABASE_ANON_KEY : undefined) ||
-                  import.meta.env?.VITE_SUPABASE_ANON_KEY ||
-                  process.env?.SUPABASE_ANON_KEY
+                  (typeof window !== 'undefined' ? (window as any).__CONFIG__?.SUPABASE_ANON_KEY : undefined) ||
+                  (typeof process !== 'undefined' && process.env?.SUPABASE_ANON_KEY) ||
+                  ''
 
   if (!url || !anonKey) {
     console.warn('[SupabaseClient] Missing configuration - provide SUPABASE_URL and SUPABASE_ANON_KEY')

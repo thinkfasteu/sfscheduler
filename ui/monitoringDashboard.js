@@ -10,6 +10,10 @@ export class MonitoringDashboard {
         this.pilotMode = true; // Enable pilot-specific monitoring
     }
 
+    render() {
+        this.renderDashboard();
+    }
+
     renderDashboard() {
         const host = document.getElementById('monitoringDashboard');
         if (!host) {

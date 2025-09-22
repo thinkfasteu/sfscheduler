@@ -79,11 +79,9 @@ function AvailabilityPage() {
   
   // Deadline calculations with holiday awareness
   const { 
-    deadline, 
     isLoading: deadlineLoading, 
     isOverdue, 
-    daysUntilDeadline, 
-    formattedDeadline 
+    daysUntilDeadline 
   } = useDeadline(currentMonth)
   
   const isSubmissionRequired = staff ? AvailabilityDeadlineService.isSubmissionRequired(staff) : false
@@ -107,23 +105,43 @@ function AvailabilityPage() {
 
   // Load availability data
   const loadAvailability = useCallback(async () => {
+    if (!staff?.id) return
+    
     setLoading(true)
     try {
-      // TODO: Load from API when Supabase is configured
-      // For now, create empty submission
-      const mockSubmission: AvailabilitySubmission = {
-        id: 'mock-submission',
-        staffId: staff?.id || 1,
-        month: monthKey,
-        status: 'draft',
-        entries: {}, // Empty entries for new submission
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+      // Load from Supabase using the real contract
+      const { fetchAvailability } = await import('@shared/contracts')
+      const existingSubmission = await fetchAvailability(staff.id, monthKey)
+      
+      if (existingSubmission) {
+        setSubmission(existingSubmission)
+      } else {
+        // Create empty submission for new month
+        const newSubmission: AvailabilitySubmission = {
+          id: `new-${staff.id}-${monthKey}`,
+          staffId: staff.id,
+          month: monthKey,
+          status: 'draft',
+          entries: {}, // Empty entries for new submission
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+        setSubmission(newSubmission)
       }
-      setSubmission(mockSubmission)
     } catch (error) {
       console.error('Error loading availability:', error)
       toast.error(t('availability.messages.loadError'))
+      // Fallback to empty submission on error
+      const fallbackSubmission: AvailabilitySubmission = {
+        id: `fallback-${staff.id}-${monthKey}`,
+        staffId: staff.id,
+        month: monthKey,
+        status: 'draft',
+        entries: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      setSubmission(fallbackSubmission)
     } finally {
       setLoading(false)
     }
@@ -134,30 +152,36 @@ function AvailabilityPage() {
 
   // Auto-save availability changes
   const saveAvailability = useCallback(async (updatedAvailability: StaffAvailability[]) => {
-    if (!submission) return
+    if (!submission || !staff?.id) return
 
     setSaving(true)
     try {
       // Convert array back to entries format
       const updatedEntries = availabilityArrayToEntries(updatedAvailability)
       
-      // TODO: Save to API when Supabase is configured
-      const updatedSubmission = {
-        ...submission,
-        entries: updatedEntries,
-        updatedAt: new Date().toISOString()
-      }
-      setSubmission(updatedSubmission)
+      // Save to Supabase using the real contract
+      const { saveDraftAvailability } = await import('@shared/contracts')
+      const savedSubmission = await saveDraftAvailability(staff.id, submission.month, updatedEntries)
+      
+      setSubmission(savedSubmission)
       
       // Show success message only for manual saves, not auto-saves
       // toast.success(t('availability.messages.savedAsDraft'))
     } catch (error) {
       console.error('Error saving availability:', error)
       toast.error(t('availability.messages.saveError'))
+      
+      // Fallback to optimistic update
+      const updatedSubmission = {
+        ...submission,
+        entries: availabilityArrayToEntries(updatedAvailability),
+        updatedAt: new Date().toISOString()
+      }
+      setSubmission(updatedSubmission)
     } finally {
       setSaving(false)
     }
-  }, [submission])
+  }, [submission, staff?.id])
 
   // Handle availability status change
   const handleAvailabilityChange = useCallback((date: Date, shift: string, status: AvailabilityStatus | undefined) => {
@@ -210,11 +234,21 @@ function AvailabilityPage() {
 
   // Submit availability
   const submitAvailability = useCallback(async () => {
-    if (!submission || submission.status !== 'draft') return
+    if (!submission || submission.status !== 'draft' || !staff?.id) return
 
     setSaving(true)
     try {
-      // TODO: Submit to API when Supabase is configured
+      // Submit to Supabase using the real contract
+      const { submitAvailability: submitToAPI } = await import('@shared/contracts')
+      const submittedSubmission = await submitToAPI(staff.id, submission.month, submission.entries)
+      
+      setSubmission(submittedSubmission)
+      toast.success(t('availability.messages.submitted'))
+    } catch (error) {
+      console.error('Error submitting availability:', error)
+      toast.error(t('availability.messages.submitError'))
+      
+      // Fallback to optimistic update
       const submittedSubmission = {
         ...submission,
         status: 'submitted' as const,
@@ -222,14 +256,10 @@ function AvailabilityPage() {
         updatedAt: new Date().toISOString()
       }
       setSubmission(submittedSubmission)
-      toast.success(t('availability.messages.submitted'))
-    } catch (error) {
-      console.error('Error submitting availability:', error)
-      toast.error(t('availability.messages.submitError'))
     } finally {
       setSaving(false)
     }
-  }, [submission, t])
+  }, [submission, staff?.id, t])
 
   // Copy from last week
   const copyLastWeek = useCallback(async () => {
