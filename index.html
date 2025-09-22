@@ -11,21 +11,9 @@
             <!--<script src="./config.local.js" data-optional="true"></script>// -->
             <!-- Hashed bundle loader moved to external file for CSP compliance -->
             <script src="./dist/runtime-config.js" data-generated="true"></script>
-            <script type="module">
-                // Wait for CONFIG to be available before loading boot
-                if (window.CONFIG) {
-                    import('./boot.js');
-                } else {
-                    // CONFIG should be set by runtime-config.js, but if it's not, try again shortly
-                    setTimeout(() => {
-                        if (window.CONFIG) {
-                            import('./boot.js');
-                        } else {
-                            console.error('[boot] CONFIG not available, cannot start app');
-                        }
-                    }, 100);
-                }
-            </script>
+            <script type="module" src="./boot.js"></script>
+
+
 
 
 

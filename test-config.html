@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Runtime Config Test</title>
+</head>
+<body>
+    <h1>Testing runtime-config.js loading</h1>
+    <div id="status">Loading...</div>
+    
+    <script>
+        console.log('Before loading runtime-config.js');
+        console.log('window.CONFIG before:', window.CONFIG);
+    </script>
+    
+    <script src="./dist/runtime-config.js"></script>
+    
+    <script>
+        console.log('After loading runtime-config.js');
+        console.log('window.CONFIG after:', window.CONFIG);
+        
+        const status = document.getElementById('status');
+        if (window.CONFIG) {
+            status.innerHTML = 'SUCCESS: CONFIG loaded with BACKEND=' + window.CONFIG.BACKEND;
+            status.style.color = 'green';
+        } else {
+            status.innerHTML = 'FAILED: CONFIG not available';
+            status.style.color = 'red';
+        }
+    </script>
+</body>
+</html>
