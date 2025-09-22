@@ -33,14 +33,14 @@ jobs:
       - name: Build
         env:
           BACKEND: supabase
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
           APP_VERSION: ${{ github.sha }}
           ENV: production
         run: |
           echo "BACKEND: $BACKEND"
-          echo "SUPABASE_URL present: ${{ secrets.SUPABASE_URL != '' }}"
-          echo "ANON_KEY present: ${{ secrets.SUPABASE_ANON_KEY != '' }}"
+          echo "SUPABASE_URL: $SUPABASE_URL"
+          echo "ANON_KEY: ${SUPABASE_ANON_KEY:0:20}..."
           npm run build
 
       - name: Upload artifact
