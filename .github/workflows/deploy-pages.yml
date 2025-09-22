@@ -68,6 +68,15 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: .
+          
+      - name: Verify uploaded structure
+        run: |
+          echo "Files that were uploaded to GitHub Pages:"
+          echo "Key files check:"
+          ls -la index.html || echo "index.html missing"
+          ls -la dist/runtime-config.js || echo "dist/runtime-config.js missing" 
+          ls -la dist/manifest.json || echo "dist/manifest.json missing"
+          echo "Upload completed from path: ."
 
   deploy:
     environment:
