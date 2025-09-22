@@ -89,7 +89,7 @@ async function bundle({watchMode=false}){
     write: false,
     target: ['es2020'],
     sourcemap: sourcemapOpt,
-    minify: !watchMode,
+    minify: false, // Temporarily disable minification to fix variable hoisting issue
     define: {
       ...envDefine,
       __BUILD_MODE__: JSON.stringify(watchMode ? 'watch' : 'build'),
