@@ -59,8 +59,16 @@ jobs:
           echo "dist/ contents:" && ls -la dist/
           echo "Root level files:" && ls -la *.html *.js 2>/dev/null || echo "No root JS files"
           echo "GitHub Pages workaround: ensuring dist/ files are accessible..."
-          # Ensure the dist directory and its contents will be available to GitHub Pages
-          # The upload-pages-artifact should preserve directory structure, but let's verify
+          # GitHub Pages is not preserving dist/ subdirectory structure properly
+          # Copy essential files to root level for GitHub Pages compatibility
+          echo "Copying dist files to root for GitHub Pages compatibility:"
+          cp dist/runtime-config.js ./runtime-config.js
+          cp dist/manifest.json ./manifest.json
+          ls -la runtime-config.js manifest.json
+          echo "Updating HTML to reference root-level files for GitHub Pages:"
+          sed -i 's|src="./dist/runtime-config.js"|src="./runtime-config.js"|g' index.html
+          echo "Verifying HTML update:"
+          grep "runtime-config.js" index.html || echo "Pattern not found"
           echo "Directory structure before upload:"
           find . -type f \( -name "*.js" -o -name "*.html" -o -name "*.json" \) | head -15
 
@@ -74,8 +82,11 @@ jobs:
           echo "Files that were uploaded to GitHub Pages:"
           echo "Key files check:"
           ls -la index.html || echo "index.html missing"
-          ls -la dist/runtime-config.js || echo "dist/runtime-config.js missing" 
-          ls -la dist/manifest.json || echo "dist/manifest.json missing"
+          ls -la runtime-config.js || echo "runtime-config.js missing (root level)" 
+          ls -la manifest.json || echo "manifest.json missing (root level)"
+          ls -la dist/runtime-config.js || echo "dist/runtime-config.js missing (original)"
+          echo "HTML should now reference root-level runtime-config.js:"
+          grep "runtime-config.js" index.html
           echo "Upload completed from path: ."
 
   deploy:
