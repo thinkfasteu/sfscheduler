@@ -596,6 +596,8 @@ export class ScheduleUI {
             const sh = shiftSel.value;
             const validator = new ScheduleValidator(month);
             const simBase = JSON.parse(JSON.stringify(window.DEBUG?.state?.scheduleData?.[month] || {}));
+            // Calculate isWeekend for this dateStr
+            const isWeekendDay = [0,6].includes(parseYMD(dateStr).getDay());
             // Ensure already-assigned staff for the date are also listed to allow switching
             const assignedIds = new Set(Object.values(cur||{}));
             assignedIds.forEach(id => {
@@ -620,8 +622,8 @@ export class ScheduleUI {
                 const weekendCount = (engine.weekendAssignmentsCount?.[s.id]) ?? 0;
                 const daytimeWeek = (engine.studentDaytimePerWeek?.[s.id]?.[weekNumLocal]) ?? 0;
                 const parts = [`Score: ${Math.round(c.score)}`];
-                if (isWeekend) parts.push(`WE bisher: ${weekendCount}`);
-                if (!isWeekend && (sh==='early'||sh==='midday') && s.role==='student') parts.push(`Tag (KW${weekNumLocal}): ${daytimeWeek}`);
+                if (isWeekendDay) parts.push(`WE bisher: ${weekendCount}`);
+                if (!isWeekendDay && (sh==='early'||sh==='midday') && s.role==='student') parts.push(`Tag (KW${weekNumLocal}): ${daytimeWeek}`);
                 if (blocker) parts.push(`Blocker: ${blocker}`);
                 const tooltip = parts.join(' | ');
                 const alreadyAssigned = assignedIds.has(s.id);
