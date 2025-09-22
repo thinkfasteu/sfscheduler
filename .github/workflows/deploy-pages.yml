@@ -46,9 +46,13 @@ jobs:
             echo "WARNING: SUPABASE_ANON_KEY is empty - app will fall back to local mode"
             echo "Please set SUPABASE_ANON_KEY in GitHub Variables"
           fi
-          npm run build
+          npm run build && echo "Build succeeded!" || (echo "Build failed!" && exit 1)
           echo "Build completed - checking artifacts:"
           ls -la dist/ | head -5
+          echo "Checking if runtime-config.js exists:"
+          ls -la dist/runtime-config.js || echo "runtime-config.js not found!"
+          echo "Checking root directory structure:"
+          ls -la | grep -E '\.(js|html|json)$' | head -5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
