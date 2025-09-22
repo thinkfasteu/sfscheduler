@@ -33,15 +33,22 @@ jobs:
       - name: Build
         env:
           BACKEND: supabase
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://aoryovdttdujfunectpx.supabase.co' }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || '' }}
           APP_VERSION: ${{ github.sha }}
           ENV: production
         run: |
           echo "BACKEND: $BACKEND"
           echo "SUPABASE_URL: $SUPABASE_URL"
-          echo "ANON_KEY: ${SUPABASE_ANON_KEY:0:20}..."
+          echo "ANON_KEY present: $([[ -n "$SUPABASE_ANON_KEY" ]] && echo "yes" || echo "no")"
+          echo "ANON_KEY length: ${#SUPABASE_ANON_KEY}"
+          if [[ -z "$SUPABASE_ANON_KEY" ]]; then
+            echo "WARNING: SUPABASE_ANON_KEY is empty - app will fall back to local mode"
+            echo "Please set SUPABASE_ANON_KEY in GitHub Variables"
+          fi
           npm run build
+          echo "Build completed - checking artifacts:"
+          ls -la dist/ | head -5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
