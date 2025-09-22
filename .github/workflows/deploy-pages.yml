@@ -53,6 +53,11 @@ jobs:
           ls -la dist/runtime-config.js || echo "runtime-config.js not found!"
           echo "Checking root directory structure:"
           ls -la | grep -E '\.(js|html|json)$' | head -5
+          echo "Verifying complete file structure that will be uploaded:"
+          find . -name "*.js" -o -name "*.html" -o -name "*.json" | grep -E "(dist/|^./[^/]*\.(js|html|json)$)" | head -10
+          echo "Testing if dist/ directory will be preserved in upload:"
+          echo "dist/ contents:" && ls -la dist/
+          echo "Root level files:" && ls -la *.html *.js 2>/dev/null || echo "No root JS files"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
