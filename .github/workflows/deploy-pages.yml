@@ -64,11 +64,15 @@ jobs:
           echo "Copying dist files to root for GitHub Pages compatibility:"
           cp dist/runtime-config.js ./runtime-config.js
           cp dist/manifest.json ./manifest.json
+          # Also copy the chunks directory to preserve chunk loading
+          cp -r dist/chunks ./chunks
           ls -la runtime-config.js manifest.json
+          ls -la chunks/ | head -3
           echo "Updating HTML to reference root-level files for GitHub Pages:"
           sed -i 's|src="./dist/runtime-config.js"|src="./runtime-config.js"|g' index.html
           echo "Verifying HTML update:"
           grep "runtime-config.js" index.html || echo "Pattern not found"
+          echo "Note: dist/ directory preserved for chunk loading compatibility"
           echo "Directory structure before upload:"
           find . -type f \( -name "*.js" -o -name "*.html" -o -name "*.json" \) | head -15
 
@@ -85,6 +89,8 @@ jobs:
           ls -la runtime-config.js || echo "runtime-config.js missing (root level)" 
           ls -la manifest.json || echo "manifest.json missing (root level)"
           ls -la dist/runtime-config.js || echo "dist/runtime-config.js missing (original)"
+          ls -la dist/chunks/ | head -3 || echo "dist/chunks/ missing"
+          ls -la chunks/ | head -3 || echo "chunks/ (root level) missing"
           echo "HTML should now reference root-level runtime-config.js:"
           grep "runtime-config.js" index.html
           echo "Upload completed from path: ."
