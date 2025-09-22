@@ -32,13 +32,16 @@ jobs:
 
       - name: Build
         env:
-          BACKEND: local
-          # BACKEND: ${{ secrets.BACKEND || 'local' }}
-          # SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          # SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          BACKEND: supabase
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           APP_VERSION: ${{ github.sha }}
           ENV: production
-        run: npm run build
+        run: |
+          echo "BACKEND: $BACKEND"
+          echo "SUPABASE_URL present: ${{ secrets.SUPABASE_URL != '' }}"
+          echo "ANON_KEY present: ${{ secrets.SUPABASE_ANON_KEY != '' }}"
+          npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
