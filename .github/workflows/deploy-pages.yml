@@ -58,6 +58,11 @@ jobs:
           echo "Testing if dist/ directory will be preserved in upload:"
           echo "dist/ contents:" && ls -la dist/
           echo "Root level files:" && ls -la *.html *.js 2>/dev/null || echo "No root JS files"
+          echo "GitHub Pages workaround: ensuring dist/ files are accessible..."
+          # Ensure the dist directory and its contents will be available to GitHub Pages
+          # The upload-pages-artifact should preserve directory structure, but let's verify
+          echo "Directory structure before upload:"
+          find . -type f \( -name "*.js" -o -name "*.html" -o -name "*.json" \) | head -15
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
