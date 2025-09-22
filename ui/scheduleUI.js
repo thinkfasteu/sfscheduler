@@ -675,8 +675,8 @@ export class ScheduleUI {
             const consentHint = document.getElementById('consentHint');
             const selectedId = parseInt(staffSel.value || 0);
             const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==selectedId);
-            const isWeekend = [0,6].includes(parseYMD(dateStr).getDay());
-            const showConsent = !!(staff && staff.role==='permanent' && isWeekend && !staff.weekendPreference);
+            const isWeekendDate = [0,6].includes(parseYMD(dateStr).getDay());
+            const showConsent = !!(staff && staff.role==='permanent' && isWeekendDate && !staff.weekendPreference);
             consentRow.classList.toggle('hidden', !showConsent);
             consentHint.classList.toggle('hidden', !showConsent);
             if (showConsent){
@@ -726,8 +726,8 @@ export class ScheduleUI {
         const consentCb = document.getElementById('consentCheckbox');
         consentCb?.addEventListener('change', (e)=>{
             const selectedId = parseInt(document.getElementById('swapStaffSelect').value || 0);
-            const isWeekend = [0,6].includes(parseYMD(dateStr).getDay());
-            if (!selectedId || !isWeekend) return;
+            const isWeekendShift = [0,6].includes(parseYMD(dateStr).getDay());
+            if (!selectedId || !isWeekendShift) return;
             const year = String(parseYMD(dateStr).getFullYear());
             const state = window.DEBUG?.state;
             if (!state.permanentOvertimeConsent) state.permanentOvertimeConsent = {};
@@ -760,15 +760,15 @@ export class ScheduleUI {
         if (!modal) return;
         const [y,m,d] = dateStr.split('-').map(Number);
         const date = new Date(y, m-1, d);
-        const isWeekend = [0,6].includes(date.getDay());
+        const isWeekendSearch = [0,6].includes(date.getDay());
         const holName = window.DEBUG?.state?.holidays?.[String(y)]?.[dateStr] || null;
         const allShifts = Object.entries(SHIFTS).filter(([k,v]) => {
             if (holName) return v.type === 'holiday';
-            if (isWeekend) return v.type === 'weekend';
+            if (isWeekendSearch) return v.type === 'weekend';
             return v.type === 'weekday';
         }).map(([k])=>k);
         document.getElementById('searchTitle').textContent = `Suchen & Zuweisen – ${dateStr}`;
-        document.getElementById('searchDetail').textContent = holName ? `Feiertag: ${holName}` : isWeekend ? 'Wochenende' : 'Wochentag';
+        document.getElementById('searchDetail').textContent = holName ? `Feiertag: ${holName}` : isWeekendSearch ? 'Wochenende' : 'Wochentag';
         // Populate shifts
         const shiftSel = document.getElementById('searchShiftSelect');
         shiftSel.innerHTML = allShifts.map(s=>`<option value="${s}">${s}</option>`).join('');
@@ -783,7 +783,7 @@ export class ScheduleUI {
         const consentHint = document.getElementById('searchConsentHint');
         const includeRow = document.getElementById('searchIncludePermanentsRow');
         const includeCb = document.getElementById('searchIncludePermanentsCheckbox');
-    includeRow.classList.toggle('hidden', !isWeekend);
+    includeRow.classList.toggle('hidden', !isWeekendSearch);
         includeCb.checked = false;
         const buildBaseCandidates = () => {
             const sh = shiftSel.value;
@@ -803,7 +803,7 @@ export class ScheduleUI {
                 const avail = appState.availabilityData?.[s.id]?.[dateStr]?.[sh];
                 const okAvail = (avail==='yes' || avail==='prefer');
                 const isPerm = s.role==='permanent';
-                const allowPerm = !isWeekend || includeCb.checked; // on weekends, gate permanents by toggle
+                const allowPerm = !isWeekendSearch || includeCb.checked; // on weekends, gate permanents by toggle
                 const vac = (appState.vacationsByStaff?.[s.id]||[]).some(p=>{ if(!p?.start||!p?.end) return false; const t=parseYMD(dateStr).getTime(); const st=parseYMD(p.start).getTime(); const en=parseYMD(p.end).getTime(); return t>=st && t<=en; });
                 const ill = (appState.illnessByStaff?.[s.id]||[]).some(p=>{ if(!p?.start||!p?.end) return false; const t=parseYMD(dateStr).getTime(); const st=parseYMD(p.start).getTime(); const en=parseYMD(p.end).getTime(); return t>=st && t<=en; });
                 const dayOff = appState.availabilityData?.[`staff:${s.id}`]?.[dateStr] === 'off';
@@ -841,7 +841,7 @@ export class ScheduleUI {
             // Consent UI
             const selectedId = parseInt(staffSel.value||0);
             const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==selectedId);
-            const showConsent = !!(staff && staff.role==='permanent' && isWeekend && !staff.weekendPreference);
+            const showConsent = !!(staff && staff.role==='permanent' && isWeekendSearch && !staff.weekendPreference);
             consentRow.classList.toggle('hidden', !showConsent);
             consentHint.classList.toggle('hidden', !showConsent);
             if (showConsent){
