@@ -32,9 +32,10 @@ jobs:
 
       - name: Build
         env:
-          BACKEND: ${{ secrets.BACKEND || 'local' }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          BACKEND: local
+          # BACKEND: ${{ secrets.BACKEND || 'local' }}
+          # SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           APP_VERSION: ${{ github.sha }}
           ENV: production
         run: npm run build
