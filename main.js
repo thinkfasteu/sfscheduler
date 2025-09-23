@@ -192,6 +192,16 @@ function initApp(){
     window.handlers = eventHandler;
     window.appUI = appUI;
     
+    // Holiday functions (missing window mappings)
+    window.showHolidaysPopup = function() { 
+        if (window.appUI?.showHolidaysPopup) return window.appUI.showHolidaysPopup(); 
+        console.error('[main] showHolidaysPopup: appUI not available'); 
+    };
+    window.addHoliday = function() { 
+        if (window.appUI?.addHoliday) return window.appUI.addHoliday(); 
+        console.error('[main] addHoliday: appUI not available'); 
+    };
+    
     // Tab switching function (replaces the one that was in prototypeCompat.js)
     window.showTab = function(evt, key) {
         if (!key && evt?.currentTarget) {
