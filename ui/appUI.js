@@ -212,9 +212,12 @@ export class AppUI {
   showHolidaysPopup(){
     this.fetchAndShowHolidays().catch(()=>{
       // fallback to local modal if fetch fails
-  if (window.__openModal) return window.__openModal('holidaysModal');
-  const modal = document.getElementById('holidaysModal');
-  if (modal){ modal.classList.add('open'); document.body.classList.add('no-scroll'); }
+      if (window.__openModal) {
+        window.__openModal('holidaysModal');
+      } else {
+        const modal = document.getElementById('holidaysModal');
+        if (modal){ modal.classList.add('open'); document.body.classList.add('no-scroll'); }
+      }
       this.initHolidays();
     });
   }
