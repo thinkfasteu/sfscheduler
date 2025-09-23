@@ -19,7 +19,19 @@ function __initEventBindings(){
   bind('saveStaffBtn','click', ()=> window.addStaff && window.addStaff());
   bind('cancelEditBtn','click', ()=> window.resetStaffForm && window.resetStaffForm());
   // Availability
-  ['availabilityStaffSelect','availabilityMonth'].forEach(id=> bind(id,'change', ()=> window.handleAvailabilityDisplay && window.handleAvailabilityDisplay()));
+  ['availabilityStaffSelect','availabilityMonth'].forEach(id=> {
+    bind(id,'change', ()=> {
+      console.log('[eventBindings] Availability selector changed:', id);
+      if (window.appUI && window.appUI.handleAvailabilityDisplay) {
+        window.appUI.handleAvailabilityDisplay();
+      } else if (window.handleAvailabilityDisplay) {
+        window.handleAvailabilityDisplay();
+      } else {
+        console.error('[eventBindings] No availability display handler found!');
+        console.log('Available: window.appUI=', !!window.appUI, 'window.handleAvailabilityDisplay=', !!window.handleAvailabilityDisplay);
+      }
+    });
+  });
   bind('showHolidaysBtn','click', ()=> window.showHolidaysPopup && window.showHolidaysPopup());
   // Schedule - both fallback bindings AND EventHandler class
   bind('generateScheduleBtn','click', ()=> {
