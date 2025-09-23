@@ -58,7 +58,27 @@ export class HydratingStore {
         // Vacations
         if (appState.vacationsByStaff){ const newVac={}; Object.entries(appState.vacationsByStaff).forEach(([oid,list])=>{ newVac[remapId(oid)] = list.map(v=>({ ...v })); }); appState.vacationsByStaff = newVac; }
         if (appState.illnessByStaff){ const newIll={}; Object.entries(appState.illnessByStaff).forEach(([oid,list])=>{ newIll[remapId(oid)] = list.map(v=>({ ...v })); }); appState.illnessByStaff = newIll; }
-        if (appState.availabilityData){ const newAvail={}; Object.entries(appState.availabilityData).forEach(([k,val])=>{ if (k.startsWith('staff:')){ const oid = k.split(':')[1]; newAvail['staff:'+remapId(oid)] = val; } else { newAvail[k]=val; } }); appState.availabilityData = newAvail; }
+        if (appState.availabilityData){
+          const newAvail = {};
+          Object.entries(appState.availabilityData).forEach(([k,val])=>{
+            if (k.startsWith('staff:')){
+              // Day-off sentinel map uses key namespace 'staff:ID'
+              const oid = k.split(':')[1];
+              newAvail['staff:'+remapId(oid)] = val;
+            } else {
+              // Per-staff per-shift availability is keyed by numeric staffId; remap those too
+              const isNumericId = /^\d+$/.test(String(k));
+              if (isNumericId){
+                const nk = String(remapId(k));
+                newAvail[nk] = val;
+              } else {
+                // Preserve any other non-standard keys just in case
+                newAvail[k] = val;
+              }
+            }
+          });
+          appState.availabilityData = newAvail;
+        }
         if (appState.voluntaryEveningAvailability){ const newVol={}; Object.entries(appState.voluntaryEveningAvailability).forEach(([k,val])=>{ const parts = k.split('::'); const oid = parts[0]; parts[0] = String(remapId(oid)); newVol[parts.join('::')] = val; }); appState.voluntaryEveningAvailability = newVol; }
         if (appState.scheduleData){ Object.values(appState.scheduleData).forEach(monthObj=>{ if(!monthObj||!monthObj.data) return; Object.values(monthObj.data).forEach(dayObj=>{ if(!dayObj.assignments) return; Object.keys(dayObj.assignments).forEach(sh=>{ const oid = dayObj.assignments[sh]; dayObj.assignments[sh] = remapId(oid); }); }); }); }
         if (appState.vacationLedger){ Object.keys(appState.vacationLedger).forEach(yearKey=>{ if (/^_hydrated_/.test(yearKey)) return; const yearMap = appState.vacationLedger[yearKey]; if (yearMap){ const newYear={}; Object.entries(yearMap).forEach(([oid,entry])=>{ if (entry && typeof entry==='object' && !('_hydrated_' in entry)){ newYear[remapId(oid)] = { ...entry, staffId: remapId(oid) }; } }); appState.vacationLedger[yearKey] = newYear; } }); }
@@ -193,7 +213,20 @@ export class HydratingStore {
               try {
                 if (appState.vacationsByStaff?.[oldId]){ appState.vacationsByStaff[created.id] = appState.vacationsByStaff[oldId]; delete appState.vacationsByStaff[oldId]; }
                 if (appState.illnessByStaff?.[oldId]){ appState.illnessByStaff[created.id] = appState.illnessByStaff[oldId]; delete appState.illnessByStaff[oldId]; }
-                if (appState.availabilityData){ Object.keys(appState.availabilityData).forEach(k=>{ if (k===`staff:${oldId}`){ appState.availabilityData[`staff:${created.id}`]=appState.availabilityData[k]; delete appState.availabilityData[k]; } }); }
+                if (appState.availabilityData){
+                  Object.keys(appState.availabilityData).forEach(k=>{
+                    // Remap day-off sentinel namespace
+                    if (k===`staff:${oldId}`){
+                      appState.availabilityData[`staff:${created.id}`] = appState.availabilityData[k];
+                      delete appState.availabilityData[k];
+                    }
+                    // Remap per-staff numeric availability buckets
+                    if (String(k)===String(oldId)){
+                      appState.availabilityData[created.id] = appState.availabilityData[k];
+                      delete appState.availabilityData[k];
+                    }
+                  });
+                }
                 if (appState.voluntaryEveningAvailability){ Object.keys(appState.voluntaryEveningAvailability).forEach(k=>{ if (k.startsWith(oldId+"::")){ const suffix=k.substring(String(oldId).length); appState.voluntaryEveningAvailability[created.id+suffix]=appState.voluntaryEveningAvailability[k]; delete appState.voluntaryEveningAvailability[k]; } }); }
                 if (appState.scheduleData){ Object.values(appState.scheduleData).forEach(monthObj=>{ if (!monthObj||!monthObj.data) return; Object.values(monthObj.data).forEach(dayObj=>{ if (!dayObj?.assignments) return; Object.keys(dayObj.assignments).forEach(shiftKey=>{ if (dayObj.assignments[shiftKey]===oldId) dayObj.assignments[shiftKey]=created.id; }); }); }); }
               } catch(err){ console.warn('[HydratingStore] staff id remap side-effects failed', err); }
