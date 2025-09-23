@@ -7,6 +7,9 @@ Thumbs.db
 .env.*
 !.env.example
 
+# Legacy files (causing conflicts)
+ui/prototypeCompat.js
+
 # Dependencies
 node_modules/
 
