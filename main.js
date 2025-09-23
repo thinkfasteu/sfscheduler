@@ -186,7 +186,7 @@ function initApp(){
             try{ overtimeUI.render(); }catch{}
             announce('state-saved', { keys: Object.keys(appState).filter(k=> appState.isDurableKey && appState.isDurableKey(k)) });
         };
-    // Expose to prototype compatibility shim
+    // Expose for compatibility
     window.handlers = eventHandler;
     window.appUI = appUI;
     window.__APP_READY__ = true;

@@ -30,6 +30,8 @@
   function getHandler(){ return window.handlers; }
 
   window.generateSchedule = function(){
+    alert('🎯 PROTOTYPE COMPAT GENERATE SCHEDULE CALLED!');
+    console.log('🎯 PROTOTYPE COMPAT GENERATE SCHEDULE CALLED!');
     const h = getHandler();
     if (h && h.generateSchedule) return h.generateSchedule();
     console.warn('generateSchedule: handler missing');

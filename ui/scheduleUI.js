@@ -22,10 +22,10 @@ export class ScheduleUI {
     setupTabs() {
         // Make UI instance available globally
         window.ui = this;
-        // If prototype-style tabs exist, let prototypeCompat handle tab switching
+        // Check for tab system and set up handlers
         const hasPrototypeTabs = document.querySelector('.tabs');
         if (hasPrototypeTabs && typeof window.showTab === 'function') {
-            return; // Do not bind modular tab buttons or force-switch
+            return; // External tab handler already exists
         }
         // Fallback: modular tab navigation (.tab-button with data-tab)
         document.querySelectorAll('.tab-button').forEach(btn => {

@@ -10,7 +10,7 @@ export class EventHandler {
         this.setupHandlers();
     }
 
-    setupHandlers() {
+    setupHandlers() {        
         // Swap modal handlers
         document.getElementById('swapModal')?.addEventListener('click', e => {
             if (e.target.classList.contains('modal')) {
@@ -114,7 +114,13 @@ export class EventHandler {
     }
 
     async generateSchedule() {
+        console.info('Schedule generation started');
         const month = document.getElementById('scheduleMonth').value;
+        
+        if (!month) {
+            alert('Bitte wählen Sie einen Monat aus.');
+            return;
+        }
         if (!month) {
             alert('Bitte Monat auswählen');
             return;
