@@ -1,0 +1,30 @@
+{
+  "app": "app.ab54e969e8.js",
+  "chunks": [
+    "chunks/academicTerms-APBZVYWF.js",
+    "chunks/scheduler-YTCATB3C.js",
+    "chunks/chunk-M3LLCWTS.js",
+    "chunks/chunk-FPWEECE2.js",
+    "chunks/SupabaseAdapter-34ZKKJC7.js",
+    "chunks/services-PFP3VL4X.js",
+    "chunks/chunk-DUSYN5G3.js",
+    "chunks/chunk-ULGWQPMY.js",
+    "chunks/chunk-6YQQWX4V.js",
+    "chunks/chunk-5V3AGATG.js"
+  ],
+  "built": "2025-09-23T05:41:39.635Z",
+  "version": "0.1.0",
+  "integrities": {
+    "app.ab54e969e8.js": "sha256-q1TpaejL6PubokSeuJ+Tl8dj+XcPvRZX/vsbtt4yvXw=",
+    "chunks/academicTerms-APBZVYWF.js": "sha256-97gGcOTVXCuHHc/Rxf7oXc2Ulgjfx/xa3LgUm/vPlVk=",
+    "chunks/scheduler-YTCATB3C.js": "sha256-Fql68fVmDrbndOuaT+jh37g0cDpMd8mC87Rp0bYMMCU=",
+    "chunks/chunk-M3LLCWTS.js": "sha256-uKJWZJaYeFY2MqBRXbCpeL2wwnGSvHCfYL48IZlk6L4=",
+    "chunks/chunk-FPWEECE2.js": "sha256-DHVweOXl+gx/0wjgmbpibzpGvNM+uMO2oxoN/k9Do3U=",
+    "chunks/SupabaseAdapter-34ZKKJC7.js": "sha256-0tzdnYgUKDU09+lhKBkzGxH8wnQ8e3o68eJJO2uMuXM=",
+    "chunks/services-PFP3VL4X.js": "sha256-3qnYY76qKYW+o/VMCoHFvXoVoCtjpNksOrfafFjubWg=",
+    "chunks/chunk-DUSYN5G3.js": "sha256-lmFj7CT3Ujo14ncxxn8EFu5rMvhkyh6WIbYJfqLHGzs=",
+    "chunks/chunk-ULGWQPMY.js": "sha256-Jkhb/DrxyzNZPjoJqvHXON/Rxw0ihuYpw5tfg4Kxz1A=",
+    "chunks/chunk-6YQQWX4V.js": "sha256-YcDIR5TNNQMUvhYAnxh7HFIu8R5w+QpJQHQ5e0hhu9U=",
+    "chunks/chunk-5V3AGATG.js": "sha256-CK8VytmjynsbAQTH81l23iKiCSgWzPtiMe8NuneaK6E="
+  }
+}
