@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Generate Schedule</title>
+    <style>
+        body { font-family: system-ui; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .btn { padding: 10px 20px; margin: 10px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; background: #f8f9fa; }
+        select { padding: 8px; margin: 10px; }
+    </style>
+    <script src="debug-schedule.js"></script>
+</head>
+<body>
+    <h1>🔧 Generate Schedule Test</h1>
+    
+    <div>
+        <label>Month: <select id="scheduleMonth">
+            <option value="2025-09">September 2025</option>
+            <option value="2025-10">October 2025</option>
+            <option value="2025-11">November 2025</option>
+        </select></label>
+    </div>
+    
+    <button id="generateScheduleBtn" class="btn">Test Generate Schedule</button>
+    <button class="btn" onclick="testDirectCall()">Test Direct Method Call</button>
+    <button class="btn" onclick="checkServices()">Check Services</button>
+    
+    <div id="testStatus" class="status">Loading...</div>
+    
+    <script>
+        async function testDirectCall() {
+            console.log('🧪 Testing direct method call...');
+            const status = document.getElementById('testStatus');
+            
+            try {
+                // Import and test the main app
+                await import('./boot.js');
+                
+                // Wait a bit for initialization
+                setTimeout(() => {
+                    if (window.handlers && window.handlers.generateSchedule) {
+                        status.innerHTML = '✅ Found handlers.generateSchedule, calling it...';
+                        window.handlers.generateSchedule();
+                    } else {
+                        status.innerHTML = '❌ handlers.generateSchedule not found';
+                        console.log('Available on window:', Object.keys(window).filter(k => k.includes('handle')));
+                    }
+                }, 2000);
+                
+            } catch (error) {
+                status.innerHTML = '❌ Error: ' + error.message;
+                console.error('Test error:', error);
+            }
+        }
+        
+        function checkServices() {
+            const status = document.getElementById('testStatus');
+            const info = [];
+            
+            info.push('Services: ' + (window.__services ? '✅' : '❌'));
+            info.push('Handlers: ' + (window.handlers ? '✅' : '❌'));
+            info.push('AppState: ' + (window.appState ? '✅' : '❌'));
+            
+            if (window.handlers) {
+                info.push('generateSchedule method: ' + (typeof window.handlers.generateSchedule));
+            }
+            
+            status.innerHTML = info.join('<br>');
+        }
+        
+        // Auto-check on load
+        setTimeout(checkServices, 1000);
+    </script>
+</body>
+</html>

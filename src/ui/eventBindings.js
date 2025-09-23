@@ -21,9 +21,29 @@ function __initEventBindings(){
   // Availability
   ['availabilityStaffSelect','availabilityMonth'].forEach(id=> bind(id,'change', ()=> window.handleAvailabilityDisplay && window.handleAvailabilityDisplay()));
   bind('showHolidaysBtn','click', ()=> window.showHolidaysPopup && window.showHolidaysPopup());
-  // Schedule - now handled by EventHandler class
-  // bind('generateScheduleBtn','click', ()=> window.generateSchedule && window.generateSchedule());
-  // bind('clearScheduleBtn','click', ()=> window.clearSchedule && window.clearSchedule());
+  // Schedule - both fallback bindings AND EventHandler class
+  bind('generateScheduleBtn','click', ()=> {
+    console.log('[eventBindings] Generate button clicked - trying both handlers');
+    if (window.handlers && window.handlers.generateSchedule) {
+      window.handlers.generateSchedule();
+    } else if (window.generateSchedule) {
+      window.generateSchedule();
+    } else {
+      console.error('[eventBindings] No generate schedule handler found!');
+      alert('Generate schedule handler not available. Check console for errors.');
+    }
+  });
+  bind('clearScheduleBtn','click', ()=> {
+    console.log('[eventBindings] Clear button clicked - trying both handlers');
+    if (window.handlers && window.handlers.clearSchedule) {
+      window.handlers.clearSchedule();
+    } else if (window.clearSchedule) {
+      window.clearSchedule();
+    } else {
+      console.error('[eventBindings] No clear schedule handler found!');
+      alert('Clear schedule handler not available. Check console for errors.');
+    }
+  });
   bind('exportScheduleBtn','click', ()=> window.exportSchedule && window.exportSchedule());
   bind('exportPdfBtn','click', ()=> window.exportPDF && window.exportPDF());
   bind('printScheduleBtn','click', ()=> window.printSchedule && window.printSchedule());
