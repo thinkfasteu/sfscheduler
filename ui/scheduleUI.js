@@ -24,8 +24,9 @@ export class ScheduleUI {
         window.ui = this;
         // Check for tab system and set up handlers
         const hasPrototypeTabs = document.querySelector('.tabs');
-        if (hasPrototypeTabs && typeof window.showTab === 'function') {
-            return; // External tab handler already exists
+        if (hasPrototypeTabs) {
+            // Global tab system exists, don't override
+            return; 
         }
         // Fallback: modular tab navigation (.tab-button with data-tab)
         document.querySelectorAll('.tab-button').forEach(btn => {
