@@ -16,7 +16,14 @@
     const flagsHtml = state.flags.length ? `<div class="cl-flags" role="status">${state.flags.slice(-8).map(f=>`<div class="cl-flag-item">${escapeHtml(f)}</div>`).join('')}</div>` : '';
     const doneCount = STEP_ORDER.filter(id=> state.steps[id]?.status==='ok').length;
     const percent = Math.round((doneCount/STEP_ORDER.length)*100);
-    root.innerHTML=`<div class="checklist-panel" role="dialog" aria-label="Planungs-Checkliste"><div class="checklist-header"><h4>Planungs-Checkliste</h4><button class="checklist-close" title="Schließen" aria-label="Schließen">×</button></div><div class="cl-progress" aria-hidden="true"><div class="cl-progress-bar" style="width:${percent}%"></div></div><ul class="checklist-steps">${stepsHtml}</ul>${flagsHtml}${state.summary?`<div class="cl-summary">${escapeHtml(state.summary.message||'Fertig')}</div>`:''}</div>`;
+    root.innerHTML=`<div class="checklist-panel" role="dialog" aria-label="Planungs-Checkliste"><div class="checklist-header"><h4>Planungs-Checkliste</h4><button class="checklist-close" title="Schließen" aria-label="Schließen">×</button></div><div class="cl-progress" aria-hidden="true"><div class="cl-progress-bar" data-percent="${percent}"></div></div><ul class="checklist-steps">${stepsHtml}</ul>${flagsHtml}${state.summary?`<div class="cl-summary">${escapeHtml(state.summary.message||'Fertig')}</div>`:''}</div>`;
+    
+    // Set progress bar width using CSS custom property instead of inline style
+    const progressBar = root.querySelector('.cl-progress-bar');
+    if (progressBar) {
+      progressBar.style.setProperty('width', `${percent}%`);
+    }
+    
     root.querySelector('.checklist-close')?.addEventListener('click', hide);
   }
   function show(){ if(state.hideDisabled) return; state.visible=true; render(); }
