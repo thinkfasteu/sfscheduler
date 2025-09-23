@@ -15,7 +15,7 @@ export class MonitoringDashboard {
     }
 
     renderDashboard() {
-        const host = document.getElementById('monitoringDashboard');
+        const host = document.getElementById('monitoring-dashboard');
         if (!host) {
             console.warn('Monitoring dashboard container not found');
             return;

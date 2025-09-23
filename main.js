@@ -189,6 +189,35 @@ function initApp(){
     // Expose for compatibility
     window.handlers = eventHandler;
     window.appUI = appUI;
+    
+    // Tab switching function (replaces the one that was in prototypeCompat.js)
+    window.showTab = function(evt, key) {
+        if (!key && evt?.currentTarget) {
+            key = evt.currentTarget.getAttribute('data-tab');
+        }
+        if (!key) return;
+        
+        // Remove active state from all tabs and sections
+        document.querySelectorAll('.tabs .tab.active').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.section.active').forEach(sec => sec.classList.remove('active'));
+        
+        // Add active state to selected tab and section
+        const btn = document.querySelector(`.tabs .tab[data-tab="${key}"]`);
+        if (btn) btn.classList.add('active');
+        const sec = document.getElementById(`${key}-tab`);
+        if (sec) sec.classList.add('active');
+    };
+    
+    // Ensure one tab active if none set yet
+    try {
+        if (!document.querySelector('.tabs .tab.active')) {
+            const first = document.querySelector('.tabs .tab[data-tab]');
+            if (first) {
+                window.showTab(null, first.getAttribute('data-tab'));
+            }
+        }
+    } catch {}
+    
     window.__APP_READY__ = true;
     try { console.info('[app] UI initialized'); } catch {}
     // Debug overlay once ready (auto-removes after 4s)
