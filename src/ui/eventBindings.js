@@ -21,9 +21,9 @@ function __initEventBindings(){
   // Availability
   ['availabilityStaffSelect','availabilityMonth'].forEach(id=> bind(id,'change', ()=> window.handleAvailabilityDisplay && window.handleAvailabilityDisplay()));
   bind('showHolidaysBtn','click', ()=> window.showHolidaysPopup && window.showHolidaysPopup());
-  // Schedule
-  bind('generateScheduleBtn','click', ()=> window.generateSchedule && window.generateSchedule());
-  bind('clearScheduleBtn','click', ()=> window.clearSchedule && window.clearSchedule());
+  // Schedule - now handled by EventHandler class
+  // bind('generateScheduleBtn','click', ()=> window.generateSchedule && window.generateSchedule());
+  // bind('clearScheduleBtn','click', ()=> window.clearSchedule && window.clearSchedule());
   bind('exportScheduleBtn','click', ()=> window.exportSchedule && window.exportSchedule());
   bind('exportPdfBtn','click', ()=> window.exportPDF && window.exportPDF());
   bind('printScheduleBtn','click', ()=> window.printSchedule && window.printSchedule());

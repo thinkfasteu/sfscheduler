@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Scheduler Debug</title>
+    <script>
+        // Simple debug helper to check what's going wrong
+        window.addEventListener('DOMContentLoaded', async () => {
+            console.log('=== SCHEDULER DEBUG REPORT ===');
+            console.log('1. CONFIG:', window.CONFIG);
+            console.log('2. __CONFIG__:', window.__CONFIG__);
+            
+            // Check if services loaded
+            setTimeout(() => {
+                console.log('3. Services:', window.__services);
+                console.log('4. AppState:', window.appState);
+                console.log('5. Errors in console (check above for red errors)');
+                
+                if (window.__services) {
+                    console.log('6. Services ready?', window.__services.ready);
+                    window.__services.ready.then(() => {
+                        console.log('7. Services are ready!');
+                        console.log('8. Backend type:', window.__services.backend);
+                        console.log('9. Health check:', window.__services.monitoring.health());
+                    }).catch(err => {
+                        console.error('7. Services failed to become ready:', err);
+                    });
+                } else {
+                    console.error('6. Services not available - app may not have loaded properly');
+                }
+            }, 2000);
+        });
+        
+        // Catch and log all errors
+        window.addEventListener('error', (e) => {
+            console.error('UNCAUGHT ERROR:', e.error, e.filename, e.lineno);
+        });
+        
+        window.addEventListener('unhandledrejection', (e) => {
+            console.error('UNHANDLED PROMISE REJECTION:', e.reason);
+        });
+    </script>
+</head>
+<body>
+    <h1>Scheduler Debug</h1>
+    <p>Check browser console for debug info. Loading main app...</p>
+    <script src="boot.js"></script>
+</body>
+</html>
