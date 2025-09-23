@@ -165,7 +165,9 @@ function initApp(){
     // Render UI first so buttons/inputs exist
     scheduleUI.refreshDisplay();
     // Then bind handlers to the rendered elements
+    console.log('[main.js] About to create EventHandler');
     const eventHandler = new EventHandler(scheduleUI);
+    console.log('[main.js] EventHandler created:', eventHandler);
     // App UI for staff/availability/vacation
     const appUI = new AppUI(scheduleUI);
     appUI.init();

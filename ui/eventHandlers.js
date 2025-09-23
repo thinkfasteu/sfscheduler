@@ -5,9 +5,12 @@ import { SchedulingEngine } from '../scheduler.js';
 
 export class EventHandler {
     constructor(ui) {
+        console.log('[EventHandler] Constructor called with ui:', ui);
         this.ui = ui;
         this.modalManager = new ModalManager();
+        console.log('[EventHandler] About to call setupHandlers');
         this.setupHandlers();
+        console.log('[EventHandler] setupHandlers completed');
     }
 
     setupHandlers() {        
@@ -26,7 +29,10 @@ export class EventHandler {
         });
 
         // Schedule generation handlers
-        document.getElementById('generateScheduleBtn')?.addEventListener('click', () => {
+        const generateBtn = document.getElementById('generateScheduleBtn');
+        console.log('[EventHandler] generateScheduleBtn found:', !!generateBtn, generateBtn);
+        generateBtn?.addEventListener('click', () => {
+            console.log('[EventHandler] Generate Schedule button clicked');
             this.generateSchedule();
         });
 

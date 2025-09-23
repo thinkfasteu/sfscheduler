@@ -300,30 +300,52 @@ export class HydratingStore {
     const legacy = `${staffId}::${dateStr}`; // migrate support
     return !!(appState.voluntaryEveningAvailability?.[k] || appState.voluntaryEveningAvailability?.[legacy]);
   }
-  availabilityListForRange(staffId, fromDate, toDate){
-    // If remote disabled use local; else attempt remote pass-through (no caching yet)
+  async availabilityListForRange(staffId, fromDate, toDate){
+    // If remote disabled use local only
     if (this.remote.disabled){
       const out = {}; const data = appState.availabilityData?.[staffId] || {}; const from = new Date(fromDate); const to = new Date(toDate);
-      Object.keys(data).forEach(d=>{ const dt = new Date(d); if (dt>=from && dt<=to) out[d] = data[d]; }); return out;
+      Object.keys(data).forEach(d=>{ const dt = new Date(d); if (dt>=from && dt<=to) out[d] = data[d]; });
+      return out;
     }
-    // Remote asynchronous call wrapped: we can't sync-block; return best-effort cached subset and queue fetch to refresh
-    // For now, just return local mirror (may be empty) and fire background fetch
-    const current = { ...(appState.availabilityData?.[staffId] || {}) };
-    this._enqueue('availabilityListForRangeFetch', async ()=> {
-      try {
-        const fresh = await this.remote.availabilityListForRange(staffId, fromDate, toDate);
-        if (!appState.availabilityData[staffId]) appState.availabilityData[staffId] = {};
-        Object.entries(fresh||{}).forEach(([d,val])=>{
-          if (!appState.availabilityData[staffId][d]) appState.availabilityData[staffId][d] = {};
-          // Merge shifts
-          Object.entries(val).forEach(([k,v])=>{ if (!k.startsWith('_')){ if (v) appState.availabilityData[staffId][d][k]=v; else delete appState.availabilityData[staffId][d][k]; } });
-          if (val._dayOff){ if (!appState.availabilityData[`staff:${staffId}`]) appState.availabilityData[`staff:${staffId}`]={}; appState.availabilityData[`staff:${staffId}`][d]='off'; }
-          if (val._voluntary){ Object.entries(val._voluntary).forEach(([kind,flag])=>{ if (flag) { if (!appState.voluntaryEveningAvailability) appState.voluntaryEveningAvailability={}; appState.voluntaryEveningAvailability[`${staffId}::${d}::${kind}`]=true; } }); }
+    // Return snapshot after attempting immediate remote fetch/merge (so callers awaiting this get hydrated data)
+    const mergeFresh = (fresh)=>{
+      if (!fresh) return;
+      if (!appState.availabilityData[staffId]) appState.availabilityData[staffId] = {};
+      Object.entries(fresh||{}).forEach(([d,val])=>{
+        if (!appState.availabilityData[staffId][d]) appState.availabilityData[staffId][d] = {};
+        // Merge shift statuses (exclude meta keys starting with _)
+        Object.entries(val).forEach(([k,v])=>{
+          if (k.startsWith('_')) return;
+          if (v) appState.availabilityData[staffId][d][k] = v; else delete appState.availabilityData[staffId][d][k];
         });
-        appState.save?.();
-      } catch(e){ console.warn('[HydratingStore] availability range fetch failed', e); }
-    });
-    return current;
+        if (val._dayOff){
+          if (!appState.availabilityData[`staff:${staffId}`]) appState.availabilityData[`staff:${staffId}`] = {};
+          appState.availabilityData[`staff:${staffId}`][d] = 'off';
+        }
+        if (val._voluntary){
+          Object.entries(val._voluntary).forEach(([kind,flag])=>{
+            if (flag){ if (!appState.voluntaryEveningAvailability) appState.voluntaryEveningAvailability = {}; appState.voluntaryEveningAvailability[`${staffId}::${d}::${kind}`] = true; }
+          });
+        }
+      });
+      appState.save?.();
+    };
+    try {
+      const fresh = await this.remote.availabilityListForRange(staffId, fromDate, toDate);
+      mergeFresh(fresh);
+    } catch(e){
+      console.warn('[HydratingStore] availability range fetch failed (will retry in background)', e);
+      // Best-effort: enqueue background retry
+      this._enqueue('availabilityListForRangeFetch', async ()=>{
+        try { const f = await this.remote.availabilityListForRange(staffId, fromDate, toDate); mergeFresh(f); }
+        catch(err){ console.warn('[HydratingStore] availability retry failed', err); }
+      });
+    }
+    // Return current snapshot in requested range after merge
+    const out = {}; const from = new Date(fromDate); const to = new Date(toDate);
+    const data = appState.availabilityData?.[staffId] || {};
+    Object.keys(data).forEach(d=>{ const dt = new Date(d); if (dt>=from && dt<=to) out[d] = data[d]; });
+    return out;
   }
   listVacations(staffId){ return appState.vacationsByStaff?.[staffId] || []; }
   addVacation(staffId, period){
