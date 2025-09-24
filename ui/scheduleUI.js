@@ -929,7 +929,7 @@ export class ScheduleUI {
                 const s=c.staff; const avail = appState.availabilityData?.[s.id]?.[dateStr]?.[sh];
                 const parts=[];
                 if (avail==='prefer') parts.push('bevorzugt'); else if (avail==='yes') parts.push('verfügbar');
-                if (isWeekend) parts.push('Wochenende'); if (holName) parts.push('Feiertag');
+                if (isWeekendSearch) parts.push('Wochenende'); if (holName) parts.push('Feiertag');
                 return `${s.name}: ${parts.join(', ')||'—'}`;
             }).join('<br/>');
         };
