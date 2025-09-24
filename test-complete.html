@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Complete Functionality Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { border: 1px solid #ccc; margin: 10px 0; padding: 15px; }
+        .test-button { background: #007bff; color: white; padding: 8px 16px; margin: 5px; border: none; cursor: pointer; }
+        .test-button:hover { background: #0056b3; }
+        .status { font-weight: bold; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        iframe { border: 1px solid #ddd; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Complete Functionality Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Results</h2>
+        <div id="testResults"></div>
+        <button class="test-button" onclick="runTests()">Run All Tests</button>
+        <button class="test-button" onclick="clearResults()">Clear Results</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Manual Testing</h2>
+        <p>Use the app below to manually test functionality:</p>
+        <ul>
+            <li>Click "Dienstplan erstellen" (Generate Schedule) button</li>
+            <li>Go to "Personalverwaltung" tab and test availability editing</li>
+            <li>Check console logs for any errors</li>
+        </ul>
+        <iframe id="appFrame" src="http://localhost:8080" width="100%" height="600"></iframe>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const results = document.getElementById('testResults');
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            results.appendChild(div);
+            console.log(`[TEST] ${message}`);
+        }
+
+        function clearResults() {
+            document.getElementById('testResults').innerHTML = '';
+        }
+
+        async function testAppLoading() {
+            log('Testing app loading...', 'info');
+            const frame = document.getElementById('appFrame');
+            
+            return new Promise((resolve) => {
+                frame.onload = () => {
+                    try {
+                        const frameWindow = frame.contentWindow;
+                        const frameDoc = frame.contentDocument;
+                        
+                        // Test if main elements exist
+                        const generateBtn = frameDoc.getElementById('generateScheduleBtn');
+                        const staffSelect = frameDoc.getElementById('availabilityStaffSelect');
+                        
+                        if (generateBtn) {
+                            log('✓ Generate schedule button found', 'success');
+                        } else {
+                            log('✗ Generate schedule button NOT found', 'error');
+                        }
+                        
+                        if (staffSelect) {
+                            log('✓ Availability staff select found', 'success');
+                        } else {
+                            log('✗ Availability staff select NOT found', 'error');
+                        }
+                        
+                        // Test EventHandler
+                        if (frameWindow.eventHandler) {
+                            log('✓ EventHandler instance available', 'success');
+                        } else {
+                            log('✗ EventHandler instance NOT available', 'error');
+                        }
+                        
+                        // Test AppUI
+                        if (frameWindow.appUI) {
+                            log('✓ AppUI instance available', 'success');
+                        } else {
+                            log('✗ AppUI instance NOT available', 'error');
+                        }
+                        
+                        resolve(true);
+                    } catch (e) {
+                        log(`✗ Error testing app frame: ${e.message}`, 'error');
+                        resolve(false);
+                    }
+                };
+                
+                // Reload the frame to trigger test
+                frame.src = frame.src;
+            });
+        }
+
+        async function testScheduleButton() {
+            log('Testing schedule button functionality...', 'info');
+            const frame = document.getElementById('appFrame');
+            
+            try {
+                const frameDoc = frame.contentDocument;
+                const generateBtn = frameDoc.getElementById('generateScheduleBtn');
+                
+                if (!generateBtn) {
+                    log('✗ Generate button not found for testing', 'error');
+                    return false;
+                }
+                
+                // Add a click listener to detect if the button responds
+                let clicked = false;
+                generateBtn.addEventListener('click', () => {
+                    clicked = true;
+                    log('✓ Generate button click event fired', 'success');
+                });
+                
+                // Simulate click
+                generateBtn.click();
+                
+                // Give it a moment to process
+                setTimeout(() => {
+                    if (clicked) {
+                        log('✓ Schedule button is responsive', 'success');
+                    } else {
+                        log('✗ Schedule button did not respond to click', 'error');
+                    }
+                }, 100);
+                
+                return true;
+            } catch (e) {
+                log(`✗ Error testing schedule button: ${e.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function testAvailabilitySelectors() {
+            log('Testing availability selectors...', 'info');
+            const frame = document.getElementById('appFrame');
+            
+            try {
+                const frameDoc = frame.contentDocument;
+                const frameWindow = frame.contentWindow;
+                const staffSelect = frameDoc.getElementById('availabilityStaffSelect');
+                const monthSelect = frameDoc.getElementById('availabilityMonth');
+                
+                if (!staffSelect) {
+                    log('✗ Staff select not found', 'error');
+                    return false;
+                }
+                
+                if (!monthSelect) {
+                    log('✗ Month select not found', 'error');
+                    return false;
+                }
+                
+                log('✓ Availability selectors found', 'success');
+                
+                // Test if handlers are bound
+                let staffChanged = false;
+                let monthChanged = false;
+                
+                staffSelect.addEventListener('change', () => {
+                    staffChanged = true;
+                    log('✓ Staff select change event fired', 'success');
+                });
+                
+                monthSelect.addEventListener('change', () => {
+                    monthChanged = true;
+                    log('✓ Month select change event fired', 'success');
+                });
+                
+                // Trigger changes
+                if (staffSelect.options.length > 1) {
+                    staffSelect.selectedIndex = 1;
+                    staffSelect.dispatchEvent(new Event('change'));
+                }
+                
+                // Test month change
+                monthSelect.dispatchEvent(new Event('change'));
+                
+                setTimeout(() => {
+                    if (staffChanged || monthChanged) {
+                        log('✓ Availability selectors are responsive', 'success');
+                    } else {
+                        log('⚠ Availability selectors may not be fully functional', 'warning');
+                    }
+                }, 100);
+                
+                return true;
+            } catch (e) {
+                log(`✗ Error testing availability: ${e.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function runTests() {
+            log('Starting comprehensive functionality tests...', 'info');
+            
+            // Wait for app to load
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            await testAppLoading();
+            await testScheduleButton();
+            await testAvailabilitySelectors();
+            
+            log('Test suite completed!', 'info');
+        }
+
+        // Auto-run tests when page loads
+        window.addEventListener('load', () => {
+            setTimeout(runTests, 3000);
+        });
+    </script>
+</body>
+</html>

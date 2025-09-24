@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>✅ Holiday Functionality - FIXED</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .fix-banner { background: linear-gradient(135deg, #28a745, #20c997); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
+        .fix-banner h1 { margin: 0; font-size: 2em; }
+        .fix-banner p { margin: 10px 0 0 0; font-size: 1.1em; opacity: 0.9; }
+        .test-section { background: #f8f9fa; border: 1px solid #dee2e6; padding: 20px; margin: 15px 0; border-radius: 8px; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; font-weight: bold; }
+        .info { color: #17a2b8; font-weight: bold; }
+        button { padding: 10px 20px; margin: 8px; background: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; font-size: 14px; }
+        button:hover { background: #0056b3; }
+        .test-button { background: #28a745; }
+        .test-button:hover { background: #218838; }
+        iframe { border: 2px solid #28a745; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .step { background: white; border-left: 4px solid #007bff; padding: 12px 16px; margin: 8px 0; border-radius: 0 4px 4px 0; }
+        .step strong { color: #007bff; }
+        #testResults { margin-top: 15px; }
+        .result { padding: 8px 12px; margin: 5px 0; border-radius: 4px; border-left: 4px solid; }
+        .result.success { background: #d4edda; border-color: #28a745; color: #155724; }
+        .result.error { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+        .result.info { background: #d1ecf1; border-color: #17a2b8; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <div class="fix-banner">
+        <h1>🎉 Holiday Functionality FIXED!</h1>
+        <p>The missing window function mappings have been restored. Holiday popup should now work properly.</p>
+    </div>
+    
+    <div class="test-section">
+        <h2>🔧 What Was Fixed</h2>
+        <div class="step">
+            <strong>Issue 1:</strong> Logic error in <code>showHolidaysPopup()</code> - premature return without calling <code>initHolidays()</code>
+        </div>
+        <div class="step">
+            <strong>Issue 2:</strong> Missing <code>window.showHolidaysPopup</code> and <code>window.addHoliday</code> function mappings
+        </div>
+        <div class="step">
+            <strong>Root Cause:</strong> When <code>prototypeCompat.js</code> was removed, the window function mappings went with it
+        </div>
+        <div class="step">
+            <strong>Solution:</strong> Added proper window function mappings in <code>main.js</code> that delegate to <code>appUI</code> methods
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>🧪 Test the Fix</h2>
+        <button class="test-button" onclick="testHolidayFunctionality()">🎯 Test Holiday Button</button>
+        <button onclick="checkWindowFunctions()">🔍 Check Window Functions</button>
+        <button onclick="testAPI()">🌐 Test Holiday API</button>
+        <button onclick="clearResults()">🗑️ Clear Results</button>
+        
+        <div id="testResults"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>📋 Manual Test Instructions</h2>
+        <ol>
+            <li><strong>Look for the "Feiertage" button</strong> in the app below (usually in the right panel)</li>
+            <li><strong>Click the "Feiertage" button</strong> - a modal should open</li>
+            <li><strong>Check the year dropdown</strong> - it should be populated with years (2024, 2025, 2026, etc.)</li>
+            <li><strong>Try adding a holiday</strong> - select a date, enter a name, click "Hinzufügen"</li>
+            <li><strong>Check for API import</strong> - holidays should automatically load from the German holiday API</li>
+        </ol>
+    </div>
+    
+    <div class="test-section">
+        <h2>🖥️ Scheduler App</h2>
+        <iframe id="appFrame" src="http://localhost:8080" width="100%" height="600"></iframe>
+    </div>
+
+    <script>
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('testResults');
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+
+        function clearResults() {
+            document.getElementById('testResults').innerHTML = '';
+        }
+
+        function getAppContext() {
+            const frame = document.getElementById('appFrame');
+            try {
+                return {
+                    window: frame.contentWindow,
+                    document: frame.contentDocument
+                };
+            } catch (e) {
+                addResult(`Cannot access app frame: ${e.message}`, 'error');
+                return null;
+            }
+        }
+
+        function checkWindowFunctions() {
+            addResult('Checking window function mappings...', 'info');
+            
+            const ctx = getAppContext();
+            if (!ctx) return;
+            
+            const { window: appWindow } = ctx;
+            
+            // Check if functions exist
+            if (typeof appWindow.showHolidaysPopup === 'function') {
+                addResult('✅ window.showHolidaysPopup is available', 'success');
+            } else {
+                addResult('❌ window.showHolidaysPopup is missing', 'error');
+            }
+            
+            if (typeof appWindow.addHoliday === 'function') {
+                addResult('✅ window.addHoliday is available', 'success');
+            } else {
+                addResult('❌ window.addHoliday is missing', 'error');
+            }
+            
+            // Check appUI
+            if (appWindow.appUI) {
+                addResult('✅ window.appUI is available', 'success');
+                if (typeof appWindow.appUI.showHolidaysPopup === 'function') {
+                    addResult('✅ appUI.showHolidaysPopup method exists', 'success');
+                } else {
+                    addResult('❌ appUI.showHolidaysPopup method missing', 'error');
+                }
+            } else {
+                addResult('❌ window.appUI is not available', 'error');
+            }
+        }
+
+        async function testHolidayFunctionality() {
+            addResult('Testing holiday functionality...', 'info');
+            
+            const ctx = getAppContext();
+            if (!ctx) return;
+            
+            const { window: appWindow, document: appDoc } = ctx;
+            
+            // Check if app is loaded
+            if (!appWindow.appState) {
+                addResult('App not fully loaded yet, waiting...', 'info');
+                setTimeout(testHolidayFunctionality, 1000);
+                return;
+            }
+            
+            // Find holiday button
+            const holidayBtn = appDoc.getElementById('showHolidaysBtn');
+            if (!holidayBtn) {
+                addResult('❌ Holiday button not found in DOM', 'error');
+                return;
+            }
+            
+            addResult('✅ Holiday button found', 'success');
+            
+            // Test click
+            const modal = appDoc.getElementById('holidaysModal');
+            const initialState = modal ? modal.classList.contains('open') : false;
+            
+            addResult('Clicking holiday button...', 'info');
+            holidayBtn.click();
+            
+            // Check if modal opened
+            setTimeout(() => {
+                const isOpen = modal ? modal.classList.contains('open') : false;
+                
+                if (isOpen && !initialState) {
+                    addResult('🎉 SUCCESS: Holiday modal opened!', 'success');
+                    
+                    // Check year dropdown
+                    const yearSelect = appDoc.getElementById('holidaysYear');
+                    if (yearSelect && yearSelect.options.length > 0) {
+                        addResult(`✅ Year dropdown populated (${yearSelect.options.length} options)`, 'success');
+                    } else {
+                        addResult('⚠️ Year dropdown not populated', 'error');
+                    }
+                    
+                    // Check other controls
+                    const addBtn = appDoc.getElementById('addHolidayBtn');
+                    const holidaysList = appDoc.getElementById('holidaysList');
+                    
+                    if (addBtn) addResult('✅ Add holiday button found', 'success');
+                    if (holidaysList) addResult('✅ Holidays list found', 'success');
+                    
+                } else {
+                    addResult('❌ Holiday modal did not open', 'error');
+                    addResult('Check browser console for error details', 'info');
+                }
+            }, 500);
+        }
+
+        async function testAPI() {
+            addResult('Testing German Holiday API...', 'info');
+            
+            try {
+                const response = await fetch('https://date.nager.at/api/v3/PublicHolidays/2025/DE');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const holidays = await response.json();
+                addResult(`✅ API working: Received ${holidays.length} holidays for 2025`, 'success');
+                
+                if (holidays.length > 0) {
+                    const sample = holidays.slice(0, 2).map(h => `${h.date}: ${h.localName}`).join(', ');
+                    addResult(`Sample holidays: ${sample}`, 'info');
+                }
+                
+            } catch (error) {
+                addResult(`❌ API test failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-run checks when page loads
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                addResult('🚀 Holiday fix test page loaded', 'success');
+                addResult('Click "Test Holiday Button" or manually test the "Feiertage" button in the app below', 'info');
+            }, 1000);
+        });
+
+        // Auto-test when app frame loads
+        document.getElementById('appFrame').addEventListener('load', () => {
+            setTimeout(() => {
+                checkWindowFunctions();
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

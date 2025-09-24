@@ -63,6 +63,71 @@ export class ScheduleUI {
         console.log('Add vacation period clicked');
     }
 
+    ensureHolidaysLoaded(year) {
+        // Check if holidays are already loaded for this year
+        const yearStr = String(year);
+        if (window.appState?.holidays?.[yearStr] && Object.keys(window.appState.holidays[yearStr]).length > 0) {
+            return; // Already loaded
+        }
+
+        // Wait for services to be ready before attempting to fetch
+        const attemptFetch = () => {
+            if (window.__services?.holiday?.fetchHolidaysForYear) {
+                console.log(`Auto-fetching holidays for ${year}...`);
+                window.__services.holiday.fetchHolidaysForYear(year)
+                    .then(() => {
+                        console.log(`Successfully loaded holidays for ${year}`);
+                        // Update calendar cells to show newly loaded holiday badges
+                        this.updateHolidayBadges(year);
+                    })
+                    .catch(err => {
+                        console.warn(`Failed to load holidays for ${year}:`, err);
+                    });
+            } else {
+                console.warn('Holiday service not available for auto-fetching');
+            }
+        };
+
+        // If services are ready, fetch immediately
+        if (window.__services?.ready) {
+            window.__services.ready.then(attemptFetch);
+        } else {
+            // Fallback: retry a few times until services are available
+            let attempts = 0;
+            const checkServices = () => {
+                attempts++;
+                if (window.__services?.holiday?.fetchHolidaysForYear) {
+                    attemptFetch();
+                } else if (attempts < 10) {
+                    setTimeout(checkServices, 200); // Check every 200ms
+                } else {
+                    console.warn(`Holiday service still not available after ${attempts} attempts`);
+                }
+            };
+            setTimeout(checkServices, 100); // Start checking after 100ms
+        }
+    }
+
+    updateHolidayBadges(year) {
+        // Update existing calendar cells to show holiday badges
+        const yearStr = String(year);
+        const holidays = window.appState?.holidays?.[yearStr] || {};
+        
+        Object.entries(holidays).forEach(([dateStr, holidayName]) => {
+            // Find the calendar cell for this date
+            const calBody = document.querySelector(`[data-date="${dateStr}"]`);
+            if (calBody) {
+                const calCell = calBody.parentElement;
+                const calDate = calCell.querySelector('.cal-date');
+                if (calDate && !calDate.querySelector('.badge')) {
+                    // Extract the day number and add the holiday badge
+                    const dayText = calDate.textContent.trim();
+                    calDate.innerHTML = `${dayText} <span class="badge">${holidayName}</span>`;
+                }
+            }
+        });
+    }
+
     refreshDisplay() {
         // Basic display implementation: simple toolbar + placeholder
         if (!this.container) {
@@ -139,12 +204,17 @@ export class ScheduleUI {
         }
 
         const [y, m] = month.split('-').map(Number);
+        
+        // Auto-fetch holidays if not loaded for this year
+        this.ensureHolidaysLoaded(y);
+        
         const first = new Date(y, m - 1, 1);
         const startDay = (first.getDay() + 6) % 7; // Monday=0
         const daysInMonth = new Date(y, m, 0).getDate();
 
         let html = '<div id="scheduleStatus" class="status-line hidden"><span class="spinner"></span><span id="scheduleStatusText">Synchronisiere Verfügbarkeiten…</span></div>'
-            + '<div class="flex flex-wrap jc-end gap-8 mb-8"'
+            + '<div class="flex flex-wrap jc-end gap-8 mb-8">'
+            + '<button class="btn btn-secondary" id="showHolidaysBtn">Feiertage</button>'
             + '<button class="btn btn-secondary" id="openSearchAssignBtn">Suchen & Zuweisen (Datum wählen)</button>'
             + '<button class="btn btn-secondary" id="recoveryPreviewBtn" title="Offene kritische Schichten anzeigen">Lücken prüfen</button>'
             + '<button class="btn btn-secondary hidden" id="recoveryApplyBtn" title="Versuchen kritische Lücken zu füllen (mit gelockerten Fairness-Penalties)">Lücken füllen</button>'
@@ -165,7 +235,7 @@ export class ScheduleUI {
                 } else {
                     const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                     const isWeekend = c >= 5;
-                    const holName = window.DEBUG?.state?.holidays?.[String(y)]?.[dateStr] || null;
+                    const holName = window.appState?.holidays?.[String(y)]?.[dateStr] || null;
                     const type = holName ? 'holiday' : (isWeekend ? 'weekend' : 'weekday');
                     html += `<div class="cal-cell ${isWeekend ? 'cal-weekend' : ''}">
                         <div class="cal-date">${day}${holName ? ` <span class=\"badge\">${holName}</span>` : ''}</div>
@@ -281,14 +351,14 @@ export class ScheduleUI {
                 const [yy,mm,dd] = dateStr.split('-').map(Number);
                 const date = new Date(yy, mm-1, dd);
                 const isWeekend = [0,6].includes(date.getDay());
-                const holName = window.DEBUG?.state?.holidays?.[String(yy)]?.[dateStr] || null;
+                const holName = window.appState?.holidays?.[String(yy)]?.[dateStr] || null;
                 const allShifts = Object.entries(SHIFTS).filter(([k,v]) => {
                     if (holName) return v.type === 'holiday';
                     if (isWeekend) return v.type === 'weekend';
                     return v.type === 'weekday';
                 }).map(([k])=>k);
                 const monthKey = dateStr.substring(0,7);
-                const cur = window.DEBUG?.state?.scheduleData?.[monthKey]?.[dateStr]?.assignments || {};
+                const cur = window.appState?.scheduleData?.[monthKey]?.[dateStr]?.assignments || {};
                 const firstUnassigned = allShifts.find(s => !cur[s]);
                 this.openAssignModal(dateStr, firstUnassigned);
             });
@@ -362,7 +432,7 @@ export class ScheduleUI {
     
 
     renderAssignments(month) {
-        const data = window.DEBUG?.state?.scheduleData?.[month] || {};
+        const data = window.appState?.scheduleData?.[month] || {};
         // For each day cell, show all shifts for its type and fill assignments if present, placeholders otherwise
         document.querySelectorAll('.cal-body[data-date]').forEach(cell => {
             const dateStr = cell.getAttribute('data-date');
@@ -376,7 +446,7 @@ export class ScheduleUI {
                 const staffId = assignments[shift];
                 const shiftMeta = (window.SHIFTS||{})[shift] || {};
                 if (staffId) {
-                    const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==staffId);
+                    const staff = (window.appState?.staffData||[]).find(s=>s.id==staffId);
                     const name = staff?.name || staffId;
                     const title = `${shiftMeta.name||shift} ${shiftMeta.time?`(${shiftMeta.time})`:''} - ${name}`;
                     return `<div class="staff-assignment" title="${title}" data-date="${dateStr}" data-shift="${shift}">
@@ -414,7 +484,7 @@ export class ScheduleUI {
     renderWeekendReport(month){
         const host = document.getElementById('weekendReport');
         if (!host) return;
-    const data = window.DEBUG?.state?.scheduleData?.[month] || {};
+    const data = window.appState?.scheduleData?.[month] || {};
         const [y, m] = month.split('-').map(Number);
         // Count weekends in month
         const daysInMonth = new Date(y, m, 0).getDate();
@@ -433,7 +503,7 @@ export class ScheduleUI {
                 counts[staffId] = (counts[staffId]||0)+1;
             });
         });
-        const staffList = (window.DEBUG?.state?.staffData||[]);
+        const staffList = (window.appState?.staffData||[]);
         const lines = staffList.map(s => {
             const isPerm = s.role==='permanent';
             const c = Math.floor((counts[s.id]||0)/2); // per-weekend count approx
@@ -442,7 +512,7 @@ export class ScheduleUI {
             return `${emoji} ${s.name}\n${c}/${weekendCount} Wochenenden\n${suffix}`;
         });
         // Other staff vacations overlapping month
-        const others = (window.DEBUG?.state?.otherStaffData||[]);
+        const others = (window.appState?.otherStaffData||[]);
         const mm = Number(m);
         const overlaps = [];
         others.forEach(os => {
@@ -479,13 +549,13 @@ export class ScheduleUI {
     renderAssignmentsForDate(month, cellEl, dateStr){
         const type = cellEl.getAttribute('data-type');
         const shifts = Object.entries(SHIFTS).filter(([_,v])=>v.type===type).map(([k])=>k);
-        const data = window.DEBUG?.state?.scheduleData?.[month] || {};
+        const data = window.appState?.scheduleData?.[month] || {};
         const assignments = data[dateStr]?.assignments || {};
         const html = shifts.map(shift => {
             const staffId = assignments[shift];
             const shiftMeta = (window.SHIFTS||{})[shift] || {};
             if (staffId){
-                const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==staffId);
+                const staff = (window.appState?.staffData||[]).find(s=>s.id==staffId);
                 const name = staff?.name || staffId;
                 const title = `${shiftMeta.name||shift} ${shiftMeta.time?`(${shiftMeta.time})`:''} - ${name}`;
                 return `<div class="staff-assignment" title="${title}" data-date="${dateStr}" data-shift="${shift}">
@@ -522,7 +592,7 @@ export class ScheduleUI {
         const [y,m,d] = dateStr.split('-').map(Number);
     const date = new Date(y, m-1, d);
         const isWeekend = [0,6].includes(date.getDay());
-        const holName = window.DEBUG?.state?.holidays?.[String(y)]?.[dateStr] || null;
+        const holName = window.appState?.holidays?.[String(y)]?.[dateStr] || null;
         const allShifts = Object.entries(SHIFTS).filter(([k,v]) => {
             if (holName) return v.type === 'holiday';
             if (isWeekend) return v.type === 'weekend';
@@ -533,7 +603,7 @@ export class ScheduleUI {
         shiftSel.innerHTML = allShifts.map(s=>`<option value="${s}">${s}</option>`).join('');
         // Default to preset, otherwise pick first unassigned if possible
         const month = dateStr.substring(0,7);
-        const cur = window.DEBUG?.state?.scheduleData?.[month]?.[dateStr]?.assignments || {};
+        const cur = window.appState?.scheduleData?.[month]?.[dateStr]?.assignments || {};
         if (presetShift && allShifts.includes(presetShift)) {
             shiftSel.value = presetShift;
         } else {
@@ -551,7 +621,7 @@ export class ScheduleUI {
         const updateCurrent = () => {
             const s = shiftSel.value;
             const sid = cur[s];
-            const staff = (window.DEBUG?.state?.staffData||[]).find(x=>x.id==sid);
+            const staff = (window.appState?.staffData||[]).find(x=>x.id==sid);
             currentAssignment.textContent = sid ? `Aktuell: ${staff?.name||sid}` : 'Aktuell: —';
             // Expose current staff to modal for swap handler
             modal.dataset.currentStaff = sid ? String(sid) : '';
@@ -570,12 +640,12 @@ export class ScheduleUI {
             const assignedIds = new Set(Object.values(cur||{}));
             assignedIds.forEach(id => {
                 if (!mapById.has(Number(id))){
-                    const st = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==id);
+                    const st = (window.appState?.staffData||[]).find(s=>s.id==id);
                     if (st) mapById.set(st.id, { staff: st, score: 0 });
                 }
             });
             // Permissive inclusion: include any staff with availability yes/prefer for this shift OR any permanent
-            (window.DEBUG?.state?.staffData||[]).forEach(s => {
+            (window.appState?.staffData||[]).forEach(s => {
                 const avail = appState.availabilityData?.[s.id]?.[dateStr]?.[sh];
                 const okAvail = (avail==='yes' || avail==='prefer');
                 const isPerm = s.role === 'permanent';
@@ -596,14 +666,14 @@ export class ScheduleUI {
             const cands = getCandidates(includePermanents);
             const sh = shiftSel.value;
             const validator = new ScheduleValidator(month);
-            const simBase = JSON.parse(JSON.stringify(window.DEBUG?.state?.scheduleData?.[month] || {}));
+            const simBase = JSON.parse(JSON.stringify(window.appState?.scheduleData?.[month] || {}));
             // Calculate isWeekend for this dateStr
             const isWeekendDay = [0,6].includes(parseYMD(dateStr).getDay());
             // Ensure already-assigned staff for the date are also listed to allow switching
             const assignedIds = new Set(Object.values(cur||{}));
             assignedIds.forEach(id => {
                 if (!cands.some(c => c.staff.id === id)){
-                    const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==id);
+                    const staff = (window.appState?.staffData||[]).find(s=>s.id==id);
                     if (staff){ cands.push({ staff, score: 0 }); }
                 }
             });
@@ -617,7 +687,7 @@ export class ScheduleUI {
                 const validated = validator.validateSchedule(sim);
                 const blocker = validated?.[dateStr]?.blockers?.[sh] || '';
                 // Build tooltip with fairness/context
-                const state = window.DEBUG?.state;
+                const state = window.appState;
                 const engine = new SchedulingEngine(month);
                 const weekNumLocal = engine.getWeekNumber(parseYMD(dateStr));
                 const weekendCount = (engine.weekendAssignmentsCount?.[s.id]) ?? 0;
@@ -675,14 +745,14 @@ export class ScheduleUI {
             const consentCb = document.getElementById('consentCheckbox');
             const consentHint = document.getElementById('consentHint');
             const selectedId = parseInt(staffSel.value || 0);
-            const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==selectedId);
+            const staff = (window.appState?.staffData||[]).find(s=>s.id==selectedId);
             const isWeekendDate = [0,6].includes(parseYMD(dateStr).getDay());
             const showConsent = !!(staff && staff.role==='permanent' && isWeekendDate && !staff.weekendPreference);
             consentRow.classList.toggle('hidden', !showConsent);
             consentHint.classList.toggle('hidden', !showConsent);
             if (showConsent){
                 const year = String(parseYMD(dateStr).getFullYear());
-                const hasConsent = !!(window.DEBUG?.state?.permanentOvertimeConsent?.[selectedId]?.[year]?.[dateStr]);
+                const hasConsent = !!(window.appState?.permanentOvertimeConsent?.[selectedId]?.[year]?.[dateStr]);
                 consentCb.checked = !!hasConsent;
             } else {
                 consentCb.checked = false;
@@ -705,10 +775,11 @@ export class ScheduleUI {
             leaveBtn.onclick = ()=>{
                 const sh = shiftSel.value;
                 const month = dateStr.substring(0,7);
-                const schedule = window.DEBUG?.state?.scheduleData?.[month] || (window.DEBUG.state.scheduleData[month] = {});
+                if (!window.appState.scheduleData[month]) window.appState.scheduleData[month] = {};
+                const schedule = window.appState.scheduleData[month];
                 if (!schedule[dateStr]) schedule[dateStr] = { assignments: {} };
                 delete schedule[dateStr].assignments[sh];
-                appState.scheduleData = window.DEBUG.state.scheduleData; appState.save?.();
+                appState.save?.();
                 this.updateDay(dateStr);
                 if (window.__closeModal) window.__closeModal('swapModal'); else { modal.classList.remove('open'); document.body.classList.remove('no-scroll'); }
             };
@@ -730,7 +801,7 @@ export class ScheduleUI {
             const isWeekendShift = [0,6].includes(parseYMD(dateStr).getDay());
             if (!selectedId || !isWeekendShift) return;
             const year = String(parseYMD(dateStr).getFullYear());
-            const state = window.DEBUG?.state;
+            const state = window.appState;
             if (!state.permanentOvertimeConsent) state.permanentOvertimeConsent = {};
             if (!state.permanentOvertimeConsent[selectedId]) state.permanentOvertimeConsent[selectedId] = {};
             if (!state.permanentOvertimeConsent[selectedId][year]) state.permanentOvertimeConsent[selectedId][year] = {};
@@ -762,7 +833,7 @@ export class ScheduleUI {
         const [y,m,d] = dateStr.split('-').map(Number);
         const date = new Date(y, m-1, d);
         const isWeekendSearch = [0,6].includes(date.getDay());
-        const holName = window.DEBUG?.state?.holidays?.[String(y)]?.[dateStr] || null;
+        const holName = window.appState?.holidays?.[String(y)]?.[dateStr] || null;
         const allShifts = Object.entries(SHIFTS).filter(([k,v]) => {
             if (holName) return v.type === 'holiday';
             if (isWeekendSearch) return v.type === 'weekend';
@@ -774,7 +845,7 @@ export class ScheduleUI {
         const shiftSel = document.getElementById('searchShiftSelect');
         shiftSel.innerHTML = allShifts.map(s=>`<option value="${s}">${s}</option>`).join('');
         const month = dateStr.substring(0,7);
-        const cur = window.DEBUG?.state?.scheduleData?.[month]?.[dateStr]?.assignments || {};
+        const cur = window.appState?.scheduleData?.[month]?.[dateStr]?.assignments || {};
         const engine = new SchedulingEngine(month);
         const weekNum = engine.getWeekNumber(date);
         const staffSel = document.getElementById('searchStaffSelect');
@@ -795,12 +866,12 @@ export class ScheduleUI {
             const assignedIds = new Set(Object.values(cur||{}));
             assignedIds.forEach(id => {
                 if (!mapById.has(Number(id))){
-                    const st = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==id);
+                    const st = (window.appState?.staffData||[]).find(s=>s.id==id);
                     if (st) mapById.set(st.id, { staff: st, score: 0 });
                 }
             });
             // Permissive: include anyone with availability or permanents
-            (window.DEBUG?.state?.staffData||[]).forEach(s => {
+            (window.appState?.staffData||[]).forEach(s => {
                 const avail = appState.availabilityData?.[s.id]?.[dateStr]?.[sh];
                 const okAvail = (avail==='yes' || avail==='prefer');
                 const isPerm = s.role==='permanent';
@@ -817,7 +888,7 @@ export class ScheduleUI {
         const renderCandidates = () => {
             const sh = shiftSel.value;
             const validator = new ScheduleValidator(month);
-            const simBase = JSON.parse(JSON.stringify(window.DEBUG?.state?.scheduleData?.[month] || {}));
+            const simBase = JSON.parse(JSON.stringify(window.appState?.scheduleData?.[month] || {}));
             let cands = buildBaseCandidates();
             // Filter
             const q = (filterInput.value||'').toLowerCase();
@@ -841,13 +912,13 @@ export class ScheduleUI {
             staffSel.innerHTML = options;
             // Consent UI
             const selectedId = parseInt(staffSel.value||0);
-            const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==selectedId);
+            const staff = (window.appState?.staffData||[]).find(s=>s.id==selectedId);
             const showConsent = !!(staff && staff.role==='permanent' && isWeekendSearch && !staff.weekendPreference);
             consentRow.classList.toggle('hidden', !showConsent);
             consentHint.classList.toggle('hidden', !showConsent);
             if (showConsent){
                 const year = String(y);
-                const hasConsent = !!(window.DEBUG?.state?.permanentOvertimeConsent?.[selectedId]?.[year]?.[dateStr]);
+                const hasConsent = !!(window.appState?.permanentOvertimeConsent?.[selectedId]?.[year]?.[dateStr]);
                 consentCb.checked = !!hasConsent;
             } else {
                 consentCb.checked = false;
@@ -872,15 +943,15 @@ export class ScheduleUI {
             const selectedId = parseInt(document.getElementById('searchStaffSelect').value||0);
             if (!selectedId) return;
             const year = String(y);
-            if (!window.DEBUG.state.permanentOvertimeConsent) window.DEBUG.state.permanentOvertimeConsent = {};
-            window.DEBUG.state.permanentOvertimeConsent[selectedId] = window.DEBUG.state.permanentOvertimeConsent[selectedId]||{};
-            window.DEBUG.state.permanentOvertimeConsent[selectedId][year] = window.DEBUG.state.permanentOvertimeConsent[selectedId][year]||{};
+            if (!window.appState.permanentOvertimeConsent) window.appState.permanentOvertimeConsent = {};
+            window.appState.permanentOvertimeConsent[selectedId] = window.appState.permanentOvertimeConsent[selectedId]||{};
+            window.appState.permanentOvertimeConsent[selectedId][year] = window.appState.permanentOvertimeConsent[selectedId][year]||{};
             if (e.target.checked){
-                window.DEBUG.state.permanentOvertimeConsent[selectedId][year][dateStr] = true;
+                window.appState.permanentOvertimeConsent[selectedId][year][dateStr] = true;
             } else {
-                delete window.DEBUG.state.permanentOvertimeConsent[selectedId][year][dateStr];
+                delete window.appState.permanentOvertimeConsent[selectedId][year][dateStr];
             }
-            try{ appState.permanentOvertimeConsent = window.DEBUG.state.permanentOvertimeConsent; appState.save?.(); }catch{}
+            try{ appState.save?.(); }catch{}
         });
     // Initial render
         renderCandidates();
@@ -889,10 +960,11 @@ export class ScheduleUI {
         if (searchLeaveBtn){
             searchLeaveBtn.onclick = ()=>{
                 const sh = shiftSel.value; const month = dateStr.substring(0,7);
-                const schedule = window.DEBUG?.state?.scheduleData?.[month] || (window.DEBUG.state.scheduleData[month] = {});
+                if (!window.appState.scheduleData[month]) window.appState.scheduleData[month] = {};
+                const schedule = window.appState.scheduleData[month];
                 if (!schedule[dateStr]) schedule[dateStr] = { assignments:{} };
                 delete schedule[dateStr].assignments[sh];
-                appState.scheduleData = window.DEBUG.state.scheduleData; appState.save?.();
+                appState.save?.();
                 this.updateDay(dateStr);
                 if (window.__closeModal) window.__closeModal('searchModal'); else { modal.classList.remove('open'); document.body.classList.remove('no-scroll'); }
             };
@@ -909,7 +981,7 @@ export class ScheduleUI {
             // Weekend permanent consent/request check like swap modal
             try{
                 const isWE = [0,6].includes(date.getDay());
-                const staff = (window.DEBUG?.state?.staffData||[]).find(s=>s.id==sid);
+                const staff = (window.appState?.staffData||[]).find(s=>s.id==sid);
                 if (isWE && staff?.role==='permanent' && !staff?.weekendPreference){
                     // Check if non-permanent candidates could fill instead
                     const scheduledToday = new Set(Object.values(cur||{}));

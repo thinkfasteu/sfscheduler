@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Holiday Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { border: 1px solid #ddd; margin: 15px 0; padding: 15px; border-radius: 4px; }
+        button { padding: 8px 16px; margin: 5px; background: #28a745; color: white; border: none; cursor: pointer; border-radius: 4px; }
+        button:hover { background: #218838; }
+        .status { font-weight: bold; margin: 10px 0; padding: 8px; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        iframe { border: 2px solid #28a745; margin-top: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>🎉 Holiday Functionality Fix Test</h1>
+    
+    <div class="test-section">
+        <h2>✅ Applied Fix</h2>
+        <p><strong>Issue:</strong> The <code>showHolidaysPopup</code> method had a logic error where it would return early without calling <code>initHolidays()</code> when using the fallback modal opening mechanism.</p>
+        <p><strong>Fix:</strong> Removed the premature <code>return</code> statement so that <code>initHolidays()</code> is always called after opening the modal.</p>
+    </div>
+    
+    <div class="test-section">
+        <h2>🧪 Test Instructions</h2>
+        <ol>
+            <li>Look for the "Feiertage" (Holidays) button in the app below</li>
+            <li>Click the "Feiertage" button</li>
+            <li>The holiday modal should now open properly</li>
+            <li>The year dropdown should be populated</li>
+            <li>You should be able to add/remove holidays</li>
+            <li>The API import should work for German holidays</li>
+        </ol>
+        
+        <button onclick="testHolidayButton()">🎯 Test Holiday Button</button>
+        <button onclick="checkAPI()">🌐 Test API Connection</button>
+        
+        <div id="testResults"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>📱 Main App</h2>
+        <iframe id="appFrame" src="http://localhost:8080" width="100%" height="600"></iframe>
+    </div>
+
+    <script>
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('testResults');
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            results.appendChild(div);
+        }
+
+        function testHolidayButton() {
+            addResult('Testing holiday button...', 'info');
+            
+            const frame = document.getElementById('appFrame');
+            try {
+                const frameWindow = frame.contentWindow;
+                const frameDoc = frame.contentDocument;
+                
+                if (!frameWindow.appState) {
+                    addResult('App not fully loaded. Waiting...', 'info');
+                    setTimeout(testHolidayButton, 1000);
+                    return;
+                }
+                
+                const holidayBtn = frameDoc.getElementById('showHolidaysBtn');
+                if (!holidayBtn) {
+                    addResult('❌ Holiday button not found!', 'error');
+                    return;
+                }
+                
+                addResult('✓ Holiday button found, clicking...', 'success');
+                holidayBtn.click();
+                
+                // Check if modal opened
+                setTimeout(() => {
+                    const modal = frameDoc.getElementById('holidaysModal');
+                    if (modal && modal.classList.contains('open')) {
+                        addResult('✅ SUCCESS: Holiday modal opened!', 'success');
+                        
+                        // Check if year select is populated
+                        const yearSelect = frameDoc.getElementById('holidaysYear');
+                        if (yearSelect && yearSelect.options.length > 0) {
+                            addResult(`✅ Year dropdown populated with ${yearSelect.options.length} options`, 'success');
+                        } else {
+                            addResult('⚠️ Year dropdown not populated', 'error');
+                        }
+                    } else {
+                        addResult('❌ Holiday modal did not open', 'error');
+                    }
+                }, 500);
+                
+            } catch (e) {
+                addResult(`❌ Error: ${e.message}`, 'error');
+            }
+        }
+
+        async function checkAPI() {
+            addResult('Testing holiday API...', 'info');
+            
+            try {
+                const response = await fetch('https://date.nager.at/api/v3/PublicHolidays/2025/DE');
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}`);
+                }
+                
+                const holidays = await response.json();
+                addResult(`✅ API working: ${holidays.length} holidays received for 2025`, 'success');
+                
+                // Show a sample holiday
+                if (holidays.length > 0) {
+                    const sample = holidays[0];
+                    addResult(`Sample: ${sample.date} - ${sample.localName}`, 'info');
+                }
+                
+            } catch (e) {
+                addResult(`❌ API test failed: ${e.message}`, 'error');
+            }
+        }
+
+        // Auto-test when page loads
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                addResult('🚀 Holiday fix applied! Test the "Feiertage" button in the app below.', 'success');
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

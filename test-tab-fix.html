@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tab Activation Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .fix-banner { background: linear-gradient(135deg, #17a2b8, #138496); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
+        .fix-banner h1 { margin: 0; font-size: 2em; }
+        .fix-banner p { margin: 10px 0 0 0; font-size: 1.1em; opacity: 0.9; }
+        .test-section { background: #f8f9fa; border: 1px solid #dee2e6; padding: 20px; margin: 15px 0; border-radius: 8px; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; font-weight: bold; }
+        .info { color: #17a2b8; font-weight: bold; }
+        button { padding: 10px 20px; margin: 8px; background: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; font-size: 14px; }
+        button:hover { background: #0056b3; }
+        .test-button { background: #28a745; }
+        .test-button:hover { background: #218838; }
+        iframe { border: 2px solid #17a2b8; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .step { background: white; border-left: 4px solid #007bff; padding: 12px 16px; margin: 8px 0; border-radius: 0 4px 4px 0; }
+        .step strong { color: #007bff; }
+        #testResults { margin-top: 15px; }
+        .result { padding: 8px 12px; margin: 5px 0; border-radius: 4px; border-left: 4px solid; }
+        .result.success { background: #d4edda; border-color: #28a745; color: #155724; }
+        .result.error { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+        .result.info { background: #d1ecf1; border-color: #17a2b8; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <div class="fix-banner">
+        <h1>🎯 Tab Activation Fix</h1>
+        <p>Fixed the issue where "Dienstplan" tab stayed active when switching to other tabs</p>
+    </div>
+    
+    <div class="test-section">
+        <h2>🔧 What Was Fixed</h2>
+        <div class="step">
+            <strong>Issue:</strong> The ScheduleUI constructor was calling <code>this.showTab('schedule')</code> even when global tab system existed
+        </div>
+        <div class="step">
+            <strong>Root Cause:</strong> Timing issue - ScheduleUI was created before <code>window.showTab</code> was defined
+        </div>
+        <div class="step">
+            <strong>Solution:</strong> Changed the check to only look for <code>.tabs</code> element existence, not <code>window.showTab</code> function
+        </div>
+        <div class="step">
+            <strong>Result:</strong> ScheduleUI no longer forces "Dienstplan" tab activation when global tab system exists
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>🧪 Test Tab Behavior</h2>
+        <button class="test-button" onclick="testTabSwitching()">🎯 Test Tab Switching</button>
+        <button onclick="checkTabState()">🔍 Check Current Tab State</button>
+        <button onclick="clearResults()">🗑️ Clear Results</button>
+        
+        <div id="testResults"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>📋 Manual Test Instructions</h2>
+        <ol>
+            <li><strong>Check initial state:</strong> "Personalverwaltung" should be the active tab (blue)</li>
+            <li><strong>Click "Verfügbarkeiten":</strong> Only this tab should be active</li>
+            <li><strong>Click "Dienstplan":</strong> Only this tab should be active</li>
+            <li><strong>Click back to "Personalverwaltung":</strong> "Dienstplan" should no longer be active</li>
+            <li><strong>Verify:</strong> Only one tab should be active at any time</li>
+        </ol>
+    </div>
+    
+    <div class="test-section">
+        <h2>🖥️ Scheduler App</h2>
+        <iframe id="appFrame" src="http://localhost:8080" width="100%" height="600"></iframe>
+    </div>
+
+    <script>
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('testResults');
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+
+        function clearResults() {
+            document.getElementById('testResults').innerHTML = '';
+        }
+
+        function getAppContext() {
+            const frame = document.getElementById('appFrame');
+            try {
+                return {
+                    window: frame.contentWindow,
+                    document: frame.contentDocument
+                };
+            } catch (e) {
+                addResult(`Cannot access app frame: ${e.message}`, 'error');
+                return null;
+            }
+        }
+
+        function checkTabState() {
+            addResult('Checking current tab state...', 'info');
+            
+            const ctx = getAppContext();
+            if (!ctx) return;
+            
+            const { document: appDoc } = ctx;
+            
+            // Find all tabs
+            const allTabs = appDoc.querySelectorAll('.tabs .tab');
+            const activeTabs = appDoc.querySelectorAll('.tabs .tab.active');
+            
+            addResult(`Total tabs found: ${allTabs.length}`, 'info');
+            addResult(`Active tabs found: ${activeTabs.length}`, activeTabs.length === 1 ? 'success' : 'error');
+            
+            if (activeTabs.length === 1) {
+                const activeTab = activeTabs[0];
+                const tabName = activeTab.textContent.trim();
+                const tabData = activeTab.getAttribute('data-tab');
+                addResult(`✅ Correctly, only "${tabName}" (${tabData}) is active`, 'success');
+            } else if (activeTabs.length === 0) {
+                addResult('❌ No tabs are active', 'error');
+            } else {
+                addResult('❌ Multiple tabs are active:', 'error');
+                activeTabs.forEach(tab => {
+                    const tabName = tab.textContent.trim();
+                    addResult(`  - ${tabName} (${tab.getAttribute('data-tab')})`, 'error');
+                });
+            }
+            
+            // Also check sections
+            const activeSections = appDoc.querySelectorAll('.section.active');
+            addResult(`Active sections: ${activeSections.length}`, activeSections.length === 1 ? 'success' : 'error');
+        }
+
+        async function testTabSwitching() {
+            addResult('Testing tab switching behavior...', 'info');
+            
+            const ctx = getAppContext();
+            if (!ctx) return;
+            
+            const { window: appWindow, document: appDoc } = ctx;
+            
+            if (!appWindow.showTab) {
+                addResult('❌ window.showTab not available', 'error');
+                return;
+            }
+            
+            addResult('✅ window.showTab is available', 'success');
+            
+            // Test switching to different tabs
+            const testTabs = ['staff', 'availability', 'schedule', 'vacation'];
+            
+            for (let i = 0; i < testTabs.length; i++) {
+                const tabKey = testTabs[i];
+                addResult(`Testing switch to "${tabKey}"...`, 'info');
+                
+                try {
+                    appWindow.showTab(null, tabKey);
+                    
+                    // Wait a bit and check
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    const activeTabs = appDoc.querySelectorAll('.tabs .tab.active');
+                    if (activeTabs.length === 1) {
+                        const activeTab = activeTabs[0];
+                        const activeKey = activeTab.getAttribute('data-tab');
+                        if (activeKey === tabKey) {
+                            addResult(`✅ Successfully switched to "${tabKey}"`, 'success');
+                        } else {
+                            addResult(`❌ Wrong tab active: expected "${tabKey}", got "${activeKey}"`, 'error');
+                        }
+                    } else {
+                        addResult(`❌ Multiple or no tabs active after switching to "${tabKey}"`, 'error');
+                    }
+                    
+                } catch (error) {
+                    addResult(`❌ Error switching to "${tabKey}": ${error.message}`, 'error');
+                }
+            }
+            
+            addResult('Tab switching test completed', 'info');
+        }
+
+        // Auto-run checks when page loads
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                addResult('🚀 Tab fix test page loaded', 'success');
+                addResult('Use the test buttons or manually test tab switching in the app below', 'info');
+            }, 1000);
+        });
+
+        // Auto-test when app frame loads
+        document.getElementById('appFrame').addEventListener('load', () => {
+            setTimeout(() => {
+                checkTabState();
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

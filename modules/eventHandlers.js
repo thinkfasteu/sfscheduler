@@ -1,4 +1,5 @@
 import { appState } from './state.js';
+import { SchedulingEngine } from '../scheduler.js';
 // This file in modules is unused by the app; keep paths correct to avoid runtime import failures if referenced
 import { ModalManager } from '../ui/modalManager.js';
 import { ScheduleValidator } from '../validation.js';
@@ -83,9 +84,39 @@ export class EventHandler {
             return;
         }
 
-        // Generation logic will be implemented in scheduler.js
-        // For now, just refresh display
-        this.ui.refreshDisplay();
+        // Check if schedule already exists and confirm overwrite
+        if (appState.scheduleData[month] && Object.keys(appState.scheduleData[month]).length > 0) {
+            if (!confirm(`Ein Dienstplan für ${month} existiert bereits. Soll er überschrieben werden?`)) {
+                return;
+            }
+        }
+
+        try {
+            // Initialize schedule data for the month if needed
+            if (!appState.scheduleData[month]) {
+                appState.scheduleData[month] = {};
+            }
+
+            // Create scheduling engine instance
+            const engine = new SchedulingEngine(month);
+            
+            // Generate the schedule
+            console.log(`Generating schedule for ${month}...`);
+            engine.generateSchedule();
+            
+            // Save the updated state
+            appState.save?.();
+            
+            // Refresh the display
+            this.ui.refreshDisplay();
+            
+            console.log(`Schedule generation completed for ${month}`);
+            alert(`Dienstplan für ${month} wurde erfolgreich erstellt!`);
+            
+        } catch (error) {
+            console.error('Schedule generation failed:', error);
+            alert(`Fehler beim Erstellen des Dienstplans: ${error.message}`);
+        }
     }
 
     clearSchedule() {

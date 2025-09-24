@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Direct Holiday API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Holiday API Direct Test</h1>
+    
+    <p>This page tests the holiday API independently of the main app.</p>
+    
+    <button onclick="testAPI()">Test Holiday API</button>
+    <button onclick="testAPIWithCORS()">Test with CORS</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script>
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = message;
+            results.appendChild(div);
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        async function testAPI() {
+            addResult('Testing Holiday API...', 'info');
+            
+            const url = 'https://date.nager.at/api/v3/PublicHolidays/2025/DE';
+            addResult(`Calling: ${url}`, 'info');
+            
+            try {
+                const startTime = Date.now();
+                const response = await fetch(url);
+                const duration = Date.now() - startTime;
+                
+                addResult(`Response received in ${duration}ms`, 'info');
+                addResult(`Status: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'error');
+                addResult(`Headers: Content-Type: ${response.headers.get('content-type')}`, 'info');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                addResult(`✓ Success! Received ${data.length} holidays`, 'success');
+                
+                // Show first few holidays
+                const sample = data.slice(0, 5).map(h => `${h.date}: ${h.localName} (${h.name})`).join('<br>');
+                addResult(`<strong>Sample holidays:</strong><br>${sample}`, 'success');
+                
+                // Check for Hessen-specific holidays
+                const hessenHolidays = data.filter(h => 
+                    !h.counties || (Array.isArray(h.counties) && h.counties.includes('DE-HE'))
+                );
+                addResult(`Holidays applicable to Hessen: ${hessenHolidays.length}`, 'info');
+                
+            } catch (error) {
+                addResult(`✗ Error: ${error.message}`, 'error');
+                console.error('Holiday API test failed:', error);
+            }
+        }
+
+        async function testAPIWithCORS() {
+            addResult('Testing with CORS mode...', 'info');
+            
+            const url = 'https://date.nager.at/api/v3/PublicHolidays/2025/DE';
+            
+            try {
+                const response = await fetch(url, {
+                    mode: 'cors',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                addResult(`CORS test status: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult(`✓ CORS test successful! ${data.length} holidays`, 'success');
+                } else {
+                    throw new Error(`CORS test failed: ${response.status}`);
+                }
+                
+            } catch (error) {
+                addResult(`✗ CORS test error: ${error.message}`, 'error');
+                
+                // Additional CORS debugging
+                if (error.message.includes('CORS')) {
+                    addResult('This appears to be a CORS issue. The API might not allow cross-origin requests from this domain.', 'error');
+                }
+            }
+        }
+
+        // Auto-test when page loads
+        window.addEventListener('load', () => {
+            addResult('Page loaded. Click "Test Holiday API" to begin.', 'info');
+        });
+    </script>
+</body>
+</html>

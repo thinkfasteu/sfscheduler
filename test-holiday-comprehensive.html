@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Comprehensive Holiday Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { border: 1px solid #ddd; margin: 10px 0; padding: 15px; border-radius: 4px; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        .console-output { background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; border-radius: 4px; font-family: monospace; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
+        iframe { border: 1px solid #ddd; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Comprehensive Holiday Debug</h1>
+    
+    <div class="section">
+        <h2>Debug Controls</h2>
+        <button onclick="runDebugInFrame()">Debug Holiday in App</button>
+        <button onclick="openConsole()">Open Browser Console</button>
+        <button onclick="clearOutput()">Clear Output</button>
+    </div>
+    
+    <div class="section">
+        <h2>Console Output</h2>
+        <div id="consoleOutput" class="console-output">Console output will appear here...\n</div>
+    </div>
+    
+    <div class="section">
+        <h2>Main App</h2>
+        <p>The scheduler app is loaded below. Use the debug button above to analyze the holiday functionality.</p>
+        <iframe id="appFrame" src="http://localhost:8080" width="100%" height="600"></iframe>
+    </div>
+
+    <script>
+        let originalConsoleLog = console.log;
+        let originalConsoleError = console.error;
+        let originalConsoleWarn = console.warn;
+        
+        function logToPage(message, type = 'log') {
+            const output = document.getElementById('consoleOutput');
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'warn' ? '⚠️' : '📝';
+            output.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        // Intercept console logs
+        console.log = function(...args) {
+            originalConsoleLog.apply(console, args);
+            logToPage(args.join(' '), 'log');
+        };
+        
+        console.error = function(...args) {
+            originalConsoleError.apply(console, args);
+            logToPage(args.join(' '), 'error');
+        };
+        
+        console.warn = function(...args) {
+            originalConsoleWarn.apply(console, args);
+            logToPage(args.join(' '), 'warn');
+        };
+        
+        function clearOutput() {
+            document.getElementById('consoleOutput').textContent = 'Console cleared...\n';
+        }
+        
+        function openConsole() {
+            logToPage('Open browser DevTools (F12) to see detailed console output', 'log');
+        }
+        
+        function runDebugInFrame() {
+            logToPage('Starting comprehensive holiday debug...', 'log');
+            
+            const frame = document.getElementById('appFrame');
+            try {
+                const frameWindow = frame.contentWindow;
+                const frameDoc = frame.contentDocument;
+                
+                if (!frameWindow.appState) {
+                    logToPage('App not fully loaded yet. Waiting 2 seconds...', 'warn');
+                    setTimeout(runDebugInFrame, 2000);
+                    return;
+                }
+                
+                // Load the comprehensive debug script into the frame
+                const script = frameDoc.createElement('script');
+                script.src = 'debug-holidays-comprehensive.js';
+                script.onload = () => {
+                    logToPage('Debug script loaded into app frame', 'log');
+                    
+                    // Run the debug function in the frame context
+                    setTimeout(() => {
+                        if (frameWindow.debugHolidays) {
+                            frameWindow.debugHolidays();
+                        } else {
+                            logToPage('Debug function not available in frame', 'error');
+                        }
+                    }, 500);
+                };
+                script.onerror = () => {
+                    logToPage('Failed to load debug script', 'error');
+                };
+                frameDoc.head.appendChild(script);
+                
+            } catch (e) {
+                logToPage(`Error accessing app frame: ${e.message}`, 'error');
+            }
+        }
+        
+        // Auto-start debug when page loads
+        window.addEventListener('load', () => {
+            logToPage('Page loaded. Click "Debug Holiday in App" to analyze.', 'log');
+        });
+    </script>
+</body>
+</html>

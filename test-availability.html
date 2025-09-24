@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Availability</title>
+    <style>
+        body { font-family: system-ui; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .form-group { margin: 15px 0; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        select { padding: 8px; width: 200px; margin: 5px; }
+        .btn { padding: 10px 20px; margin: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; background: #f8f9fa; border: 1px solid #dee2e6; }
+        #availabilityForm { margin-top: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+    </style>
+    <script src="debug-availability.js"></script>
+</head>
+<body>
+    <h1>🔧 Test Availability Functionality</h1>
+    
+    <div class="form-group">
+        <label>Staff:</label>
+        <select id="availabilityStaffSelect">
+            <option value="">– auswählen –</option>
+        </select>
+    </div>
+    
+    <div class="form-group">
+        <label>Month:</label>
+        <select id="availabilityMonth">
+        </select>
+    </div>
+    
+    <button class="btn" onclick="testAvailabilityDisplay()">Test Display</button>
+    <button class="btn" onclick="checkServices()">Check Services</button>
+    <button class="btn" onclick="populateSelectors()">Populate Selectors</button>
+    
+    <div id="testStatus" class="status">Ready for testing...</div>
+    <div id="availabilityForm"><p>Bitte Mitarbeiter und Monat auswählen.</p></div>
+    
+    <script>
+        async function testAvailabilityDisplay() {
+            console.log('🧪 Testing availability display...');
+            const status = document.getElementById('testStatus');
+            
+            try {
+                // Import the main app
+                await import('./boot.js');
+                
+                // Wait for initialization
+                setTimeout(() => {
+                    if (window.appUI && window.appUI.handleAvailabilityDisplay) {
+                        status.innerHTML = '✅ Found appUI.handleAvailabilityDisplay, calling it...';
+                        try {
+                            window.appUI.handleAvailabilityDisplay();
+                            status.innerHTML += '<br>✅ Called successfully';
+                        } catch (e) {
+                            status.innerHTML += '<br>❌ Error calling: ' + e.message;
+                        }
+                    } else {
+                        status.innerHTML = '❌ appUI.handleAvailabilityDisplay not found';
+                    }
+                }, 2000);
+                
+            } catch (error) {
+                status.innerHTML = '❌ Error: ' + error.message;
+                console.error('Test error:', error);
+            }
+        }
+        
+        function checkServices() {
+            const status = document.getElementById('testStatus');
+            const info = [];
+            
+            info.push('Services: ' + (window.__services ? '✅' : '❌'));
+            info.push('AppUI: ' + (window.appUI ? '✅' : '❌'));
+            info.push('Staff service: ' + (window.__services?.staff ? '✅' : '❌'));
+            info.push('Availability service: ' + (window.__services?.availability ? '✅' : '❌'));
+            
+            if (window.__services?.staff?.list) {
+                const staffList = window.__services.staff.list();
+                info.push('Staff count: ' + staffList.length);
+            }
+            
+            status.innerHTML = info.join('<br>');
+        }
+        
+        function populateSelectors() {
+            const staffSel = document.getElementById('availabilityStaffSelect');
+            const monthSel = document.getElementById('availabilityMonth');
+            
+            // Try to populate manually
+            if (window.appUI && window.appUI.populateAvailabilitySelectors) {
+                window.appUI.populateAvailabilitySelectors();
+                document.getElementById('testStatus').innerHTML = '✅ Called populateAvailabilitySelectors';
+            } else {
+                document.getElementById('testStatus').innerHTML = '❌ populateAvailabilitySelectors not found';
+            }
+        }
+        
+        // Auto-load main app
+        setTimeout(() => {
+            import('./boot.js').catch(e => console.error('Boot failed:', e));
+        }, 500);
+    </script>
+</body>
+</html>

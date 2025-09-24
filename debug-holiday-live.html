@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Holiday Debug - Live Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .debug-panel { background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; margin: 10px 0; border-radius: 4px; }
+        .error { color: #dc3545; font-weight: bold; }
+        .success { color: #28a745; font-weight: bold; }
+        .warning { color: #ffc107; font-weight: bold; }
+        .info { color: #17a2b8; font-weight: bold; }
+        button { padding: 8px 16px; margin: 5px; background: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }
+        .step { margin: 10px 0; padding: 8px; border-left: 4px solid #007bff; background: #f8f9fa; }
+        iframe { border: 2px solid #007bff; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Holiday Functionality Live Debug</h1>
+    
+    <div class="debug-panel">
+        <h2>🎯 Real-time Testing</h2>
+        <button onclick="testHolidayFlow()">Test Holiday Function Flow</button>
+        <button onclick="testDirectAPI()">Test API Directly</button>
+        <button onclick="inspectModalState()">Inspect Modal State</button>
+        <button onclick="simulateClick()">Simulate Button Click</button>
+        <button onclick="clearLog()">Clear Log</button>
+        
+        <div id="debugLog"></div>
+    </div>
+    
+    <div class="debug-panel">
+        <h2>📋 Step-by-Step Manual Test</h2>
+        <div class="step">
+            <strong>Step 1:</strong> Open browser console (F12) to see detailed logs
+        </div>
+        <div class="step">
+            <strong>Step 2:</strong> Look for the "Feiertage" button in the app below
+        </div>
+        <div class="step">
+            <strong>Step 3:</strong> Click the "Feiertage" button and watch the console
+        </div>
+        <div class="step">
+            <strong>Step 4:</strong> Check if a modal appears or if there are any errors
+        </div>
+        <div class="step">
+            <strong>Step 5:</strong> Use the test buttons above to diagnose issues
+        </div>
+    </div>
+    
+    <div class="debug-panel">
+        <h2>🖥️ App Frame</h2>
+        <iframe id="appFrame" src="http://localhost:8080" width="100%" height="600"></iframe>
+    </div>
+
+    <script>
+        let logCounter = 0;
+        
+        function log(message, type = 'info') {
+            const debugLog = document.getElementById('debugLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = `[${timestamp}] ${message}`;
+            debugLog.appendChild(div);
+            
+            // Also log to console for detailed debugging
+            console.log(`[HOLIDAY-DEBUG] ${message}`);
+            
+            // Scroll to bottom
+            debugLog.scrollTop = debugLog.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('debugLog').innerHTML = '';
+            console.clear();
+            log('Debug log cleared');
+        }
+        
+        function getFrameContext() {
+            const frame = document.getElementById('appFrame');
+            try {
+                return {
+                    window: frame.contentWindow,
+                    document: frame.contentDocument,
+                    frame: frame
+                };
+            } catch (e) {
+                log(`Cannot access frame: ${e.message}`, 'error');
+                return null;
+            }
+        }
+        
+        async function testHolidayFlow() {
+            log('🔍 Testing complete holiday function flow...', 'info');
+            
+            const ctx = getFrameContext();
+            if (!ctx) return;
+            
+            const { window: frameWindow, document: frameDoc } = ctx;
+            
+            // Check if app is loaded
+            if (!frameWindow.appState) {
+                log('❌ App not loaded yet - appState missing', 'error');
+                return;
+            }
+            
+            log('✅ App state found', 'success');
+            
+            // Check holiday button
+            const holidayBtn = frameDoc.getElementById('showHolidaysBtn');
+            if (!holidayBtn) {
+                log('❌ Holiday button not found in DOM', 'error');
+                return;
+            }
+            
+            log(`✅ Holiday button found: "${holidayBtn.textContent}"`, 'success');
+            
+            // Check window functions
+            log(`🔍 Checking window.showHolidaysPopup: ${typeof frameWindow.showHolidaysPopup}`, 'info');
+            if (!frameWindow.showHolidaysPopup) {
+                log('❌ window.showHolidaysPopup not available', 'error');
+            }
+            
+            // Check AppUI
+            log(`🔍 Checking window.appUI: ${typeof frameWindow.appUI}`, 'info');
+            if (frameWindow.appUI) {
+                log(`🔍 appUI.showHolidaysPopup: ${typeof frameWindow.appUI.showHolidaysPopup}`, 'info');
+                log(`🔍 appUI.fetchAndShowHolidays: ${typeof frameWindow.appUI.fetchAndShowHolidays}`, 'info');
+                log(`🔍 appUI.initHolidays: ${typeof frameWindow.appUI.initHolidays}`, 'info');
+            } else {
+                log('❌ window.appUI not available', 'error');
+            }
+            
+            // Check services
+            log(`🔍 Checking __services: ${typeof frameWindow.__services}`, 'info');
+            if (frameWindow.__services) {
+                log(`🔍 __services.holiday: ${typeof frameWindow.__services.holiday}`, 'info');
+                if (frameWindow.__services.holiday) {
+                    log(`🔍 holiday.fetchHolidaysForYear: ${typeof frameWindow.__services.holiday.fetchHolidaysForYear}`, 'info');
+                }
+            }
+            
+            // Check modal
+            const modal = frameDoc.getElementById('holidaysModal');
+            if (modal) {
+                log(`✅ Holiday modal found, classes: ${modal.className}`, 'success');
+            } else {
+                log('❌ Holiday modal not found in DOM', 'error');
+            }
+        }
+        
+        async function testDirectAPI() {
+            log('🌐 Testing holiday API directly...', 'info');
+            
+            try {
+                const url = 'https://date.nager.at/api/v3/PublicHolidays/2025/DE';
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const holidays = await response.json();
+                log(`✅ API call successful: ${holidays.length} holidays received`, 'success');
+                
+                if (holidays.length > 0) {
+                    log(`📅 Sample: ${holidays[0].date} - ${holidays[0].localName}`, 'info');
+                }
+                
+            } catch (error) {
+                log(`❌ API call failed: ${error.message}`, 'error');
+            }
+        }
+        
+        function inspectModalState() {
+            log('🔍 Inspecting modal state...', 'info');
+            
+            const ctx = getFrameContext();
+            if (!ctx) return;
+            
+            const { document: frameDoc } = ctx;
+            const modal = frameDoc.getElementById('holidaysModal');
+            
+            if (!modal) {
+                log('❌ Modal element not found', 'error');
+                return;
+            }
+            
+            log(`📋 Modal classes: "${modal.className}"`, 'info');
+            log(`📋 Modal is open: ${modal.classList.contains('open')}`, 'info');
+            log(`📋 Modal display style: ${modal.style.display}`, 'info');
+            log(`📋 Body classes: "${frameDoc.body.className}"`, 'info');
+            
+            // Check modal content
+            const yearSelect = frameDoc.getElementById('holidaysYear');
+            const addBtn = frameDoc.getElementById('addHolidayBtn');
+            const closeBtn = frameDoc.getElementById('holidaysModalCloseBtn');
+            
+            log(`📋 Year select: ${!!yearSelect} (${yearSelect?.options.length || 0} options)`, 'info');
+            log(`📋 Add button: ${!!addBtn}`, 'info');
+            log(`📋 Close button: ${!!closeBtn}`, 'info');
+        }
+        
+        function simulateClick() {
+            log('🖱️ Simulating holiday button click...', 'info');
+            
+            const ctx = getFrameContext();
+            if (!ctx) return;
+            
+            const { window: frameWindow, document: frameDoc } = ctx;
+            const holidayBtn = frameDoc.getElementById('showHolidaysBtn');
+            
+            if (!holidayBtn) {
+                log('❌ Holiday button not found', 'error');
+                return;
+            }
+            
+            log('🖱️ Clicking button...', 'info');
+            
+            // Monitor for changes
+            const modal = frameDoc.getElementById('holidaysModal');
+            const initialClasses = modal?.className || '';
+            
+            try {
+                holidayBtn.click();
+                log('✅ Button click executed', 'success');
+                
+                // Check after a delay
+                setTimeout(() => {
+                    const currentClasses = modal?.className || '';
+                    log(`📋 Modal classes before: "${initialClasses}"`, 'info');
+                    log(`📋 Modal classes after: "${currentClasses}"`, 'info');
+                    
+                    if (modal && modal.classList.contains('open')) {
+                        log('🎉 SUCCESS: Modal opened!', 'success');
+                    } else {
+                        log('❌ Modal did not open', 'error');
+                    }
+                    
+                    // Check console for errors
+                    log('💡 Check browser console for any error messages', 'warning');
+                }, 500);
+                
+            } catch (error) {
+                log(`❌ Button click failed: ${error.message}`, 'error');
+            }
+        }
+        
+        // Auto-start testing when page loads
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                log('🚀 Holiday debug page loaded', 'info');
+                log('💡 Use the test buttons above or manually test the "Feiertage" button in the app', 'info');
+            }, 1000);
+        });
+        
+        // Monitor frame loading
+        document.getElementById('appFrame').addEventListener('load', () => {
+            log('📱 App frame loaded', 'info');
+            setTimeout(testHolidayFlow, 2000);
+        });
+    </script>
+</body>
+</html>
