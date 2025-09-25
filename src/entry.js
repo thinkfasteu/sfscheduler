@@ -10,7 +10,8 @@ installGlobalErrorHandlers();
 if (typeof window !== 'undefined') window.health = () => getHealthSnapshot();
 // Self-check: compare manifest version if available
 if (typeof window !== 'undefined'){
-	fetch('./dist/manifest.json', { cache:'no-store' }).then(r=> r.json()).then(m =>{
+	const baseUrl = (window.CONFIG?.BASE_URL || './dist').replace(/\/$/, '') || './dist';
+	fetch(baseUrl + '/manifest.json', { cache:'no-store' }).then(r=> r.json()).then(m =>{
 		if (m?.version && window.__APP_VERSION__ && m.version !== window.__APP_VERSION__){
 			console.warn('[version-mismatch] manifest', m.version, 'runtime', window.__APP_VERSION__);
 		}
