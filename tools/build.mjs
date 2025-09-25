@@ -253,6 +253,8 @@ async function bundle({watchMode=false}){
 
       // Ensure dist/ exists (already at top), then write the final page into dist/
       writeFileSync('dist/index.html', html);
+      // Create 404.html as identical copy for SPA fallback routing on GitHub Pages
+      writeFileSync('dist/404.html', html);
     }
   } catch(e){ console.warn('[build] preload injection failed', e); }
   if (!watchMode){
