@@ -21,7 +21,10 @@ class Schedule {
         
         const d = parseYMD(dateStr);
         const isWeekend = [0,6].includes(d.getDay());
-        const isHoliday = appState.holidays[this.year]?.[dateStr];
+        // Use TS singleton as primary source, fallback to appState for compatibility
+        const isHoliday = window.holidayService
+            ? window.holidayService.isHoliday(dateStr)
+            : !!(appState.holidays?.[String(this.year)]?.[dateStr]);
         const type = isHoliday ? 'holiday' : isWeekend ? 'weekend' : 'weekday';
         return Object.entries(SHIFTS)
             .filter(([,s]) => s.type === type)
@@ -29,7 +32,11 @@ class Schedule {
     }
     setAssignment(dateStr, shiftKey, staffId){
         if (!this.data[dateStr]){
-            this.data[dateStr] = { assignments: {}, holidayName: appState.holidays[this.year]?.[dateStr] || null };
+            // Use TS singleton as primary source for holiday name
+            const holidayName = window.holidayService
+                ? window.holidayService.getHolidayName(dateStr)
+                : (appState.holidays?.[String(this.year)]?.[dateStr] || null);
+            this.data[dateStr] = { assignments: {}, holidayName };
         }
         this.data[dateStr].assignments[shiftKey] = staffId;
     }

@@ -130,10 +130,20 @@ export class ScheduleUI {
         }
     }
 
+    // Helper function to get holiday name using TS singleton with appState fallback
+    getHolidayName(dateStr) {
+        return window.holidayService
+            ? window.holidayService.getHolidayName(dateStr)
+            : (window.appState?.holidays?.[dateStr.split('-')[0]]?.[dateStr] || null);
+    }
+
     updateHolidayBadges(year) {
         // Update existing calendar cells to show holiday badges
         const yearStr = String(year);
-        const holidays = window.appState?.holidays?.[yearStr] || {};
+        // Get holidays from TS singleton or fallback to appState
+        const holidays = window.holidayService
+            ? window.holidayService.getHolidaysForYear(year)
+            : (window.appState?.holidays?.[yearStr] || {});
         
         console.log(`[updateHolidayBadges] Processing ${Object.keys(holidays).length} holidays for ${yearStr}`);
         
@@ -268,7 +278,10 @@ export class ScheduleUI {
                 } else {
                     const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                     const isWeekend = c >= 5;
-                    const holName = window.appState?.holidays?.[String(y)]?.[dateStr] || null;
+                    // Use TS singleton as primary source, fallback to appState for compatibility
+                    const holName = window.holidayService
+                        ? window.holidayService.getHolidayName(dateStr)
+                        : (window.appState?.holidays?.[String(y)]?.[dateStr] || null);
                     const type = holName ? 'holiday' : (isWeekend ? 'weekend' : 'weekday');
                     html += `<div class="cal-cell ${isWeekend ? 'cal-weekend' : ''}">
                         <div class="cal-date">${day}${holName ? ` <span class=\"badge\">${holName}</span>` : ''}</div>
@@ -384,7 +397,7 @@ export class ScheduleUI {
                 const [yy,mm,dd] = dateStr.split('-').map(Number);
                 const date = new Date(yy, mm-1, dd);
                 const isWeekend = [0,6].includes(date.getDay());
-                const holName = window.appState?.holidays?.[String(yy)]?.[dateStr] || null;
+                const holName = this.getHolidayName(dateStr);
                 const allShifts = Object.entries(SHIFTS).filter(([k,v]) => {
                     if (holName) return v.type === 'holiday';
                     if (isWeekend) return v.type === 'weekend';

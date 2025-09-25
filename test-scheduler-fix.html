@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Scheduler Fix</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; font-family: monospace; }
+        button { padding: 10px 20px; margin: 10px; }
+    </style>
+</head>
+<body>
+    <h2>Scheduler Availability Key Fix Test</h2>
+    <p>This test verifies the critical scheduler fix where isStaffAvailable() uses consistent namespaced keys.</p>
+    
+    <button onclick="testSchedulerFix()">Test Scheduler Fix</button>
+    <button onclick="testGenerateSchedule()">Test Generate Schedule</button>
+    
+    <div id="results"></div>
+    
+    <script type="module">
+        import { SchedulingEngine } from './scheduler.js';
+        
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            document.getElementById('results').appendChild(div);
+        }
+        
+        window.testSchedulerFix = function() {
+            log('🧪 Testing scheduler availability key fix...', 'info');
+            
+            try {
+                // Mock minimal required state
+                window.appState = {
+                    staffData: [
+                        { id: 'staff1', role: 'student', weeklyHours: 20 },
+                        { id: 'staff2', role: 'minijob', weeklyHours: 15 }
+                    ],
+                    availabilityData: {
+                        'staff:staff1': {
+                            '2025-10-01': { early: 'yes', midday: 'prefer' },
+                            '2025-10-02': 'off'
+                        },
+                        'staff:staff2': {
+                            '2025-10-01': { early: 'yes' },
+                            '2025-10-02': { early: 'no' }
+                        }
+                    },
+                    vacationsByStaff: {},
+                    illnessByStaff: {},
+                    scheduleData: {},
+                    carryoverByStaffAndMonth: {}
+                };
+                
+                const engine = new SchedulingEngine('2025-10');
+                
+                // Test availability checks with consistent namespaced keys
+                const staff1 = window.appState.staffData[0];
+                const staff2 = window.appState.staffData[1];
+                
+                // Test cases that should work with fixed namespaced keys
+                const test1 = engine.isStaffAvailable(staff1, '2025-10-01', 'early');
+                const test2 = engine.isStaffAvailable(staff1, '2025-10-01', 'midday');
+                const test3 = engine.isStaffAvailable(staff1, '2025-10-02', 'early'); // 'off' day
+                const test4 = engine.isStaffAvailable(staff2, '2025-10-01', 'early');
+                const test5 = engine.isStaffAvailable(staff2, '2025-10-02', 'early'); // explicit 'no'
+                
+                log(`✅ Staff1 available 2025-10-01 early: ${test1} (expected: true)`, test1 ? 'success' : 'error');
+                log(`✅ Staff1 available 2025-10-01 midday: ${test2} (expected: true)`, test2 ? 'success' : 'error');
+                log(`✅ Staff1 available 2025-10-02 early: ${test3} (expected: false, 'off' day)`, !test3 ? 'success' : 'error');
+                log(`✅ Staff2 available 2025-10-01 early: ${test4} (expected: true)`, test4 ? 'success' : 'error');
+                log(`✅ Staff2 available 2025-10-02 early: ${test5} (expected: false, explicit 'no')`, !test5 ? 'success' : 'error');
+                
+                const allPassed = test1 && test2 && !test3 && test4 && !test5;
+                
+                if (allPassed) {
+                    log('🎉 All availability tests PASSED! The scheduler fix is working correctly.', 'success');
+                } else {
+                    log('❌ Some availability tests FAILED! There may still be an issue.', 'error');
+                }
+                
+                return allPassed;
+                
+            } catch (error) {
+                log(`❌ Error during scheduler test: ${error.message}`, 'error');
+                console.error('Scheduler test error:', error);
+                return false;
+            }
+        };
+        
+        window.testGenerateSchedule = function() {
+            log('🎯 Testing schedule generation with availability data...', 'info');
+            
+            try {
+                if (!window.appState) {
+                    log('⚠️ Run availability test first to set up mock data', 'error');
+                    return false;
+                }
+                
+                const engine = new SchedulingEngine('2025-10');
+                log('📊 Engine created successfully', 'success');
+                
+                // Test candidate finding (the core issue that was fixed)
+                const candidates = engine.findCandidatesForShift('2025-10-01', 'early', new Set(), 40);
+                log(`🔍 Found ${candidates.length} candidates for 2025-10-01 early shift`, 'info');
+                
+                if (candidates.length > 0) {
+                    candidates.forEach((cand, i) => {
+                        log(`   Candidate ${i+1}: ${cand.staff.id} (score: ${cand.score})`, 'info');
+                    });
+                    log('✅ Candidate finding working! This was the core issue that was fixed.', 'success');
+                } else {
+                    log('❌ No candidates found - this indicates the availability bug may still exist', 'error');
+                }
+                
+                return candidates.length > 0;
+                
+            } catch (error) {
+                log(`❌ Error during schedule generation test: ${error.message}`, 'error');
+                console.error('Schedule generation test error:', error);
+                return false;
+            }
+        };
+        
+        // Auto-run tests on load
+        setTimeout(() => {
+            log('🚀 Auto-running scheduler tests...', 'info');
+            const fixPassed = window.testSchedulerFix();
+            if (fixPassed) {
+                window.testGenerateSchedule();
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

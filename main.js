@@ -284,6 +284,28 @@ function initApp(){
     
     window.__APP_READY__ = true;
     try { console.info('[app] UI initialized'); } catch {}
+    
+    // Initialize holidays for current and next year
+    if (window.holidayService?.ensureCurrentAndNextYearLoaded) {
+        try {
+            window.holidayService.ensureCurrentAndNextYearLoaded().then(() => {
+                console.info('[app] Holidays loaded, refreshing calendar...');
+                // Trigger calendar repaint after holidays are loaded
+                try {
+                    if (window.scheduleUI?.updateCalendarFromSelect) {
+                        window.scheduleUI.updateCalendarFromSelect();
+                    }
+                } catch (e) {
+                    console.warn('[app] Could not refresh calendar after holiday load:', e);
+                }
+            }).catch(e => {
+                console.warn('[app] Holiday loading failed:', e);
+            });
+        } catch (e) {
+            console.warn('[app] Holiday service initialization failed:', e);
+        }
+    }
+    
     // Debug overlay once ready (auto-removes after 4s)
     try {
         if (!document.getElementById('appReadyOverlay')){

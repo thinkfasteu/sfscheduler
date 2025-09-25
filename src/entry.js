@@ -4,10 +4,15 @@ import './config/bootstrap.js';
 import './ui/eventBindings.js';
 import '../main.js';
 import { installGlobalErrorHandlers, getHealthSnapshot } from './utils/errors.js';
+import { holidayService } from '../packages/shared/src/services/holidayService';
 
 installGlobalErrorHandlers();
 // Expose health snapshot helper for diagnostics
-if (typeof window !== 'undefined') window.health = () => getHealthSnapshot();
+if (typeof window !== 'undefined') {
+    window.health = () => getHealthSnapshot();
+    // Expose TS holiday service as window.holidayService
+    window.holidayService = holidayService;
+}
 // Self-check: compare manifest version if available
 if (typeof window !== 'undefined'){
 	const baseUrl = (window.CONFIG?.BASE_URL || './dist').replace(/\/$/, '') || './dist';
