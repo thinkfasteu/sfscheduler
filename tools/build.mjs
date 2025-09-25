@@ -26,8 +26,8 @@ function loadEnv(){
       });
     } catch(e){ console.warn('[build] env parse failed', e); }
   }
-  // Also merge process.env (env file wins)
-  for (const [k,v] of Object.entries(process.env)) if (out[k]===undefined) out[k]=v;
+  // Also merge process.env (process.env wins for deployment overrides)
+  for (const [k,v] of Object.entries(process.env)) if (v !== undefined) out[k]=v;
   return out;
 }
 
