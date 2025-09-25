@@ -77,7 +77,17 @@ export class ScheduleUI {
                 window.__services.holiday.fetchHolidaysForYear(year)
                     .then(() => {
                         console.log(`Successfully loaded holidays for ${year}`);
+                        // Log the actual holiday data
+                        const holidays = window.appState?.holidays?.[String(year)] || {};
+                        console.log(`Holiday data for ${year}:`, holidays);
+                        const oct3 = holidays['2025-10-03'];
+                        if (oct3) {
+                            console.log(`✅ October 3rd found in data: "${oct3}"`);
+                        } else {
+                            console.log(`❌ October 3rd NOT found in loaded data`);
+                        }
                         // Update calendar cells to show newly loaded holiday badges
+                        console.log(`Calling updateHolidayBadges for ${year}...`);
                         this.updateHolidayBadges(year);
                     })
                     .catch(err => {
@@ -113,17 +123,28 @@ export class ScheduleUI {
         const yearStr = String(year);
         const holidays = window.appState?.holidays?.[yearStr] || {};
         
+        console.log(`[updateHolidayBadges] Processing ${Object.keys(holidays).length} holidays for ${yearStr}`);
+        
         Object.entries(holidays).forEach(([dateStr, holidayName]) => {
+            console.log(`[updateHolidayBadges] Processing ${dateStr}: ${holidayName}`);
             // Find the calendar cell for this date
             const calBody = document.querySelector(`[data-date="${dateStr}"]`);
             if (calBody) {
+                console.log(`[updateHolidayBadges] Found DOM element for ${dateStr}`);
                 const calCell = calBody.parentElement;
                 const calDate = calCell.querySelector('.cal-date');
                 if (calDate && !calDate.querySelector('.badge')) {
                     // Extract the day number and add the holiday badge
                     const dayText = calDate.textContent.trim();
                     calDate.innerHTML = `${dayText} <span class="badge">${holidayName}</span>`;
+                    console.log(`[updateHolidayBadges] ✅ Added badge for ${dateStr}: ${holidayName}`);
+                } else if (calDate && calDate.querySelector('.badge')) {
+                    console.log(`[updateHolidayBadges] Badge already exists for ${dateStr}`);
+                } else {
+                    console.log(`[updateHolidayBadges] ❌ No .cal-date found for ${dateStr}`);
                 }
+            } else {
+                console.log(`[updateHolidayBadges] ❌ No DOM element found with [data-date="${dateStr}"]`);
             }
         });
     }
