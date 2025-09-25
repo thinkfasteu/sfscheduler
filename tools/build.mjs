@@ -235,7 +235,7 @@ async function bundle({watchMode=false}){
       // First, remove any existing runtime-config.js script tags (from previous builds with different base paths)
       html = html.replace(/<script[^>]*src="[^"]*runtime-config\.js"[^>]*><\/script>\s*/g, '');
       // Then add the correct one for current base path (no /dist/ since we're serving contents of dist/)
-      html = html.replace(/(\s*)<script type="module" src="\.\/boot\.js"><\/script>/, `$1<script src="${pubBase}runtime-config.js" data-generated="true"></script>\n$1<script type="module" src="./boot.js"></script>`);
+      html = html.replace(/(\s*)<script type="module" src="\.\/boot\.js"><\/script>/, `$1<script src="${pubBase}runtime-config.js" data-generated="true"></script>\n$1<script type="module" src="${pubBase}boot.js"></script>`);
       // Deliberately NOT applying SRI to boot.js to avoid dev churn (boot changes often & isn't hashed).
       // Also remove any stale preload line referencing old app.*.js not equal to current manifest.app
       const escapedPubBase = escapeRegex(pubBase);
