@@ -2,6 +2,7 @@ import { appState } from './modules/state.js';
 import { ScheduleUI } from './ui/scheduleUI.js';  // Updated path
 import { EventHandler } from './ui/eventHandlers.js';  // Updated path
 import { APP_CONFIG, SHIFTS } from './modules/config.js';
+import { SchedulingEngine, Schedule } from './scheduler.js';
 import { AppUI } from './ui/appUI.js';
 import { OvertimeRequestsUI } from './ui/overtimeRequests.js';
 import { MonitoringDashboard } from './ui/monitoringDashboard.js';
@@ -176,6 +177,49 @@ function initApp(){
     console.log('[main.js] About to create EventHandler');
     const eventHandler = new EventHandler(scheduleUI);
     console.log('[main.js] EventHandler created:', eventHandler);
+    
+    // Expose working handlers to window for eventBindings fallback
+    (function exposeHandlers(){
+        // Avoid clobbering if rehydrated twice
+        window.handlers = window.handlers || {};
+
+        window.handlers.generateSchedule = () => {
+            console.log('[handlers] generateSchedule called');
+            try {
+                const month = scheduleUI?.currentCalendarMonth || (new Date()).toISOString().slice(0,7);
+                const engine = new SchedulingEngine(month);
+                const schedule = engine.generateSchedule();
+                // ensure UI redraw
+                if (scheduleUI?.renderSchedule) {
+                    scheduleUI.renderSchedule(schedule);
+                } else {
+                    console.warn('[handlers] scheduleUI.renderSchedule missing; schedule stored but not drawn');
+                }
+            } catch (e) {
+                console.error('[handlers] generateSchedule failed', e);
+                alert('Fehler beim Erstellen des Dienstplans (Details in Konsole).');
+            }
+        };
+
+        window.handlers.clearSchedule = () => {
+            console.log('[handlers] clearSchedule called');
+            const month = scheduleUI?.currentCalendarMonth || (new Date()).toISOString().slice(0,7);
+            if (!appState.scheduleData) appState.scheduleData = {};
+            appState.scheduleData[month] = {};
+            appState.save?.();
+            if (scheduleUI?.renderSchedule) {
+                scheduleUI.renderSchedule(new Schedule(month));
+            }
+        };
+
+        // Optional: holidays popup bridge if modal manager is class-based
+        if (!window.showHolidaysPopup && window.modalManager?.openHolidays) {
+            window.showHolidaysPopup = () => window.modalManager.openHolidays();
+        }
+        
+        console.log('[main.js] Handlers exposed to window.handlers');
+    })();
+    
     // App UI for staff/availability/vacation
     const appUI = new AppUI(scheduleUI);
     appUI.init();

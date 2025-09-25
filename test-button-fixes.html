@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Button Fixes</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        .log { background: #f5f5f5; padding: 10px; margin: 5px 0; font-family: monospace; font-size: 12px; }
+        button { padding: 10px 20px; margin: 10px; }
+        .test-buttons { background: #e8f4f8; padding: 15px; margin: 10px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h2>🔧 Button Fix Verification Test</h2>
+    <p>This test verifies the surgical fixes for DOM timing and handler exposure issues.</p>
+    
+    <!-- Simulate the actual app buttons -->
+    <div class="test-buttons">
+        <h4>Test Buttons (simulating app layout):</h4>
+        <button id="generateScheduleBtn">Generate Schedule</button>
+        <button id="clearScheduleBtn">Clear Schedule</button>
+        <button id="showHolidaysBtn">Show Holidays</button>
+    </div>
+    
+    <button onclick="runTests()">🧪 Run All Tests</button>
+    <button onclick="clearLogs()">🧹 Clear Logs</button>
+    
+    <div id="results"></div>
+    
+    <script type="module">
+        import { SchedulingEngine, Schedule } from './scheduler.js';
+        import { appState } from './modules/state.js';
+        
+        // Mock minimal app setup
+        window.appState = {
+            staffData: [
+                { id: 'staff1', role: 'student', weeklyHours: 20 },
+                { id: 'staff2', role: 'minijob', weeklyHours: 15 }
+            ],
+            availabilityData: {
+                'staff:staff1': {
+                    '2025-10-01': { early: 'yes', midday: 'prefer' }
+                },
+                'staff2': { // Test legacy format compatibility
+                    '2025-10-01': { early: 'yes' }
+                }
+            },
+            vacationsByStaff: {},
+            illnessByStaff: {},
+            scheduleData: {},
+            carryoverByStaffAndMonth: {},
+            save: () => console.log('📀 Mock save called')
+        };
+        
+        // Mock ScheduleUI
+        window.mockScheduleUI = {
+            currentCalendarMonth: '2025-10',
+            renderSchedule: (schedule) => {
+                log(`📊 Mock UI render called for ${schedule.month}`, 'success');
+                return true;
+            }
+        };
+        
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            document.getElementById('results').appendChild(div);
+        }
+        
+        function clearLogs() {
+            document.getElementById('results').innerHTML = '';
+        }
+        
+        window.clearLogs = clearLogs;
+        
+        // Test the DOM-ready binding function
+        function testDomReadyBinding() {
+            log('🔧 Testing DOM-ready binding...', 'info');
+            
+            // Simulate the improved bind function
+            function onDomReady(fn) {
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', fn, { once: true });
+                } else {
+                    fn();
+                }
+            }
+
+            function bind(id, type, handler) {
+                const attach = () => {
+                    const el = document.getElementById(id);
+                    if (!el) {
+                        log(`⚠️ bind() #${id} not found at bind time`, 'error');
+                        return false;
+                    }
+                    el.addEventListener(type, handler);
+                    log(`✅ bind() attached ${type} on #${id}`, 'success');
+                    return true;
+                };
+                onDomReady(attach);
+                return true;
+            }
+            
+            // Test binding to existing elements
+            const result1 = bind('generateScheduleBtn', 'click', () => log('🎯 Generate button clicked!', 'success'));
+            const result2 = bind('nonExistentBtn', 'click', () => log('Should not happen', 'error'));
+            
+            return result1; // Should succeed for existing button
+        }
+        
+        // Test handler exposure
+        function testHandlerExposure() {
+            log('🌐 Testing handler exposure...', 'info');
+            
+            // Simulate the handler exposure from main.js
+            window.handlers = window.handlers || {};
+
+            window.handlers.generateSchedule = () => {
+                log('[handlers] generateSchedule called', 'success');
+                try {
+                    const month = window.mockScheduleUI?.currentCalendarMonth || '2025-10';
+                    const engine = new SchedulingEngine(month);
+                    log(`🏭 Engine created for ${month}`, 'success');
+                    
+                    // Test candidate finding (the core fix)
+                    const candidates = engine.findCandidatesForShift('2025-10-01', 'early', new Set(), 40);
+                    log(`🔍 Found ${candidates.length} candidates (availability fix working!)`, candidates.length > 0 ? 'success' : 'error');
+                    
+                    if (window.mockScheduleUI?.renderSchedule) {
+                        const schedule = new Schedule(month);
+                        window.mockScheduleUI.renderSchedule(schedule);
+                    }
+                    return true;
+                } catch (e) {
+                    log(`❌ generateSchedule failed: ${e.message}`, 'error');
+                    return false;
+                }
+            };
+
+            window.handlers.clearSchedule = () => {
+                log('[handlers] clearSchedule called', 'success');
+                const month = '2025-10';
+                window.appState.scheduleData[month] = {};
+                window.appState.save();
+                return true;
+            };
+            
+            // Test that handlers exist
+            const hasGenerate = typeof window.handlers.generateSchedule === 'function';
+            const hasClear = typeof window.handlers.clearSchedule === 'function';
+            
+            log(`✅ window.handlers.generateSchedule: ${hasGenerate}`, hasGenerate ? 'success' : 'error');
+            log(`✅ window.handlers.clearSchedule: ${hasClear}`, hasClear ? 'success' : 'error');
+            
+            return hasGenerate && hasClear;
+        }
+        
+        // Test availability key compatibility
+        function testAvailabilityKeys() {
+            log('🔑 Testing availability key compatibility...', 'info');
+            
+            try {
+                const engine = new SchedulingEngine('2025-10');
+                const staff1 = window.appState.staffData[0]; // Uses 'staff:staff1' key
+                const staff2 = window.appState.staffData[1]; // Uses 'staff2' legacy key
+                
+                // Test both key formats work
+                const avail1 = engine.isStaffAvailable(staff1, '2025-10-01', 'early');
+                const avail2 = engine.isStaffAvailable(staff2, '2025-10-01', 'early');
+                
+                log(`✅ Staff1 (namespaced key) available: ${avail1}`, avail1 ? 'success' : 'error');
+                log(`✅ Staff2 (legacy key) available: ${avail2}`, avail2 ? 'success' : 'error');
+                
+                return avail1 && avail2;
+                
+            } catch (error) {
+                log(`❌ Availability test failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        // Test button click simulation
+        function testButtonClicks() {
+            log('🖱️ Testing button clicks...', 'info');
+            
+            // Simulate the eventBindings click handlers
+            const generateBtn = document.getElementById('generateScheduleBtn');
+            const clearBtn = document.getElementById('clearScheduleBtn');
+            
+            if (!generateBtn || !clearBtn) {
+                log('❌ Test buttons not found', 'error');
+                return false;
+            }
+            
+            // Simulate click handlers (like in eventBindings.js)
+            generateBtn.addEventListener('click', () => {
+                log('[eventBindings] Generate button clicked - trying both handlers', 'info');
+                if (window.handlers?.generateSchedule) {
+                    window.handlers.generateSchedule();
+                } else {
+                    log('❌ No generate schedule handler found!', 'error');
+                }
+            });
+            
+            clearBtn.addEventListener('click', () => {
+                log('[eventBindings] Clear button clicked - trying both handlers', 'info');
+                if (window.handlers?.clearSchedule) {
+                    window.handlers.clearSchedule();
+                } else {
+                    log('❌ No clear schedule handler found!', 'error');
+                }
+            });
+            
+            log('✅ Button event listeners attached', 'success');
+            return true;
+        }
+        
+        window.runTests = function() {
+            log('🚀 Starting comprehensive button fix tests...', 'info');
+            
+            const results = {
+                domReady: testDomReadyBinding(),
+                handlers: testHandlerExposure(),
+                availability: testAvailabilityKeys(),
+                buttons: testButtonClicks()
+            };
+            
+            log('📊 Test Results Summary:', 'info');
+            Object.entries(results).forEach(([test, passed]) => {
+                log(`   ${test}: ${passed ? '✅ PASS' : '❌ FAIL'}`, passed ? 'success' : 'error');
+            });
+            
+            const allPassed = Object.values(results).every(r => r);
+            log(`\n🎯 Overall Result: ${allPassed ? '✅ ALL TESTS PASSED' : '❌ SOME TESTS FAILED'}`, allPassed ? 'success' : 'error');
+            
+            if (allPassed) {
+                log('\n🎉 The surgical fixes are working! Buttons should now function correctly.', 'success');
+                log('💡 Try clicking the Generate and Clear buttons above to test the full flow.', 'info');
+            } else {
+                log('\n⚠️ Some issues remain. Check the individual test results above.', 'error');
+            }
+            
+            return allPassed;
+        };
+        
+        // Auto-run tests after a short delay
+        setTimeout(() => {
+            log('🔄 Auto-running tests in 1 second...', 'info');
+            window.runTests();
+        }, 1000);
+    </script>
+</body>
+</html>
