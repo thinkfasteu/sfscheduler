@@ -29,16 +29,18 @@
     console.info('[boot] mode=dist');
     // Do not pre-import chunks; let the hashed app bundle import its own chunk graph.
     // This avoids 404s if a deploy updates chunks between client loads.
+    // Use BASE_URL from runtime config to support different deployment paths
+    const baseUrl = (window.CONFIG?.BASE_URL || '/').replace(/\/$/, '') || '';
     try {
-      await import('./dist/' + manifest.app + '?v=' + encodeURIComponent(manifest.built));
+      await import(baseUrl + '/' + manifest.app + '?v=' + encodeURIComponent(manifest.built));
     } catch(e){
       console.warn('[boot] app load failed, refetching manifest', e);
       try {
-        const m2 = await (await fetch('./dist/manifest.json', { cache:'no-store' })).json();
+        const m2 = await (await fetch(baseUrl + '/manifest.json', { cache:'no-store' })).json();
         if (m2.app && m2.app !== manifest.app){
           console.info('[boot] retry with new app', m2.app);
           if (m2.version) window.__APP_VERSION__ = m2.version;
-          await import('./dist/' + m2.app + '?v=' + encodeURIComponent(m2.built));
+          await import(baseUrl + '/' + m2.app + '?v=' + encodeURIComponent(m2.built));
         } else throw e;
       } catch(e2){ throw e2; }
     }
@@ -86,14 +88,16 @@
   let mode = window.CONFIG?.BUILD_MODE;
   if (!mode){
     try {
-      const res = await fetch('./dist/manifest.json',{ cache:'no-store' });
+      const baseUrl = window.CONFIG?.BASE_URL || './dist';
+      const res = await fetch(baseUrl + '/manifest.json',{ cache:'no-store' });
       if (res.ok){ mode='dist'; window.__BUILD_MANIFEST__ = await res.json(); }
       else mode='dev';
     } catch { mode='dev'; }
   }
 
   if (mode==='dist'){
-    const manifest = window.__BUILD_MANIFEST__ || (await (await fetch('./dist/manifest.json')).json());
+    const baseUrl = window.CONFIG?.BASE_URL || './dist';
+    const manifest = window.__BUILD_MANIFEST__ || (await (await fetch(baseUrl + '/manifest.json')).json());
   if (manifest?.version) { window.__APP_VERSION__ = manifest.version; }
     try { await loadDist(manifest); } catch(e){ originalWarn('[boot] dist load failed – falling back to dev', e); await loadDev(); }
   } else {
