@@ -36,20 +36,48 @@ export function createHolidayService(){
         }
 
         const allGermanHolidays = await response.json();
+        console.log(`[HolidayService] API returned ${allGermanHolidays.length} holidays total`);
+        
+        // Check for October 3rd specifically in raw API data
+        const oct3Raw = allGermanHolidays.find(h => h.date === '2025-10-03');
+        if (oct3Raw) {
+          console.log(`[HolidayService] October 3rd in raw API:`, oct3Raw);
+        } else {
+          console.log(`[HolidayService] ❌ October 3rd NOT in raw API response`);
+        }
         
         // Filter holidays for our state (Hessen = DE-HE)
+        console.log(`[HolidayService] Filtering for state: ${stateCode}`);
         const stateHolidays = allGermanHolidays.filter(holiday => {
           // Include holidays that either:
           // 1. Don't have county restrictions (national holidays)
           // 2. Explicitly include our state code
-          return !holiday.counties || 
-                 (Array.isArray(holiday.counties) && holiday.counties.includes(`DE-${stateCode}`));
+          const hasNoCounties = !holiday.counties;
+          const includesOurState = Array.isArray(holiday.counties) && holiday.counties.includes(`DE-${stateCode}`);
+          const included = hasNoCounties || includesOurState;
+          
+          if (holiday.date === '2025-10-03') {
+            console.log(`[HolidayService] October 3rd filter check:`, {
+              counties: holiday.counties,
+              hasNoCounties,
+              includesOurState,
+              stateCode: `DE-${stateCode}`,
+              included
+            });
+          }
+          
+          return included;
         });
 
+        console.log(`[HolidayService] Filtered to ${stateHolidays.length} holidays for state ${stateCode}`);
+        
         // Convert to the format expected by the scheduler: { "YYYY-MM-DD": "Holiday Name" }
         appState.holidays[yearStr] = {};
         stateHolidays.forEach(holiday => {
           appState.holidays[yearStr][holiday.date] = holiday.localName;
+          if (holiday.date === '2025-10-03') {
+            console.log(`[HolidayService] ✅ Added October 3rd: ${holiday.date} = ${holiday.localName}`);
+          }
         });
 
         // Persist to storage
