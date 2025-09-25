@@ -78,6 +78,7 @@ export class EventHandler {
     }
 
     generateSchedule() {
+        console.log('🎯 Generate schedule handler called');
         const month = document.getElementById('scheduleMonth').value;
         if (!month) {
             alert('Bitte Monat auswählen');
