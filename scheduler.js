@@ -318,10 +318,12 @@ class SchedulingEngine {
     const ill = appState.illnessByStaff?.[staff.id]||[];
     if (ill.length){ const t=parseYMD(dateStr).getTime(); for(const p of ill){ if(!p?.start||!p?.end) continue; const s=parseYMD(p.start).getTime(); const e=parseYMD(p.end).getTime(); if (t>=s && t<=e) return false; } }
         
-        // Fix: Use consistent namespaced key format for both checks
-        const namespacedKey = `staff:${staff.id}`;
-        if (appState.availabilityData?.[namespacedKey]?.[dateStr] === 'off') return false;
-        const a = appState.availabilityData?.[namespacedKey]?.[dateStr]?.[shiftKey];
+        // Robust availability lookup: handle both namespaced and legacy key formats
+        const availBucket =
+            appState.availabilityData?.[`staff:${staff.id}`] ??
+            appState.availabilityData?.[staff.id] ?? null;
+        if (availBucket?.[dateStr] === 'off') return false;
+        const a = availBucket?.[dateStr]?.[shiftKey];
         
         // For non-permanent staff: only explicit 'yes' or 'prefer' counts as available; undefined / legacy 'no' treated not available.
         if (staff.role !== 'permanent'){

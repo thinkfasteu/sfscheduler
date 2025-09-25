@@ -1,4 +1,23 @@
-function bind(id, evt, handler){ const el = document.getElementById(id); if (el) el.addEventListener(evt, handler); }
+function onDomReady(fn) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', fn, { once: true });
+  } else {
+    fn();
+  }
+}
+
+function bind(id, type, handler) {
+  const attach = () => {
+    const el = document.getElementById(id);
+    if (!el) {
+      console.warn(`[bind] #${id} not found at bind time`);
+      return;
+    }
+    el.addEventListener(type, handler);
+    console.log(`[bind] attached ${type} on #${id}`);
+  };
+  onDomReady(attach);
+}
 
 function __initEventBindings(){
   // Debug instrumentation: log tab clicks until confirmed working
