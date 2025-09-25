@@ -88,7 +88,7 @@
   let mode = window.CONFIG?.BUILD_MODE;
   if (!mode){
     try {
-      const baseUrl = window.CONFIG?.BASE_URL || './dist';
+      const baseUrl = (window.CONFIG?.BASE_URL || './dist').replace(/\/$/, '') || './dist';
       const res = await fetch(baseUrl + '/manifest.json',{ cache:'no-store' });
       if (res.ok){ mode='dist'; window.__BUILD_MANIFEST__ = await res.json(); }
       else mode='dev';
@@ -96,7 +96,7 @@
   }
 
   if (mode==='dist'){
-    const baseUrl = window.CONFIG?.BASE_URL || './dist';
+    const baseUrl = (window.CONFIG?.BASE_URL || './dist').replace(/\/$/, '') || './dist';
     const manifest = window.__BUILD_MANIFEST__ || (await (await fetch(baseUrl + '/manifest.json')).json());
   if (manifest?.version) { window.__APP_VERSION__ = manifest.version; }
     try { await loadDist(manifest); } catch(e){ originalWarn('[boot] dist load failed – falling back to dev', e); await loadDev(); }
