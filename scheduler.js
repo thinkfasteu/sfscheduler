@@ -317,8 +317,12 @@ class SchedulingEngine {
     // Illness periods block assignment exactly like vacations
     const ill = appState.illnessByStaff?.[staff.id]||[];
     if (ill.length){ const t=parseYMD(dateStr).getTime(); for(const p of ill){ if(!p?.start||!p?.end) continue; const s=parseYMD(p.start).getTime(); const e=parseYMD(p.end).getTime(); if (t>=s && t<=e) return false; } }
-        if (appState.availabilityData?.[`staff:${staff.id}`]?.[dateStr] === 'off') return false;
-        const a = appState.availabilityData?.[staff.id]?.[dateStr]?.[shiftKey];
+        
+        // Fix: Use consistent namespaced key format for both checks
+        const namespacedKey = `staff:${staff.id}`;
+        if (appState.availabilityData?.[namespacedKey]?.[dateStr] === 'off') return false;
+        const a = appState.availabilityData?.[namespacedKey]?.[dateStr]?.[shiftKey];
+        
         // For non-permanent staff: only explicit 'yes' or 'prefer' counts as available; undefined / legacy 'no' treated not available.
         if (staff.role !== 'permanent'){
             return a === 'yes' || a === 'prefer';
