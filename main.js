@@ -84,7 +84,15 @@ function initApp(){
             if (!currentLockOwner){
                 currentLockOwner = TAB_ID;
                 showLockStatus();
-                try { console.info('[lock] self-assigned (no competing tabs detected)'); } catch {}
+                try { 
+                    console.info('[lock] self-assigned (no competing tabs detected)'); 
+                    // Also explicitly enable the generate button
+                    const btn = document.getElementById('generateScheduleBtn');
+                    if (btn && btn.disabled) {
+                        btn.disabled = false;
+                        console.info('[lock] enabled generateScheduleBtn');
+                    }
+                } catch {}
             }
         }, 300);
         // Fallback via storage events if BroadcastChannel unavailable
