@@ -180,7 +180,7 @@ async function bundle({watchMode=false}){
   
   // Copy static assets to dist/ for deployment
   // Copy individual files referenced in HTML
-  const staticFiles = ['boot.js', 'manifest.json', 'logo-sportfabrik.jpg'];
+  const staticFiles = ['boot.js', 'logo-sportfabrik.jpg'];
   staticFiles.forEach(file => {
     if (existsSync(file)) {
       try {
