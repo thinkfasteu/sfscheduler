@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Holiday Fix Verification</title>
+    <style>
+        body { font-family: system-ui; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { background: #d4edda; border-color: #c3e6cb; }
+        .error { background: #f8d7da; border-color: #f5c6cb; }
+        .info { background: #d1ecf1; border-color: #bee5eb; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        button { padding: 8px 16px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .test-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Holiday Fix Verification Test</h1>
+    <p>This test verifies that the dual holiday storage issue has been resolved and October 3rd (German Reunification Day) now appears correctly in the calendar.</p>
+
+    <div class="test-section info">
+        <h3>📋 Test Plan</h3>
+        <ol>
+            <li>Verify TS Holiday Service is exposed on window</li>
+            <li>Load holidays for 2025 using TS service</li>
+            <li>Check that October 3rd is available via window.holidayService</li>
+            <li>Verify appState.holidays persists data (if both services sync)</li>
+            <li>Test calendar display integration</li>
+        </ol>
+    </div>
+
+    <div class="test-grid">
+        <div class="test-section" id="test1">
+            <h3>🔍 Test 1: TS Service Available</h3>
+            <button onclick="test1()" class="btn-primary">Test TS Holiday Service</button>
+            <div id="test1-results"></div>
+        </div>
+
+        <div class="test-section" id="test2">
+            <h3>🎯 Test 2: Load & Verify October 3rd</h3>
+            <button onclick="test2()" class="btn-primary">Load 2025 Holidays</button>
+            <div id="test2-results"></div>
+        </div>
+    </div>
+
+    <div class="test-section" id="test3">
+        <h3>🔧 Test 3: Calendar Integration</h3>
+        <button onclick="test3()" class="btn-primary">Test Calendar Methods</button>
+        <div id="test3-results"></div>
+    </div>
+
+    <div class="test-section" id="app-frame-section">
+        <h3>🖥️ Live App Test</h3>
+        <p>Load the main app to see if holidays appear correctly in the actual calendar:</p>
+        <button onclick="openApp()" class="btn-success">Open Main App</button>
+        <div>
+            <iframe id="app-frame" src="" width="100%" height="400" style="display:none;border:1px solid #ddd;margin-top:10px;"></iframe>
+        </div>
+    </div>
+
+    <script>
+        function log(message, type = 'info', containerId) {
+            console.log(`[${type}] ${message}`);
+            if (containerId) {
+                const container = document.getElementById(containerId);
+                if (container) {
+                    const div = document.createElement('div');
+                    div.innerHTML = `<strong>[${type.toUpperCase()}]</strong> ${message}`;
+                    div.style.margin = '5px 0';
+                    if (type === 'error') div.style.color = '#dc3545';
+                    if (type === 'success') div.style.color = '#28a745';
+                    container.appendChild(div);
+                }
+            }
+        }
+
+        async function test1() {
+            const results = document.getElementById('test1-results');
+            results.innerHTML = '';
+
+            log('🔍 Testing if window.holidayService is available...', 'info', 'test1-results');
+            
+            if (typeof window.holidayService === 'undefined') {
+                log('❌ window.holidayService is NOT available', 'error', 'test1-results');
+                log('💡 This means the TS service was not properly exposed', 'info', 'test1-results');
+                return;
+            }
+
+            log('✅ window.holidayService is available!', 'success', 'test1-results');
+
+            // Check available methods
+            const methods = ['fetchHolidaysForYear', 'isHoliday', 'getHolidayName', 'getHolidaysForYear', 'ensureCurrentAndNextYearLoaded'];
+            let allMethodsAvailable = true;
+
+            methods.forEach(method => {
+                if (typeof window.holidayService[method] === 'function') {
+                    log(`✅ Method ${method}() available`, 'success', 'test1-results');
+                } else {
+                    log(`❌ Method ${method}() NOT available`, 'error', 'test1-results');
+                    allMethodsAvailable = false;
+                }
+            });
+
+            if (allMethodsAvailable) {
+                document.getElementById('test1').classList.add('success');
+                log('🎉 All TS Holiday Service methods are available!', 'success', 'test1-results');
+            } else {
+                document.getElementById('test1').classList.add('error');
+            }
+        }
+
+        async function test2() {
+            const results = document.getElementById('test2-results');
+            results.innerHTML = '';
+
+            if (!window.holidayService) {
+                log('❌ Please run Test 1 first - holiday service not available', 'error', 'test2-results');
+                return;
+            }
+
+            log('🔄 Loading holidays for 2025...', 'info', 'test2-results');
+
+            try {
+                // Load holidays for 2025
+                const holidays = await window.holidayService.fetchHolidaysForYear(2025);
+                log(`✅ Loaded ${Object.keys(holidays).length} holidays for 2025`, 'success', 'test2-results');
+
+                // Check specifically for October 3rd
+                const oct3 = holidays['2025-10-03'];
+                if (oct3) {
+                    log(`🎉 OCTOBER 3RD FOUND: "${oct3}"`, 'success', 'test2-results');
+                    document.getElementById('test2').classList.add('success');
+                } else {
+                    log('❌ October 3rd NOT found in holidays', 'error', 'test2-results');
+                    document.getElementById('test2').classList.add('error');
+                }
+
+                // Show all holidays for verification
+                log('📋 All 2025 holidays:', 'info', 'test2-results');
+                Object.entries(holidays).forEach(([date, name]) => {
+                    const highlight = date === '2025-10-03' ? ' 👈 TARGET DATE' : '';
+                    log(`   ${date}: ${name}${highlight}`, 'info', 'test2-results');
+                });
+
+                // Test individual methods
+                log('🧪 Testing individual service methods:', 'info', 'test2-results');
+                log(`   isHoliday('2025-10-03'): ${window.holidayService.isHoliday('2025-10-03')}`, 'info', 'test2-results');
+                log(`   getHolidayName('2025-10-03'): "${window.holidayService.getHolidayName('2025-10-03')}"`, 'info', 'test2-results');
+
+            } catch (error) {
+                log(`❌ Failed to load holidays: ${error.message}`, 'error', 'test2-results');
+                document.getElementById('test2').classList.add('error');
+            }
+        }
+
+        async function test3() {
+            const results = document.getElementById('test3-results');
+            results.innerHTML = '';
+
+            log('🔍 Testing calendar integration methods...', 'info', 'test3-results');
+
+            // Check if calendar methods are available that would use holidays
+            const calendarMethods = [
+                'window.scheduleUI',
+                'window.scheduleUI?.updateCalendarFromSelect',
+                'window.scheduleUI?.getHolidayName'
+            ];
+
+            calendarMethods.forEach(methodPath => {
+                try {
+                    const method = eval(methodPath);
+                    if (method) {
+                        log(`✅ ${methodPath} available`, 'success', 'test3-results');
+                    } else {
+                        log(`⚠️ ${methodPath} not available (may load after app init)`, 'info', 'test3-results');
+                    }
+                } catch (e) {
+                    log(`⚠️ ${methodPath} not available (may load after app init)`, 'info', 'test3-results');
+                }
+            });
+
+            // Test if appState persistence includes holidays
+            if (typeof appState !== 'undefined' && appState.isDurableKey) {
+                const isHolidaysPersistent = appState.isDurableKey('holidays');
+                if (isHolidaysPersistent) {
+                    log('✅ appState.holidays is included in persistence whitelist', 'success', 'test3-results');
+                    document.getElementById('test3').classList.add('success');
+                } else {
+                    log('❌ appState.holidays NOT in persistence whitelist - data will be lost on save', 'error', 'test3-results');
+                    document.getElementById('test3').classList.add('error');
+                }
+            } else {
+                log('⚠️ appState not available yet (normal in standalone test)', 'info', 'test3-results');
+            }
+        }
+
+        function openApp() {
+            const iframe = document.getElementById('app-frame');
+            iframe.src = './index.html';
+            iframe.style.display = 'block';
+            
+            setTimeout(() => {
+                log('📱 App loaded in iframe. Check the calendar for October 3rd holiday badges!', 'success', 'test3-results');
+            }, 2000);
+        }
+
+        // Auto-run basic tests on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                console.log('🚀 Starting automatic tests...');
+                test1();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

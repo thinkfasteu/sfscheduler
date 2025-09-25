@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Holiday Data Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        .log { background: #f5f5f5; padding: 10px; margin: 5px 0; font-family: monospace; font-size: 12px; }
+        button { padding: 10px 20px; margin: 10px; }
+    </style>
+</head>
+<body>
+    <h2>🔍 Holiday Data Investigation</h2>
+    <p>Let's see what's happening with the holiday data...</p>
+    
+    <button onclick="checkHolidayData()">Check Holiday Data</button>
+    <button onclick="testAPI()">Test Nager API Directly</button>
+    <button onclick="clearLogs()">Clear Logs</button>
+    
+    <div id="results"></div>
+    
+    <script>
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            document.getElementById('results').appendChild(div);
+        }
+        
+        function clearLogs() {
+            document.getElementById('results').innerHTML = '';
+        }
+        
+        window.clearLogs = clearLogs;
+        
+        window.checkHolidayData = async function() {
+            log('🔍 Checking holiday data in app...', 'info');
+            
+            // Wait for app to load
+            await new Promise(resolve => {
+                const checkReady = () => {
+                    if (window.appState) {
+                        resolve();
+                    } else {
+                        setTimeout(checkReady, 100);
+                    }
+                };
+                checkReady();
+            });
+            
+            log('📊 App state loaded, checking holidays...', 'success');
+            
+            if (!window.appState.holidays) {
+                log('❌ No appState.holidays object found!', 'error');
+                return;
+            }
+            
+            log(`📅 Holiday years in appState: ${Object.keys(window.appState.holidays)}`, 'info');
+            
+            const holidays2025 = window.appState.holidays['2025'];
+            if (!holidays2025) {
+                log('❌ No holidays for 2025 found in appState', 'error');
+                return;
+            }
+            
+            const holidayCount = Object.keys(holidays2025).length;
+            log(`✅ Found ${holidayCount} holidays for 2025`, holidayCount > 0 ? 'success' : 'error');
+            
+            // Look specifically for October 3rd (German Reunification Day)
+            const oct3 = holidays2025['2025-10-03'];
+            if (oct3) {
+                log(`🎉 October 3rd found: "${oct3}"`, 'success');
+            } else {
+                log('❌ October 3rd (German Reunification) NOT found in holiday data!', 'error');
+            }
+            
+            // Show all October holidays
+            const octoberHolidays = Object.entries(holidays2025)
+                .filter(([date]) => date.includes('2025-10'));
+            
+            if (octoberHolidays.length > 0) {
+                log(`📅 October 2025 holidays found:`, 'info');
+                octoberHolidays.forEach(([date, name]) => {
+                    log(`   ${date}: ${name}`, 'info');
+                });
+            } else {
+                log('📅 No October 2025 holidays found', 'error');
+            }
+            
+            // Show first few holidays for context
+            log('📋 All 2025 holidays (first 10):', 'info');
+            Object.entries(holidays2025).slice(0, 10).forEach(([date, name]) => {
+                log(`   ${date}: ${name}`, 'info');
+            });
+            
+            return holidays2025;
+        };
+        
+        window.testAPI = async function() {
+            log('🌐 Testing Nager API directly...', 'info');
+            
+            try {
+                const response = await fetch('https://date.nager.at/api/v3/PublicHolidays/2025/DE');
+                if (!response.ok) {
+                    throw new Error(`API returned status ${response.status}`);
+                }
+                
+                const holidays = await response.json();
+                log(`✅ API returned ${holidays.length} holidays for Germany 2025`, 'success');
+                
+                // Look for October 3rd specifically
+                const oct3Holiday = holidays.find(h => h.date === '2025-10-03');
+                if (oct3Holiday) {
+                    log(`🎉 October 3rd in API: "${oct3Holiday.localName}" (${oct3Holiday.name})`, 'success');
+                    log(`   Counties: ${oct3Holiday.counties ? oct3Holiday.counties.join(', ') : 'All (national)'}`, 'info');
+                } else {
+                    log('❌ October 3rd NOT found in API response!', 'error');
+                }
+                
+                // Show all holidays for October
+                const octoberHolidays = holidays.filter(h => h.date.includes('2025-10'));
+                log(`📅 October holidays in API (${octoberHolidays.length}):`, 'info');
+                octoberHolidays.forEach(h => {
+                    log(`   ${h.date}: ${h.localName} (counties: ${h.counties ? h.counties.join(', ') : 'national'})`, 'info');
+                });
+                
+                return holidays;
+                
+            } catch (error) {
+                log(`❌ API test failed: ${error.message}`, 'error');
+                return null;
+            }
+        };
+        
+        // Auto-load the app's main script and check
+        if (!window.appState) {
+            log('🔄 Loading app to check holiday data...', 'info');
+            
+            // Create iframe to load the main app
+            const iframe = document.createElement('iframe');
+            iframe.src = './index.html';
+            iframe.style.width = '1px';
+            iframe.style.height = '1px';
+            iframe.style.border = 'none';
+            iframe.style.position = 'absolute';
+            iframe.style.left = '-1000px';
+            
+            iframe.onload = () => {
+                // Give the app time to initialize
+                setTimeout(() => {
+                    try {
+                        window.appState = iframe.contentWindow.appState;
+                        log('✅ App loaded, appState available', 'success');
+                        
+                        // Auto-check holiday data
+                        setTimeout(window.checkHolidayData, 1000);
+                        
+                    } catch (e) {
+                        log(`⚠️ Could not access iframe app state: ${e.message}`, 'error');
+                        log('💡 You can still run tests manually using the buttons above', 'info');
+                    }
+                }, 2000);
+            };
+            
+            document.body.appendChild(iframe);
+        } else {
+            // Already loaded, auto-check
+            setTimeout(window.checkHolidayData, 500);
+        }
+    </script>
+</body>
+</html>

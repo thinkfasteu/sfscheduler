@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Holiday API Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .log { background: #f5f5f5; padding: 10px; margin: 5px 0; font-family: monospace; font-size: 12px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h2>🔍 Holiday API Structure Debug</h2>
+    <button onclick="testAPI()">Test API Response Structure</button>
+    <button onclick="testFiltering()">Test Filtering Logic</button>
+    <button onclick="clearLogs()">Clear</button>
+    
+    <div id="results"></div>
+    
+    <script>
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            document.getElementById('results').appendChild(div);
+        }
+        
+        function clearLogs() {
+            document.getElementById('results').innerHTML = '';
+        }
+        
+        window.clearLogs = clearLogs;
+        
+        window.testAPI = async function() {
+            log('🌐 Testing Nager API response structure...', 'info');
+            
+            try {
+                const response = await fetch('https://date.nager.at/api/v3/PublicHolidays/2025/DE');
+                const holidays = await response.json();
+                
+                log(`✅ API returned ${holidays.length} holidays`, 'success');
+                
+                // Find October 3rd
+                const oct3 = holidays.find(h => h.date === '2025-10-03');
+                if (oct3) {
+                    log(`🎉 October 3rd found in API:`, 'success');
+                    log(`   Date: ${oct3.date}`, 'info');
+                    log(`   Local Name: ${oct3.localName}`, 'info');
+                    log(`   Name: ${oct3.name}`, 'info');
+                    log(`   Counties: ${JSON.stringify(oct3.counties)}`, 'info');
+                    log(`   Global: ${oct3.global}`, 'info');
+                } else {
+                    log('❌ October 3rd NOT found in API', 'error');
+                }
+                
+                // Show structure of first few holidays
+                log('📋 Sample holiday structures:', 'info');
+                holidays.slice(0, 5).forEach((h, i) => {
+                    log(`   ${i+1}. ${h.date} - ${h.localName}`, 'info');
+                    log(`      counties: ${JSON.stringify(h.counties)}`, 'info');
+                    log(`      global: ${h.global}`, 'info');
+                });
+                
+                return holidays;
+                
+            } catch (error) {
+                log(`❌ API test failed: ${error.message}`, 'error');
+            }
+        };
+        
+        window.testFiltering = async function() {
+            log('🔧 Testing filtering logic...', 'info');
+            
+            const holidays = await window.testAPI();
+            if (!holidays) return;
+            
+            const stateCode = 'HE'; // Hessen
+            log(`🏛️ Filtering for state: DE-${stateCode}`, 'info');
+            
+            const stateHolidays = holidays.filter(holiday => {
+                const hasNoCounties = !holiday.counties;
+                const includesOurState = Array.isArray(holiday.counties) && 
+                                       holiday.counties.includes(`DE-${stateCode}`);
+                const included = hasNoCounties || includesOurState;
+                
+                if (holiday.date === '2025-10-03') {
+                    log(`🔍 October 3rd filter analysis:`, 'info');
+                    log(`   counties value: ${JSON.stringify(holiday.counties)}`, 'info');
+                    log(`   typeof counties: ${typeof holiday.counties}`, 'info');
+                    log(`   !holiday.counties: ${!holiday.counties}`, 'info');
+                    log(`   Array.isArray(counties): ${Array.isArray(holiday.counties)}`, 'info');
+                    if (Array.isArray(holiday.counties)) {
+                        log(`   includes DE-${stateCode}: ${holiday.counties.includes('DE-' + stateCode)}`, 'info');
+                    }
+                    log(`   FINAL RESULT: ${included}`, included ? 'success' : 'error');
+                }
+                
+                return included;
+            });
+            
+            log(`✅ Filtered result: ${stateHolidays.length} holidays`, 'success');
+            
+            const oct3Filtered = stateHolidays.find(h => h.date === '2025-10-03');
+            if (oct3Filtered) {
+                log(`🎉 October 3rd survived filtering!`, 'success');
+            } else {
+                log(`❌ October 3rd was filtered out!`, 'error');
+            }
+            
+            // Show October holidays that survived
+            const octoberFiltered = stateHolidays.filter(h => h.date.startsWith('2025-10'));
+            log(`📅 October 2025 holidays after filtering:`, 'info');
+            if (octoberFiltered.length > 0) {
+                octoberFiltered.forEach(h => {
+                    log(`   ${h.date}: ${h.localName}`, 'success');
+                });
+            } else {
+                log(`   No October holidays survived filtering`, 'error');
+            }
+        };
+        
+        // Auto-run on load
+        setTimeout(() => {
+            log('🚀 Auto-testing API structure...', 'info');
+            window.testAPI();
+        }, 500);
+    </script>
+</body>
+</html>

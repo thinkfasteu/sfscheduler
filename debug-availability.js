@@ -1,4 +1,5 @@
-// Availability Debug Helper
+// Availability Debug Tool - Updated for Key Mismatch Fix
+// Use in browser console to diagnose availability data issues
 (function() {
     console.log('=== AVAILABILITY DEBUG HELPER LOADED ===');
     

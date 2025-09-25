@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Holiday Rendering Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        .log { background: #f5f5f5; padding: 10px; margin: 5px 0; font-family: monospace; font-size: 12px; }
+        button { padding: 10px 20px; margin: 10px; }
+        .test-calendar { background: #f9f9f9; padding: 15px; margin: 10px 0; border: 1px solid #ccc; }
+        .cal-body { background: white; padding: 5px; margin: 2px; border: 1px solid #ddd; display: inline-block; }
+        .cal-date { font-weight: bold; }
+        .badge { background: #007bff; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 5px; }
+    </style>
+</head>
+<body>
+    <h2>🗓️ Holiday Rendering Debug</h2>
+    <p>Testing why October 3rd holiday isn't showing in calendar...</p>
+    
+    <!-- Test calendar structure -->
+    <div class="test-calendar">
+        <h4>Test Calendar (October 2025):</h4>
+        <div class="cal-body" data-date="2025-10-01" data-type="weekday">
+            <div class="cal-date">1</div>
+        </div>
+        <div class="cal-body" data-date="2025-10-02" data-type="weekday">
+            <div class="cal-date">2</div>
+        </div>
+        <div class="cal-body" data-date="2025-10-03" data-type="holiday">
+            <div class="cal-date">3</div>
+        </div>
+        <div class="cal-body" data-date="2025-10-04" data-type="weekend">
+            <div class="cal-date">4</div>
+        </div>
+        <div class="cal-body" data-date="2025-10-05" data-type="weekend">
+            <div class="cal-date">5</div>
+        </div>
+    </div>
+    
+    <button onclick="loadRealApp()">Load Real App</button>
+    <button onclick="testHolidayService()">Test Holiday Service</button>
+    <button onclick="testUpdateBadges()">Test Update Badges</button>
+    <button onclick="checkCalendarDOM()">Check Calendar DOM</button>
+    <button onclick="clearLogs()">Clear Logs</button>
+    
+    <div id="results"></div>
+    
+    <script>
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            document.getElementById('results').appendChild(div);
+        }
+        
+        function clearLogs() {
+            document.getElementById('results').innerHTML = '';
+        }
+        
+        window.clearLogs = clearLogs;
+        
+        // Mock the updateHolidayBadges function to test
+        function updateHolidayBadges(year) {
+            log('🔄 Running updateHolidayBadges...', 'info');
+            const yearStr = String(year);
+            const holidays = window.appState?.holidays?.[yearStr] || {};
+            
+            log(`📅 Found ${Object.keys(holidays).length} holidays for ${yearStr}`, 'info');
+            
+            Object.entries(holidays).forEach(([dateStr, holidayName]) => {
+                log(`🔍 Processing ${dateStr}: ${holidayName}`, 'info');
+                
+                // Find the calendar cell for this date
+                const calBody = document.querySelector(`[data-date="${dateStr}"]`);
+                if (calBody) {
+                    log(`✅ Found DOM element for ${dateStr}`, 'success');
+                    const calDate = calBody.querySelector('.cal-date');
+                    if (calDate) {
+                        if (!calDate.querySelector('.badge')) {
+                            // Extract the day number and add the holiday badge
+                            const dayText = calDate.textContent.trim();
+                            calDate.innerHTML = `${dayText} <span class="badge">${holidayName}</span>`;
+                            log(`🎉 Added badge for ${dateStr}: ${holidayName}`, 'success');
+                        } else {
+                            log(`⚠️ Badge already exists for ${dateStr}`, 'info');
+                        }
+                    } else {
+                        log(`❌ No .cal-date found in element for ${dateStr}`, 'error');
+                    }
+                } else {
+                    log(`❌ No DOM element found for [data-date="${dateStr}"]`, 'error');
+                }
+            });
+        }
+        
+        window.loadRealApp = async function() {
+            log('📱 Loading real app...', 'info');
+            
+            try {
+                // Load the main app in an iframe to get access to its state
+                const iframe = document.createElement('iframe');
+                iframe.src = './index.html';
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+                
+                await new Promise((resolve, reject) => {
+                    iframe.onload = resolve;
+                    iframe.onerror = reject;
+                    setTimeout(() => reject(new Error('Timeout')), 10000);
+                });
+                
+                // Give it time to initialize
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                try {
+                    window.appState = iframe.contentWindow.appState;
+                    window.__services = iframe.contentWindow.__services;
+                    log('✅ App loaded successfully', 'success');
+                    
+                    if (window.appState?.holidays) {
+                        log(`📊 AppState holidays: ${JSON.stringify(Object.keys(window.appState.holidays))}`, 'info');
+                    }
+                    
+                } catch (e) {
+                    log(`⚠️ Could not access app state: ${e.message}`, 'error');
+                }
+                
+            } catch (error) {
+                log(`❌ Failed to load app: ${error.message}`, 'error');
+            }
+        };
+        
+        window.testHolidayService = async function() {
+            log('🔧 Testing holiday service...', 'info');
+            
+            if (!window.__services?.holiday) {
+                log('❌ Holiday service not available. Load real app first.', 'error');
+                return;
+            }
+            
+            try {
+                const holidays = await window.__services.holiday.fetchHolidaysForYear(2025);
+                log(`✅ Holiday service returned ${Object.keys(holidays).length} holidays`, 'success');
+                
+                const oct3 = holidays['2025-10-03'];
+                if (oct3) {
+                    log(`🎉 October 3rd found: "${oct3}"`, 'success');
+                } else {
+                    log('❌ October 3rd NOT found in service result', 'error');
+                }
+                
+                // Show all October holidays
+                const octoberHolidays = Object.entries(holidays)
+                    .filter(([date]) => date.startsWith('2025-10'));
+                    
+                if (octoberHolidays.length > 0) {
+                    log(`📅 October holidays from service:`, 'info');
+                    octoberHolidays.forEach(([date, name]) => {
+                        log(`   ${date}: ${name}`, 'info');
+                    });
+                } else {
+                    log('📅 No October holidays returned by service', 'error');
+                }
+                
+            } catch (error) {
+                log(`❌ Holiday service test failed: ${error.message}`, 'error');
+            }
+        };
+        
+        window.testUpdateBadges = function() {
+            log('🏷️ Testing badge update function...', 'info');
+            
+            if (!window.appState?.holidays) {
+                log('❌ No appState.holidays available. Load app first.', 'error');
+                return;
+            }
+            
+            // Test with 2025 data
+            updateHolidayBadges(2025);
+        };
+        
+        window.checkCalendarDOM = function() {
+            log('🔍 Checking calendar DOM structure...', 'info');
+            
+            const calBodies = document.querySelectorAll('[data-date]');
+            log(`📊 Found ${calBodies.length} elements with data-date attribute`, 'info');
+            
+            calBodies.forEach(el => {
+                const date = el.getAttribute('data-date');
+                const type = el.getAttribute('data-type');
+                const hasCalDate = !!el.querySelector('.cal-date');
+                log(`   ${date} (${type}) - has .cal-date: ${hasCalDate}`, 'info');
+            });
+            
+            // Check specifically for October 3rd
+            const oct3Element = document.querySelector('[data-date="2025-10-03"]');
+            if (oct3Element) {
+                log(`✅ Found October 3rd element: ${oct3Element.outerHTML}`, 'success');
+            } else {
+                log('❌ No October 3rd element found in DOM', 'error');
+            }
+        };
+        
+        // Auto-test basic DOM
+        setTimeout(() => {
+            log('🔄 Auto-checking test calendar DOM...', 'info');
+            window.checkCalendarDOM();
+        }, 500);
+    </script>
+</body>
+</html>

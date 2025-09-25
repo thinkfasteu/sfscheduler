@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Holiday Service Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .log { background: #f5f5f5; padding: 10px; margin: 5px 0; font-family: monospace; font-size: 12px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        pre { background: #f0f0f0; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h2>🔧 Holiday Service Simulation</h2>
+    <p>This simulates exactly what the HolidayService.fetchHolidaysForYear() function does.</p>
+    
+    <button onclick="simulateHolidayService()">Simulate Holiday Service</button>
+    <button onclick="clearLogs()">Clear</button>
+    
+    <div id="results"></div>
+    
+    <script>
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            document.getElementById('results').appendChild(div);
+        }
+        
+        function clearLogs() {
+            document.getElementById('results').innerHTML = '';
+        }
+        
+        window.clearLogs = clearLogs;
+        
+        window.simulateHolidayService = async function() {
+            log('🔧 Simulating HolidayService.fetchHolidaysForYear(2025)...', 'info');
+            
+            try {
+                // Mock appState
+                const appState = { holidays: {} };
+                
+                const year = 2025;
+                const yearStr = String(year);
+                const stateCode = 'HE'; // Hessen by default
+                const baseUrl = 'https://date.nager.at/api/v3/PublicHolidays';
+                
+                // Initialize holidays structure if needed
+                if (!appState.holidays) {
+                    appState.holidays = {};
+                }
+                
+                // Return cached holidays if already loaded
+                if (appState.holidays[yearStr] && Object.keys(appState.holidays[yearStr]).length > 0) {
+                    log('📋 Holidays already cached, returning cached data', 'info');
+                    return appState.holidays[yearStr];
+                }
+                
+                const url = `${baseUrl}/${year}/DE`;
+                log(`🌐 Fetching holidays from: ${url}`, 'info');
+                
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+                
+                const allGermanHolidays = await response.json();
+                log(`📊 API returned ${allGermanHolidays.length} holidays total`, 'success');
+                
+                // Check for October 3rd specifically in raw API data
+                const oct3Raw = allGermanHolidays.find(h => h.date === '2025-10-03');
+                if (oct3Raw) {
+                    log(`✅ October 3rd found in raw API:`, 'success');
+                    log(`   ${JSON.stringify(oct3Raw)}`, 'info');
+                } else {
+                    log(`❌ October 3rd NOT in raw API response`, 'error');
+                }
+                
+                // Filter holidays for our state (Hessen = DE-HE)
+                log(`🏛️ Filtering for state: DE-${stateCode}`, 'info');
+                const stateHolidays = allGermanHolidays.filter(holiday => {
+                    // Include holidays that either:
+                    // 1. Don't have county restrictions (national holidays)
+                    // 2. Explicitly include our state code
+                    const hasNoCounties = !holiday.counties;
+                    const includesOurState = Array.isArray(holiday.counties) && holiday.counties.includes(`DE-${stateCode}`);
+                    const included = hasNoCounties || includesOurState;
+                    
+                    if (holiday.date === '2025-10-03') {
+                        log(`🔍 October 3rd filter check:`, 'info');
+                        log(`   counties: ${JSON.stringify(holiday.counties)}`, 'info');
+                        log(`   hasNoCounties: ${hasNoCounties}`, 'info');
+                        log(`   includesOurState: ${includesOurState}`, 'info');
+                        log(`   stateCode: DE-${stateCode}`, 'info');
+                        log(`   INCLUDED: ${included}`, included ? 'success' : 'error');
+                    }
+                    
+                    return included;
+                });
+                
+                log(`✅ Filtered to ${stateHolidays.length} holidays for state DE-${stateCode}`, 'success');
+                
+                // Convert to the format expected by the scheduler: { "YYYY-MM-DD": "Holiday Name" }
+                appState.holidays[yearStr] = {};
+                stateHolidays.forEach(holiday => {
+                    appState.holidays[yearStr][holiday.date] = holiday.localName;
+                    if (holiday.date === '2025-10-03') {
+                        log(`✅ Added October 3rd: ${holiday.date} = ${holiday.localName}`, 'success');
+                    }
+                });
+                
+                log(`🎯 Final appState.holidays[${yearStr}]:`, 'info');
+                const finalHolidays = appState.holidays[yearStr];
+                log(`   Count: ${Object.keys(finalHolidays).length}`, 'info');
+                
+                // Show October holidays specifically
+                const octoberHolidays = Object.entries(finalHolidays)
+                    .filter(([date]) => date.startsWith('2025-10'));
+                    
+                if (octoberHolidays.length > 0) {
+                    log(`📅 October holidays in final result:`, 'success');
+                    octoberHolidays.forEach(([date, name]) => {
+                        log(`   ${date}: ${name}`, 'success');
+                    });
+                } else {
+                    log(`❌ No October holidays in final result`, 'error');
+                }
+                
+                // Show all holidays for context
+                log(`📋 All holidays in final result:`, 'info');
+                Object.entries(finalHolidays).slice(0, 10).forEach(([date, name]) => {
+                    log(`   ${date}: ${name}`, 'info');
+                });
+                if (Object.keys(finalHolidays).length > 10) {
+                    log(`   ... and ${Object.keys(finalHolidays).length - 10} more`, 'info');
+                }
+                
+                return finalHolidays;
+                
+            } catch (error) {
+                log(`❌ Error in simulation: ${error.message}`, 'error');
+                console.error('Simulation error:', error);
+            }
+        };
+        
+        // Auto-run
+        setTimeout(() => {
+            log('🚀 Auto-running simulation...', 'info');
+            window.simulateHolidayService();
+        }, 500);
+    </script>
+</body>
+</html>
