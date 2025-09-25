@@ -37,6 +37,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || '' }}
           APP_VERSION: ${{ github.sha }}
           ENV: production
+          APP_ENV: production
           BASE_URL: /sfscheduler/
         run: |
           echo "BACKEND: $BACKEND"
@@ -61,6 +62,22 @@ jobs:
           grep -E "href=|src=" dist/index.html | head -3 || echo "No asset references found"
           echo "Ensuring no /dist/ in public URLs:"
           if grep -q "/dist/" dist/index.html; then echo "ERROR: Found /dist/ in public URLs!"; else echo "Good: No /dist/ in public URLs"; fi
+
+      - name: Inspect dist
+        run: |
+          ls -la dist
+          test -f dist/index.html && echo "✓ index.html OK" || echo "✗ index.html MISSING"
+          test -f dist/404.html && echo "✓ 404.html OK" || echo "✗ 404.html MISSING"  
+          test -f dist/runtime-config.js && echo "✓ runtime-config.js OK" || echo "✗ runtime-config.js MISSING"
+          test -f dist/manifest.json && echo "✓ manifest.json OK" || echo "✗ manifest.json MISSING"
+          test -f dist/boot.js && echo "✓ boot.js OK" || echo "✗ boot.js MISSING"
+          echo "Check URLs in HTML:"
+          echo "Looking for any /dist/ paths (should be none):"
+          grep -n "dist/" dist/index.html || echo "✓ No /dist/ paths found (good!)"
+          echo "Runtime config reference:"
+          grep -n "runtime-config" dist/index.html || echo "✗ No runtime-config reference found"
+          echo "Verify 404.html identical to index.html:"
+          if diff -q dist/index.html dist/404.html > /dev/null; then echo "✓ 404.html identical to index.html"; else echo "✗ 404.html differs from index.html"; fi
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
