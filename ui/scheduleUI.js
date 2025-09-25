@@ -66,7 +66,19 @@ export class ScheduleUI {
     ensureHolidaysLoaded(year) {
         // Check if holidays are already loaded for this year
         const yearStr = String(year);
-        if (window.appState?.holidays?.[yearStr] && Object.keys(window.appState.holidays[yearStr]).length > 0) {
+        const existing = window.appState?.holidays?.[yearStr];
+        const existingCount = existing ? Object.keys(existing).length : 0;
+        
+        console.log(`[ensureHolidaysLoaded] Checking year ${year}:`, {
+          hasHolidaysObject: !!window.appState?.holidays,
+          hasYearData: !!existing,
+          existingCount,
+          existingKeys: existing ? Object.keys(existing).slice(0, 3) : [],
+          callStack: new Error().stack.split('\n').slice(1, 4).map(line => line.trim())
+        });
+        
+        if (existing && existingCount > 0) {
+            console.log(`[ensureHolidaysLoaded] Already loaded ${existingCount} holidays for ${year}, skipping fetch`);
             return; // Already loaded
         }
 

@@ -82,10 +82,25 @@ export function createHolidayService(){
 
         // Persist to storage
         if (appState.save) {
+          console.log(`[HolidayService] Saving appState with ${Object.keys(appState.holidays[yearStr]).length} holidays...`);
           appState.save();
+          console.log(`[HolidayService] AppState saved successfully`);
+        } else {
+          console.log(`[HolidayService] ⚠️ No appState.save() function available`);
         }
 
         console.log(`Loaded ${stateHolidays.length} holidays for ${year}:`, appState.holidays[yearStr]);
+        
+        // Double-check the data is still there after save
+        setTimeout(() => {
+          const recheck = appState.holidays?.[yearStr];
+          const recheckCount = recheck ? Object.keys(recheck).length : 0;
+          console.log(`[HolidayService] Recheck after save - ${recheckCount} holidays still in appState for ${yearStr}`);
+          if (recheckCount === 0) {
+            console.error(`[HolidayService] ❌ HOLIDAYS LOST AFTER SAVE! This is the bug!`);
+          }
+        }, 100);
+        
         return appState.holidays[yearStr];
 
       } catch (error) {
