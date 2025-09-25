@@ -38,7 +38,7 @@ jobs:
           APP_VERSION: ${{ github.sha }}
           ENV: production
           APP_ENV: production
-          BASE_URL: /sfscheduler/
+          BASE_URL: /sfscheduler
         run: |
           echo "BACKEND: $BACKEND"
           echo "SUPABASE_URL: $SUPABASE_URL"
