@@ -1,4 +1,4 @@
-import { appState } from '../modules/state.js';  // Fixed relative path from utils/
+import { appState } from '@state';  // Fixed relative path from utils/
 import { ROLE_TYPES } from '../types.js';
 
 /**

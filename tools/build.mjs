@@ -3,6 +3,12 @@ import { build, context } from 'esbuild';
 import { existsSync, mkdirSync, writeFileSync, rmSync, readFileSync, cpSync } from 'fs';
 import { createHash } from 'crypto';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, '..'); 
+const STATE_ABS = path.resolve(projectRoot, 'modules/state.js');
 
 const args = process.argv.slice(2);
 const watch = args.includes('--watch');
@@ -98,6 +104,23 @@ async function bundle({watchMode=false}){
       __BUILD_ANALYZE__: JSON.stringify(!!analyze),
       __APP_VERSION__: JSON.stringify(process.env.APP_VERSION || `0.1.0+${Date.now()}`)
     },
+    plugins: [
+      {
+        name: 'alias-state',
+        setup(build) {
+          // Make *all* "state.js" imports resolve to the same absolute file.
+          build.onResolve({ filter: /(^|\/)state\.js$/ }, args => {
+            console.log(`[alias-state] Resolving state.js import: ${args.path} from ${args.importer}`);
+            return { path: STATE_ABS };
+          });
+          // Optional: enforce package alias like '@state'
+          build.onResolve({ filter: /^@state$/ }, () => {
+            console.log(`[alias-state] Resolving @state alias`);
+            return { path: STATE_ABS };
+          });
+        }
+      }
+    ],
     logLevel: 'silent'
   });
   // Aggregate output files; main entry assumed to end with entry.js

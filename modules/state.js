@@ -1,3 +1,39 @@
+// state.js (top of file) — instrumentation to detect duplicate singletons
+// NOTE: this assumes `const appState = { ... }` is declared below and exported.
+
+const __STATE_MARK__ = (typeof crypto !== 'undefined' && crypto.randomUUID)
+  ? crypto.randomUUID()
+  : Math.random().toString(36).slice(2);
+
+// Attach/compare against global
+if (typeof window !== 'undefined') {
+  // Defer until appState is declared if needed (wrap in a microtask)
+  queueMicrotask(() => {
+    try {
+      if (!window.appState) {
+        window.appState = appState;
+        window.__STATE_MARK__ = __STATE_MARK__;
+        console.log('[state] attach window.appState mark=', __STATE_MARK__);
+      } else {
+        const same = window.appState === appState;
+        console.warn('[state] window.appState already present. same?', same, {
+          existingMark: window.__STATE_MARK__,
+          hereMark: __STATE_MARK__,
+          module: (import.meta && import.meta.url) || '(no meta.url)'
+        });
+        if (!same) {
+          // Force unify to avoid split-brain reads at runtime
+          window.appState = appState;
+          window.__STATE_MARK__ = __STATE_MARK__;
+          console.warn('[state] FORCING global appState to this instance to avoid split-brain');
+        }
+      }
+    } catch (e) {
+      console.error('[state] instrumentation error', e);
+    }
+  });
+}
+
 /**
  * @typedef {Object} StateSchema
  * @property {Array} staffData - Staff member records

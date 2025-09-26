@@ -1,4 +1,4 @@
-import { appState } from '../../modules/state.js';
+import { appState } from '@state';
 import { APP_CONFIG } from '../../modules/config.js';
 
 export function createHolidayService(){
@@ -90,6 +90,9 @@ export function createHolidayService(){
         }
 
         console.log(`Loaded ${stateHolidays.length} holidays for ${year}:`, appState.holidays[yearStr]);
+        
+        // Mark log for split-brain detection
+        console.log('[holidays][writer] mark=', window.__STATE_MARK__, appState.holidays[String(year)]);
         
         // Double-check the data is still there after save
         setTimeout(() => {

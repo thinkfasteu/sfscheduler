@@ -1,4 +1,4 @@
-import { appState } from '../../modules/state.js';
+import { appState } from '@state';
 
 // Local adapter proxies to in-memory appState while coordinating persistence via appState.save().
 export class LocalStorageAdapter {

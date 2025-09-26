@@ -1,5 +1,5 @@
 import { SchedulingEngine } from '../scheduler.js';
-import { appState } from '../modules/state.js';  // Updated path
+import { appState } from '@state';  // Updated path
 import { TestDataGenerator, TestAssertions } from '../utils.js';  // Updated path
 
 const tests = {

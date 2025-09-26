@@ -1,5 +1,5 @@
 import { APP_CONFIG, SHIFTS } from './modules/config.js';  // Updated path
-import { appState } from './modules/state.js';  // Updated path and name
+import { appState } from '@state';  // Updated path and name
 import { getWeekNumber, parseShiftTime, parseYMD } from './utils/dateUtils.js';
 import { getStudentWeeklyCapSync } from './modules/academicTerms.js';
 

@@ -1,4 +1,4 @@
-import { appState } from '../../modules/state.js';
+import { appState } from '@state';
 
 // Wraps an async adapter (SupabaseAdapter) and provides a synchronous API compatible with LocalStorageAdapter
 // by maintaining an in-memory mirror (appState) and performing remote writes asynchronously.
