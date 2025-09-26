@@ -1,4 +1,4 @@
-import { appState } from '../modules/state.js';
+import { appState } from '@state';
 
 // Minimal staff service (local adapter); to be swapped with Supabase implementation later.
 export const staffService = {

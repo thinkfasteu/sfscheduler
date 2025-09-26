@@ -12,7 +12,7 @@
  * - Audit logging for all public API calls
  */
 
-import { appState } from '../../modules/state.js';
+import { appState } from '@state';
 import { APP_CONFIG } from '../../modules/config.js';
 
 class PublicAPI {

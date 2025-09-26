@@ -1,4 +1,4 @@
-import { appState } from './state.js';
+import { appState } from '@state';
 import { SchedulingEngine } from '../scheduler.js';
 // This file in modules is unused by the app; keep paths correct to avoid runtime import failures if referenced
 import { ModalManager } from '../ui/modalManager.js';

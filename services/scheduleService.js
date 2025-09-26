@@ -1,4 +1,4 @@
-import { appState } from '../modules/state.js';
+import { appState } from '@state';
 
 // Placeholder schedule service for future Supabase adapter integration.
 export const scheduleService = {

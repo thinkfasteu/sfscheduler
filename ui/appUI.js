@@ -1,4 +1,4 @@
-import { appState } from '../modules/state.js'; // TODO remove direct non-staff usage later
+import { appState } from '@state'; // TODO remove direct non-staff usage later
 import { APP_CONFIG, SHIFTS } from '../modules/config.js';
 import { toLocalISOMonth, toLocalISODate, pad2, parseYMD } from '../utils/dateUtils.js';
 // Add audit message helper

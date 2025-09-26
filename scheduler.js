@@ -1,5 +1,5 @@
 import { APP_CONFIG, SHIFTS } from './modules/config.js';
-import { appState } from './modules/state.js';
+import { appState } from '@state';
 import { parseYMD } from './utils/dateUtils.js';
 import { getStudentWeeklyCapSync } from './modules/academicTerms.js';
 

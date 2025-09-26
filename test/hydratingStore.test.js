@@ -1,5 +1,5 @@
 import { createStore } from '../src/services/index.js';
-import { appState } from '../modules/state.js';
+import { appState } from '@state';
 
 (async function(){
   const cfg = (typeof window!=='undefined'? window.__CONFIG__ : global.__CONFIG__) || {};

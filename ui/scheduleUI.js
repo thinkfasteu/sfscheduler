@@ -1,5 +1,5 @@
 import { APP_CONFIG, SHIFTS } from '../modules/config.js';
-import { appState } from '../modules/state.js';
+import { appState } from '@state';
 import { SchedulingEngine } from '../scheduler.js';
 import { ScheduleValidator } from '../validation.js';
 import { parseYMD } from '../utils/dateUtils.js';
@@ -91,6 +91,8 @@ export class ScheduleUI {
                         console.log(`Successfully loaded holidays for ${year}`);
                         // Log the actual holiday data
                         const holidays = window.appState?.holidays?.[String(year)] || {};
+                        // Mark log for split-brain detection
+                        console.log('[holidays][reader] mark=', window.__STATE_MARK__, appState.holidays[String(year)]);
                         console.log(`Holiday data for ${year}:`, holidays);
                         const oct3 = holidays['2025-10-03'];
                         if (oct3) {
