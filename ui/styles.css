@@ -400,6 +400,9 @@ li { margin: 6px 0; }
     border-radius: 3px;
 }
 
+/* Prevent scheduling checklist overlay from intercepting clicks when a modal is open */
+.modal.open ~ #scheduleChecklistRoot .checklist-panel { pointer-events: none; }
+
 .btn-help {
     background: #6c757d;
     color: white;

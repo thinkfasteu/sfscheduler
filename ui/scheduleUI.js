@@ -134,18 +134,23 @@ export class ScheduleUI {
 
     // Helper function to get holiday name using TS singleton with appState fallback
     getHolidayName(dateStr) {
-        return window.holidayService
-            ? window.holidayService.getHolidayName(dateStr)
-            : (window.appState?.holidays?.[dateStr.split('-')[0]]?.[dateStr] || null);
+        const yearStr = dateStr.split('-')[0];
+        // Prefer service only if it actually returns a value for this date
+        try {
+            const fromSvc = window.holidayService?.getHolidayName?.(dateStr) || null;
+            if (fromSvc) return fromSvc;
+        } catch(e){ /* swallow */ }
+        return window.appState?.holidays?.[yearStr]?.[dateStr] || null;
     }
 
     updateHolidayBadges(year) {
         // Update existing calendar cells to show holiday badges
         const yearStr = String(year);
-        // Get holidays from TS singleton or fallback to appState
-        const holidays = window.holidayService
-            ? window.holidayService.getHolidaysForYear(year)
-            : (window.appState?.holidays?.[yearStr] || {});
+        // Get holidays from service; only prefer if it actually has entries
+        const svcMap = window.holidayService?.getHolidaysForYear?.(Number(year)) || {};
+        const holidays = Object.keys(svcMap).length
+          ? svcMap
+          : (window.appState?.holidays?.[yearStr] || {});
         
         console.log(`[updateHolidayBadges] Processing ${Object.keys(holidays).length} holidays for ${yearStr}`);
         
@@ -248,10 +253,7 @@ export class ScheduleUI {
             grid = document.getElementById('scheduleGrid');
         }
 
-        const [y, m] = month.split('-').map(Number);
-        
-        // Auto-fetch holidays if not loaded for this year
-        this.ensureHolidaysLoaded(y);
+    const [y, m] = month.split('-').map(Number);
         
         const first = new Date(y, m - 1, 1);
         const startDay = (first.getDay() + 6) % 7; // Monday=0
@@ -281,9 +283,7 @@ export class ScheduleUI {
                     const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                     const isWeekend = c >= 5;
                     // Use TS singleton as primary source, fallback to appState for compatibility
-                    const holName = window.holidayService
-                        ? window.holidayService.getHolidayName(dateStr)
-                        : (window.appState?.holidays?.[String(y)]?.[dateStr] || null);
+                    const holName = this.getHolidayName(dateStr);
                     const type = holName ? 'holiday' : (isWeekend ? 'weekend' : 'weekday');
                     html += `<div class="cal-cell ${isWeekend ? 'cal-weekend' : ''}">
                         <div class="cal-date">${day}${holName ? ` <span class=\"badge\">${holName}</span>` : ''}</div>
@@ -295,7 +295,20 @@ export class ScheduleUI {
             html += '</div>';
         }
         html += '</div>';
-        grid.innerHTML = html;
+    grid.innerHTML = html;
+    // Kick off holiday load after initial paint (non-blocking)
+    try { this.ensureHolidaysLoaded(y); } catch(e){ console.warn('ensureHolidaysLoaded failed', e); }
+    // Immediately apply any already-known holiday badges from persisted state/service fallback
+    try { this.updateHolidayBadges(y); } catch(e){ /* non-fatal */ }
+        // Bind Feiertage button to open holidays modal
+        try {
+            document.getElementById('showHolidaysBtn')?.addEventListener('click', () => {
+                const modal = document.getElementById('holidaysModal');
+                if (!modal) return;
+                if (window.__openModal) window.__openModal('holidaysModal');
+                else { modal.classList.add('open'); document.body.classList.add('no-scroll'); }
+            });
+        } catch(e){ console.warn('[ScheduleUI] failed to bind Feiertage button', e); }
     this.currentCalendarMonth = month;
     window.__perf.calendarFullRenders++;
         // Track a selected date for the search modal
@@ -709,6 +722,27 @@ export class ScheduleUI {
             return list.sort((a,b)=>b.score-a.score);
         };
         const staffSel = document.getElementById('swapStaffSelect');
+        // Lightweight consent updater (prevents full candidate re-render on selection changes)
+        const updateConsentForSelected = () => {
+            try {
+                const selectedId = parseInt(staffSel.value || 0);
+                const staff = (window.appState?.staffData||[]).find(s=>s.id==selectedId);
+                const isWeekendDate = [0,6].includes(parseYMD(dateStr).getDay());
+                const showConsent = !!(staff && staff.role==='permanent' && isWeekendDate && !staff.weekendPreference);
+                const consentRow = document.getElementById('consentRow');
+                const consentCb = document.getElementById('consentCheckbox');
+                const consentHint = document.getElementById('consentHint');
+                if (consentRow) consentRow.classList.toggle('hidden', !showConsent);
+                if (consentHint) consentHint.classList.toggle('hidden', !showConsent);
+                if (showConsent){
+                    const year = String(parseYMD(dateStr).getFullYear());
+                    const hasConsent = !!(window.appState?.permanentOvertimeConsent?.[selectedId]?.[year]?.[dateStr]);
+                    if (consentCb) consentCb.checked = !!hasConsent;
+                } else if (consentCb){
+                    consentCb.checked = false;
+                }
+            } catch(e){ /* noop */ }
+        };
         const renderCandidates = () => {
             const includePermanents = document.getElementById('includePermanentsCheckbox')?.checked || false;
             const cands = getCandidates(includePermanents);
@@ -753,6 +787,8 @@ export class ScheduleUI {
                 return `<option value="${s.id}"${disabled}${title}>${label}</option>`;
             }).join('');
             staffSel.innerHTML = options;
+            // Ensure consent row reflects the default selected option
+            updateConsentForSelected();
             // Build hint lines (include quick context and blocker reasons)
             const hints = cands.slice(0,8).map(c => {
                 const s = c.staff;
@@ -838,9 +874,17 @@ export class ScheduleUI {
         const syncShift = () => { modal.dataset.shift = shiftSel.value; renderCandidates(); updateCurrent(); };
         shiftSel.addEventListener('change', syncShift);
         // React to staff selection changes to update consent row state
-        document.getElementById('swapStaffSelect').addEventListener('change', () => {
-            renderCandidates();
-        });
+                document.getElementById('swapStaffSelect').addEventListener('change', () => {
+                        // Keep current selection; just refresh consent & current assignment view
+                        updateConsentForSelected();
+                        const s = document.getElementById('swapShiftSelect').value;
+                        const sid = parseInt(document.getElementById('swapStaffSelect').value || 0);
+                        const currentAssignment = document.getElementById('currentAssignment');
+                        const staff = (window.appState?.staffData||[]).find(x=>x.id==sid);
+                        if (currentAssignment) {
+                            currentAssignment.textContent = sid ? `Aktuell: ${staff?.name||sid}` : 'Aktuell: —';
+                        }
+                });
 
         // Persist consent when user toggles it
         const consentCb = document.getElementById('consentCheckbox');
@@ -903,6 +947,24 @@ export class ScheduleUI {
         const consentHint = document.getElementById('searchConsentHint');
         const includeRow = document.getElementById('searchIncludePermanentsRow');
         const includeCb = document.getElementById('searchIncludePermanentsCheckbox');
+        // Lightweight consent updater for search modal (avoid full candidate rebuild on selection change)
+        const updateSearchConsentForSelected = () => {
+            try {
+                const selectedId = parseInt(staffSel.value || 0);
+                const staff = (window.appState?.staffData||[]).find(s=>s.id==selectedId);
+                const isWeekendSearchLocal = [0,6].includes(date.getDay());
+                const showConsent = !!(staff && staff.role==='permanent' && isWeekendSearchLocal && !staff.weekendPreference);
+                consentRow.classList.toggle('hidden', !showConsent);
+                consentHint.classList.toggle('hidden', !showConsent);
+                if (showConsent){
+                    const year = String(y);
+                    const hasConsent = !!(window.appState?.permanentOvertimeConsent?.[selectedId]?.[year]?.[dateStr]);
+                    consentCb.checked = !!hasConsent;
+                } else {
+                    consentCb.checked = false;
+                }
+            } catch(e){ /* noop */ }
+        };
     includeRow.classList.toggle('hidden', !isWeekendSearch);
         includeCb.checked = false;
         const buildBaseCandidates = () => {
@@ -958,19 +1020,8 @@ export class ScheduleUI {
                 return `<option value="${s.id}"${title}>${label}</option>`;
             }).join('');
             staffSel.innerHTML = options;
-            // Consent UI
-            const selectedId = parseInt(staffSel.value||0);
-            const staff = (window.appState?.staffData||[]).find(s=>s.id==selectedId);
-            const showConsent = !!(staff && staff.role==='permanent' && isWeekendSearch && !staff.weekendPreference);
-            consentRow.classList.toggle('hidden', !showConsent);
-            consentHint.classList.toggle('hidden', !showConsent);
-            if (showConsent){
-                const year = String(y);
-                const hasConsent = !!(window.appState?.permanentOvertimeConsent?.[selectedId]?.[year]?.[dateStr]);
-                consentCb.checked = !!hasConsent;
-            } else {
-                consentCb.checked = false;
-            }
+            // Update consent UI for default selected option
+            updateSearchConsentForSelected();
             // Notes
             const notes = document.getElementById('searchCandidateNotes');
             notes.innerHTML = cands.slice(0,8).map(c=>{
@@ -982,10 +1033,11 @@ export class ScheduleUI {
             }).join('<br/>');
         };
         // Bindings
-        shiftSel.onchange = renderCandidates;
+    shiftSel.onchange = renderCandidates;
         filterInput.oninput = renderCandidates;
         includeCb.onchange = renderCandidates;
-        staffSel.onchange = renderCandidates;
+    // Only update consent state on simple selection change (keep list ordering stable for user)
+    staffSel.addEventListener('change', updateSearchConsentForSelected);
         // Persist consent toggle
         consentCb?.addEventListener('change', (e)=>{
             const selectedId = parseInt(document.getElementById('searchStaffSelect').value||0);
