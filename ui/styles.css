@@ -400,8 +400,12 @@ li { margin: 6px 0; }
     border-radius: 3px;
 }
 
-/* Prevent scheduling checklist overlay from intercepting clicks when a modal is open */
-.modal.open ~ #scheduleChecklistRoot .checklist-panel { pointer-events: none; }
+/* Modal + checklist interaction layering */
+/* Ensure checklist sits below modal baseline but can still appear above other UI (adjusted via .modal-open class) */
+#scheduleChecklistRoot .checklist-panel { z-index: 500; }
+.modal.open { z-index: 1000; }
+/* When any modal is open (class added via JS helper), disable pointer events so checklist does not steal clicks */
+#scheduleChecklistRoot.modal-open .checklist-panel { pointer-events: none; }
 
 .btn-help {
     background: #6c757d;
