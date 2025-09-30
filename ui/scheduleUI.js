@@ -17,6 +17,49 @@ export class ScheduleUI {
     window.__perf.calendarFullRenders = window.__perf.calendarFullRenders || 0;
     window.__perf.calendarDiffUpdates = window.__perf.calendarDiffUpdates || 0;
         this.setupTabs();
+        // Expose modal helpers if not already present (scoped to this file's lifecycle)
+        if (!window.__uiModalHelpersInstalled) {
+            window.__uiModalHelpersInstalled = true;
+            window.openModal = function openModal(id){
+                const m = document.getElementById(id);
+                if (!m) return;
+                m.classList.add('open');
+                document.body.classList.add('no-scroll');
+                document.getElementById('scheduleChecklistRoot')?.classList.add('modal-open');
+            };
+            window.closeModal = function closeModal(id){
+                const m = document.getElementById(id);
+                if (!m) return;
+                m.classList.remove('open');
+                const anyOpen = !!document.querySelector('.modal.open');
+                if (!anyOpen){
+                    document.body.classList.remove('no-scroll');
+                    document.getElementById('scheduleChecklistRoot')?.classList.remove('modal-open');
+                }
+            };
+            // Global escape handler to close the top-most modal
+            window.addEventListener('keydown', (e)=>{
+                if (e.key === 'Escape'){ // close last opened modal
+                    const openModals = Array.from(document.querySelectorAll('.modal.open'));
+                    const last = openModals[openModals.length-1];
+                    if (last){
+                        const id = last.id;
+                        if (window.__closeModal) window.__closeModal(id); else window.closeModal(id);
+                    }
+                }
+            });
+            // Bind close buttons once DOM likely loaded; if not present yet, defer a tick
+            const bindModalCloseButtons = () => {
+                document.getElementById('swapModalCloseBtn')?.addEventListener('click', ()=> closeModal('swapModal'));
+                document.getElementById('searchModalCloseBtn')?.addEventListener('click', ()=> closeModal('searchModal'));
+                document.getElementById('holidaysModalCloseBtn')?.addEventListener('click', ()=> closeModal('holidaysModal'));
+            };
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', bindModalCloseButtons, { once:true });
+            } else {
+                setTimeout(bindModalCloseButtons, 0);
+            }
+        }
     }
 
     setupTabs() {
@@ -144,38 +187,25 @@ export class ScheduleUI {
     }
 
     updateHolidayBadges(year) {
-        // Update existing calendar cells to show holiday badges
+        // Paint holiday badges only for the currently rendered month to avoid log spam
         const yearStr = String(year);
-        // Get holidays from service; only prefer if it actually has entries
         const svcMap = window.holidayService?.getHolidaysForYear?.(Number(year)) || {};
-        const holidays = Object.keys(svcMap).length
-          ? svcMap
-          : (window.appState?.holidays?.[yearStr] || {});
-        
-        console.log(`[updateHolidayBadges] Processing ${Object.keys(holidays).length} holidays for ${yearStr}`);
-        
-        Object.entries(holidays).forEach(([dateStr, holidayName]) => {
-            console.log(`[updateHolidayBadges] Processing ${dateStr}: ${holidayName}`);
-            // Find the calendar cell for this date
-            const calBody = document.querySelector(`[data-date="${dateStr}"]`);
-            if (calBody) {
-                console.log(`[updateHolidayBadges] Found DOM element for ${dateStr}`);
-                const calCell = calBody.parentElement;
-                const calDate = calCell.querySelector('.cal-date');
-                if (calDate && !calDate.querySelector('.badge')) {
-                    // Extract the day number and add the holiday badge
-                    const dayText = calDate.textContent.trim();
-                    calDate.innerHTML = `${dayText} <span class="badge">${holidayName}</span>`;
-                    console.log(`[updateHolidayBadges] ✅ Added badge for ${dateStr}: ${holidayName}`);
-                } else if (calDate && calDate.querySelector('.badge')) {
-                    console.log(`[updateHolidayBadges] Badge already exists for ${dateStr}`);
-                } else {
-                    console.log(`[updateHolidayBadges] ❌ No .cal-date found for ${dateStr}`);
-                }
-            } else {
-                console.log(`[updateHolidayBadges] ❌ No DOM element found with [data-date="${dateStr}"]`);
+        const holidays = Object.keys(svcMap).length ? svcMap : (window.appState?.holidays?.[yearStr] || {});
+        const monthKey = this.currentCalendarMonth; // e.g. "2025-10"
+        if (!monthKey) return;
+        const entries = Object.entries(holidays).filter(([dateStr]) => dateStr.startsWith(monthKey));
+        console.log(`[updateHolidayBadges] Painting ${entries.length} holiday(s) for ${monthKey}`);
+        for (const [dateStr, holidayName] of entries) {
+            const calBody = document.querySelector(`.cal-body[data-date="${dateStr}"]`);
+            if (!calBody) continue; // silently ignore days not in DOM
+            const calCell = calBody.parentElement;
+            const calDate = calCell?.querySelector('.cal-date');
+            if (!calDate) continue;
+            if (!calDate.querySelector('.badge')) {
+                const dayText = calDate.textContent.trim();
+                calDate.innerHTML = `${dayText} <span class="badge">${holidayName}</span>`;
             }
-        });
+        }
     }
 
     refreshDisplay() {
@@ -303,10 +333,7 @@ export class ScheduleUI {
         // Bind Feiertage button to open holidays modal
         try {
             document.getElementById('showHolidaysBtn')?.addEventListener('click', () => {
-                const modal = document.getElementById('holidaysModal');
-                if (!modal) return;
-                if (window.__openModal) window.__openModal('holidaysModal');
-                else { modal.classList.add('open'); document.body.classList.add('no-scroll'); }
+                if (window.__openModal) window.__openModal('holidaysModal'); else openModal('holidaysModal');
             });
         } catch(e){ console.warn('[ScheduleUI] failed to bind Feiertage button', e); }
     this.currentCalendarMonth = month;
@@ -915,7 +942,7 @@ export class ScheduleUI {
         });
 
     // Show modal
-    if (window.__openModal) window.__openModal('swapModal'); else { modal.classList.add('open'); document.body.classList.add('no-scroll'); }
+    if (window.__openModal) window.__openModal('swapModal'); else openModal('swapModal');
     }
 
     // New: Search & Assign dialog separate from availability tab
@@ -1066,12 +1093,12 @@ export class ScheduleUI {
                 delete schedule[dateStr].assignments[sh];
                 appState.save?.();
                 this.updateDay(dateStr);
-                if (window.__closeModal) window.__closeModal('searchModal'); else { modal.classList.remove('open'); document.body.classList.remove('no-scroll'); }
+                if (window.__closeModal) window.__closeModal('searchModal'); else closeModal('searchModal');
             };
         }
         // Stash context
         modal.dataset.date = dateStr;
-    if (window.__openModal) window.__openModal('searchModal'); else { modal.classList.add('open'); document.body.classList.add('no-scroll'); }
+    if (window.__openModal) window.__openModal('searchModal'); else openModal('searchModal');
         // Bind assign button
         const execBtn = document.getElementById('executeSearchAssignBtn');
     execBtn.onclick = async () => {
@@ -1125,6 +1152,7 @@ export class ScheduleUI {
             const dow = date.getDay();
             if (dow===0 || dow===6){ this.renderWeekendReport(month); }
             if (window.__closeModal) window.__closeModal('searchModal'); else { modal.classList.remove('open'); document.body.classList.remove('no-scroll'); }
+            if (window.__closeModal) window.__closeModal('searchModal'); else closeModal('searchModal');
         };
     }
 }
