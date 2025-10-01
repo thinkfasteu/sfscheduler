@@ -174,6 +174,19 @@ function initApp(){
     // Render UI first so buttons/inputs exist
     scheduleUI.refreshDisplay();
     try { scheduleUI.ensureGlobalGenerateBridge?.(); } catch(e){ console.warn('[main] generate bridge init failed', e); }
+    // Fallback: explicitly bind generate button if not already firing (defensive)
+    setTimeout(()=>{
+        const genBtn = document.getElementById('generateScheduleBtn');
+        if (genBtn && !genBtn.__boundGenerate){
+            genBtn.addEventListener('click', () => {
+                console.info('[fallback] generateScheduleBtn click -> ScheduleUI.generateScheduleForCurrentMonth');
+                try { scheduleUI.generateScheduleForCurrentMonth(); } catch(err){ console.error('[fallback] generate failed', err); }
+            });
+            genBtn.__boundGenerate = true;
+        } else if (!genBtn){
+            console.warn('[fallback] generateScheduleBtn not found after refreshDisplay');
+        }
+    }, 50);
     // Then bind handlers to the rendered elements
     console.log('[main.js] About to create EventHandler');
     const eventHandler = new EventHandler(scheduleUI);

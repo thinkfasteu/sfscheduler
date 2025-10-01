@@ -624,13 +624,15 @@ export class ScheduleUI {
     generateScheduleForCurrentMonth(){
         const month = this.currentCalendarMonth;
         if (!month){ console.warn('[generateSchedule] no current month'); return; }
-        if (!window.__TAB_CAN_EDIT){ console.warn('[generateSchedule] blocked: view-only mode'); return; }
+        // Treat undefined as editable; only block if explicitly false
+        if (window.__TAB_CAN_EDIT === false){ console.warn('[generateSchedule] blocked: view-only mode (__TAB_CAN_EDIT===false)'); return; }
         if (this._generating){ console.warn('[generateSchedule] already in progress'); return; }
         this._generating = true;
         (async ()=> {
             const startedAt = performance.now?.()||0;
             try {
                 this.setStatus('Erzeuge Plan…', true);
+                this.setBusy(true);
                 // Ensure availability hydration if not yet done
                 if (!this._hydratedMonths.has(month)){
                     this.setStatus('Lade Verfügbarkeiten…', true);
@@ -656,6 +658,7 @@ export class ScheduleUI {
                 setTimeout(()=> this.clearStatus(), 1800);
             } finally {
                 this._generating = false;
+                this.setBusy(false);
             }
         })();
     }
