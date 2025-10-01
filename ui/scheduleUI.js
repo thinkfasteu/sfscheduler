@@ -508,6 +508,7 @@ export class ScheduleUI {
             + '<button class="btn btn-secondary" id="openSearchAssignBtn">Suchen & Zuweisen (Datum wählen)</button>'
             + '<button class="btn btn-secondary" id="recoveryPreviewBtn" title="Offene kritische Schichten anzeigen">Lücken prüfen</button>'
             + '<button class="btn btn-secondary hidden" id="recoveryApplyBtn" title="Versuchen kritische Lücken zu füllen (mit gelockerten Fairness-Penalties)">Lücken füllen</button>'
+            + '<button class="btn btn-secondary" id="finalizeMonthBtn" title="Monat abschließen (informell – Plan bleibt bearbeitbar)">Monat abschließen</button>'
             + '</div>'
             + '<div id="recoveryReport" class="full-width text-small mt-neg-4"></div>';
         html += '<div class="cal"><div class="cal-row cal-head">';
@@ -574,6 +575,13 @@ export class ScheduleUI {
                 this.setStatus('Synchronisiert ✓', true, false);
                 setTimeout(()=>{ this.clearStatus(); }, 900);
         }).catch((e)=>{ console.warn(e); this.clearStatus(); });
+        try {
+            const issues = this.runA11yAudit?.();
+            if (issues) {
+                const counts = issues.reduce((acc,i)=>{ acc[i.type]=(acc[i.type]||0)+1; return acc; },{});
+                console.info('[a11y] audit summary after render', { total: issues.length, counts });
+            }
+        } catch(ae){ console.warn('[a11y] audit invocation failed', ae); }
         console.log('[scheduleUI][phase] done updateCalendarFromSelect');
     }
 
@@ -599,6 +607,8 @@ export class ScheduleUI {
                     if (typeof this._applyRecovery === 'function') this._applyRecovery();
                 } else if (id === 'generateScheduleBtn'){
                     this.generateScheduleForCurrentMonth();
+                } else if (id === 'finalizeMonthBtn'){
+                    this.finalizeCurrentMonth();
                 }
             }
             const body = e.target.closest('.cal-body[data-date]');
@@ -618,19 +628,36 @@ export class ScheduleUI {
                     this.openAssignModal(dateStr);
                 }
             }
+            // Delegated pill click (assignment or unassigned pill)
+            const pill = e.target.closest('.staff-assignment[data-date]');
+            if (pill){
+                e.stopPropagation();
+                const dateStr = pill.getAttribute('data-date');
+                const shiftKey = pill.getAttribute('data-shift');
+                this.openAssignModal(dateStr, shiftKey);
+            }
+            // Delegated swap button inside pill
+            const swap = e.target.closest('.swap-btn[data-date]');
+            if (swap){
+                e.stopPropagation();
+                const dateStr = swap.getAttribute('data-date');
+                const shiftKey = swap.getAttribute('data-shift');
+                this.openAssignModal(dateStr, shiftKey);
+            }
         }, true);
     }
 
     generateScheduleForCurrentMonth(){
         const month = this.currentCalendarMonth;
         if (!month){ console.warn('[generateSchedule] no current month'); return; }
-        if (!window.__TAB_CAN_EDIT){ console.warn('[generateSchedule] blocked: view-only mode'); return; }
+    // View-only mode disabled: always allow generation
         if (this._generating){ console.warn('[generateSchedule] already in progress'); return; }
         this._generating = true;
         (async ()=> {
             const startedAt = performance.now?.()||0;
             try {
                 this.setStatus('Erzeuge Plan…', true);
+                this.setBusy(true);
                 // Ensure availability hydration if not yet done
                 if (!this._hydratedMonths.has(month)){
                     this.setStatus('Lade Verfügbarkeiten…', true);
@@ -656,6 +683,7 @@ export class ScheduleUI {
                 setTimeout(()=> this.clearStatus(), 1800);
             } finally {
                 this._generating = false;
+                this.setBusy(false);
             }
         })();
     }
@@ -675,8 +703,10 @@ export class ScheduleUI {
     }
 
     async prehydrateAvailability(month){
+        let releasing = false;
         try {
             if (!month || this._hydratedMonths.has(month)) return;
+            this.setBusy(true); releasing = true;
             // Ensure services are available
             if (!window.__services){
                 const mod = await import('../src/services/index.js');
@@ -700,6 +730,7 @@ export class ScheduleUI {
             this._hydratedMonths.add(month);
             this.disableScheduleControls(false, btns);
         } catch(e){ console.warn('[ScheduleUI] prehydrateAvailability failed', e); }
+        finally { if (releasing) this.setBusy(false); }
     }
 
     setStatus(text, show=true, withSpinner=true){
@@ -755,22 +786,7 @@ export class ScheduleUI {
             }).join('');
             cell.innerHTML = validHtml + invalidHtml;
         });
-        document.querySelectorAll('.staff-assignment[data-date]').forEach(pill => {
-            pill.addEventListener('click', (e)=>{
-                e.stopPropagation();
-                const dateStr = pill.getAttribute('data-date');
-                const shiftKey = pill.getAttribute('data-shift');
-                this.openAssignModal(dateStr, shiftKey);
-            });
-        });
-        document.querySelectorAll('.swap-btn[data-date]').forEach(btn => {
-            btn.addEventListener('click', (e)=>{
-                e.stopPropagation();
-                const dateStr = btn.getAttribute('data-date');
-                const shiftKey = btn.getAttribute('data-shift');
-                this.openAssignModal(dateStr, shiftKey);
-            });
-        });
+        // Per-pill listeners removed; handled by central delegation for performance & consistency
     }
 
     renderWeekendReport(month){
@@ -871,20 +887,7 @@ export class ScheduleUI {
             </div>`;
         }).join('');
         cellEl.innerHTML = validHtml + invalidHtml;
-        cellEl.querySelectorAll('.staff-assignment[data-date]').forEach(pill => {
-            pill.addEventListener('click', (e)=>{
-                e.stopPropagation();
-                const shiftKey = pill.getAttribute('data-shift');
-                this.openAssignModal(dateStr, shiftKey);
-            });
-        });
-        cellEl.querySelectorAll('.swap-btn[data-date]').forEach(btn => {
-            btn.addEventListener('click', (e)=>{
-                e.stopPropagation();
-                const shiftKey = btn.getAttribute('data-shift');
-                this.openAssignModal(dateStr, shiftKey);
-            });
-        });
+        // Per-pill listeners removed; central delegation covers interactions
     }
 
     // Busy state helpers (ref-counted)
@@ -1399,55 +1402,58 @@ if (typeof ScheduleUI !== 'undefined'){ Object.assign(ScheduleUI.prototype, {
         if (this._recoveryInFlight){ console.warn('[recovery] preview already running'); return; }
         const monthKey = this.currentCalendarMonth; if (!monthKey) return;
         const started = performance.now?.()||0;
-        this._recoveryInFlight = true;
-        console.info('[recovery][preview] start', { month: monthKey });
-        const recoveryReport = document.getElementById('recoveryReport');
-        const applyBtn = document.getElementById('recoveryApplyBtn');
-        const gaps = this._collectCriticalGaps(monthKey);
-        if (!gaps.length){ if(recoveryReport) recoveryReport.innerHTML = '<em>Keine offenen kritischen Schichten.</em>'; applyBtn?.classList.add('hidden'); return; }
-        const engine = new SchedulingEngine(monthKey);
-        const preview = [];
-        gaps.forEach(g => {
-            const weekNum = engine.getWeekNumber(parseYMD(g.dateStr));
-            const scheduledToday = new Set(Object.values(appState.scheduleData?.[monthKey]?.[g.dateStr]?.assignments||{}));
-            let cands = engine.findCandidatesForShift(g.dateStr, g.shiftKey, scheduledToday, weekNum);
-            cands = cands.map(c => ({ ...c, adjScore: c.score < 0 ? Math.max(c.score, (APP_CONFIG?.RECOVERY_MIN_SCORE_FLOOR||-800)) : c.score }));
-            cands.sort((a,b)=> b.adjScore - a.adjScore);
-            const best = cands[0];
-            if (best && best.adjScore >= (APP_CONFIG?.RECOVERY_MIN_SCORE_FLOOR||-800)) preview.push({ ...g, staffId: best.staff.id, name: best.staff.name, score: best.score, adjScore: best.adjScore });
-        });
-        if (!preview.length){ if (recoveryReport) recoveryReport.innerHTML = '<em>Keine geeigneten Kandidaten für offene kritischen Schichten.</em>'; applyBtn?.classList.add('hidden'); this._recoveryInFlight=false; console.info('[recovery][preview] complete (none)', { ms: Math.round((performance.now?.()||0)-started) }); return; }
-        if (recoveryReport) recoveryReport.innerHTML = '<strong>Vorschau Füllung:</strong><br/>' + preview.map(p=> `${p.dateStr} – ${p.shiftKey} → ${p.name} (Score ${Math.round(p.score)} / adj ${Math.round(p.adjScore)})`).join('<br/>' );
-        applyBtn?.classList.remove('hidden');
-        if (applyBtn) applyBtn.dataset.preview = JSON.stringify(preview);
-        this._recoveryInFlight = false;
-        console.info('[recovery][preview] complete', { candidates: preview.length, ms: Math.round((performance.now?.()||0)-started) });
+        this._recoveryInFlight = true; this.setBusy(true);
+        try {
+            console.info('[recovery][preview] start', { month: monthKey });
+            const recoveryReport = document.getElementById('recoveryReport');
+            const applyBtn = document.getElementById('recoveryApplyBtn');
+            const gaps = this._collectCriticalGaps(monthKey);
+            if (!gaps.length){ if(recoveryReport) recoveryReport.innerHTML = '<em>Keine offenen kritischen Schichten.</em>'; applyBtn?.classList.add('hidden'); return; }
+            const engine = new SchedulingEngine(monthKey);
+            const preview = [];
+            gaps.forEach(g => {
+                const weekNum = engine.getWeekNumber(parseYMD(g.dateStr));
+                const scheduledToday = new Set(Object.values(appState.scheduleData?.[monthKey]?.[g.dateStr]?.assignments||{}));
+                let cands = engine.findCandidatesForShift(g.dateStr, g.shiftKey, scheduledToday, weekNum);
+                cands = cands.map(c => ({ ...c, adjScore: c.score < 0 ? Math.max(c.score, (APP_CONFIG?.RECOVERY_MIN_SCORE_FLOOR||-800)) : c.score }));
+                cands.sort((a,b)=> b.adjScore - a.adjScore);
+                const best = cands[0];
+                if (best && best.adjScore >= (APP_CONFIG?.RECOVERY_MIN_SCORE_FLOOR||-800)) preview.push({ ...g, staffId: best.staff.id, name: best.staff.name, score: best.score, adjScore: best.adjScore });
+            });
+            if (!preview.length){ if (recoveryReport) recoveryReport.innerHTML = '<em>Keine geeigneten Kandidaten für offene kritischen Schichten.</em>'; applyBtn?.classList.add('hidden'); console.info('[recovery][preview] complete (none)', { ms: Math.round((performance.now?.()||0)-started) }); return; }
+            if (recoveryReport) recoveryReport.innerHTML = '<strong>Vorschau Füllung:</strong><br/>' + preview.map(p=> `${p.dateStr} – ${p.shiftKey} → ${p.name} (Score ${Math.round(p.score)} / adj ${Math.round(p.adjScore)})`).join('<br/>' );
+            applyBtn?.classList.remove('hidden');
+            if (applyBtn) applyBtn.dataset.preview = JSON.stringify(preview);
+            console.info('[recovery][preview] complete', { candidates: preview.length, ms: Math.round((performance.now?.()||0)-started) });
+        } finally { this._recoveryInFlight = false; this.setBusy(false); }
     },
     _applyRecovery(){
         if (this._recoveryInFlight){ console.warn('[recovery] apply already running'); return; }
         const monthKey = this.currentCalendarMonth; if (!monthKey) return;
-        const started = performance.now?.()||0; this._recoveryInFlight = true; console.info('[recovery][apply] start', { month: monthKey });
-        const applyBtn = document.getElementById('recoveryApplyBtn'); if (!applyBtn) return;
-        const raw = applyBtn.dataset.preview; if (!raw) return;
-        let preview; try { preview = JSON.parse(raw); } catch { return; }
-        const sched = appState.scheduleData?.[monthKey] || (appState.scheduleData[monthKey] = {});
-        let applied=0;
-        preview.forEach(p => {
-            const day = sched[p.dateStr] || (sched[p.dateStr] = { assignments:{} });
-            if (day.assignments[p.shiftKey]) return;
-            day.assignments[p.shiftKey] = p.staffId;
-            const validator = new ScheduleValidator(monthKey);
-            const { schedule: consolidated } = validator.validateScheduleWithIssues(sched);
-            const blocker = consolidated[p.dateStr]?.blockers?.[p.shiftKey];
-            if (blocker){ delete day.assignments[p.shiftKey]; } else { applied++; appState.scheduleData[monthKey] = consolidated; }
-        });
-        appState.save?.();
-        const recoveryReport = document.getElementById('recoveryReport');
-        if (recoveryReport) recoveryReport.innerHTML += `<div class=\"mt-4\"><strong>Angewendet:</strong> ${applied} Schichten gefüllt.</div>`;
-        applyBtn.classList.add('hidden');
-        this.updateCalendarFromSelect();
-        this._recoveryInFlight = false;
-        console.info('[recovery][apply] complete', { applied, ms: Math.round((performance.now?.()||0)-started) });
+        const started = performance.now?.()||0; this._recoveryInFlight = true; this.setBusy(true);
+        try {
+            console.info('[recovery][apply] start', { month: monthKey });
+            const applyBtn = document.getElementById('recoveryApplyBtn'); if (!applyBtn) return;
+            const raw = applyBtn.dataset.preview; if (!raw) return;
+            let preview; try { preview = JSON.parse(raw); } catch { return; }
+            const sched = appState.scheduleData?.[monthKey] || (appState.scheduleData[monthKey] = {});
+            let applied=0;
+            preview.forEach(p => {
+                const day = sched[p.dateStr] || (sched[p.dateStr] = { assignments:{} });
+                if (day.assignments[p.shiftKey]) return;
+                day.assignments[p.shiftKey] = p.staffId;
+                const validator = new ScheduleValidator(monthKey);
+                const { schedule: consolidated } = validator.validateScheduleWithIssues(sched);
+                const blocker = consolidated[p.dateStr]?.blockers?.[p.shiftKey];
+                if (blocker){ delete day.assignments[p.shiftKey]; } else { applied++; appState.scheduleData[monthKey] = consolidated; }
+            });
+            appState.save?.();
+            const recoveryReport = document.getElementById('recoveryReport');
+            if (recoveryReport) recoveryReport.innerHTML += `<div class=\"mt-4\"><strong>Angewendet:</strong> ${applied} Schichten gefüllt.</div>`;
+            applyBtn.classList.add('hidden');
+            this.updateCalendarFromSelect();
+            console.info('[recovery][apply] complete', { applied, ms: Math.round((performance.now?.()||0)-started) });
+        } finally { this._recoveryInFlight = false; this.setBusy(false); }
     }
     , runA11yAudit(){
         const issues = [];
@@ -1469,6 +1475,56 @@ if (typeof ScheduleUI !== 'undefined'){ Object.assign(ScheduleUI.prototype, {
         });
         if (!issues.length) console.info('[a11y] audit passed (no issues)'); else console.warn('[a11y] issues', issues);
         return issues;
+    }
+    , ensureFinalizeModal(){
+        if (document.getElementById('finalizeModal')) return;
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `<div class="modal hidden" id="finalizeModal" role="dialog" aria-labelledby="finalizeModalTitle">\n  <div class="modal-content">\n    <h2 id="finalizeModalTitle">Monat abschließen</h2>\n    <p class="text-small mb-8">Dies markiert den Plan als "abgeschlossen" (informell). Weitere Änderungen bleiben möglich; dies dient nur zur Nachverfolgung.</p>\n    <div id="finalizeSummary" class="mb-12 text-small"></div>\n    <div class="flex gap-8 jc-end">\n      <button class="btn btn-secondary" id="finalizeCancelBtn">Abbrechen</button>\n      <button class="btn btn-success" id="finalizeApplyBtn">Bestätigen</button>\n    </div>\n  </div>\n</div>`;
+        document.body.appendChild(wrapper.firstElementChild);
+        document.getElementById('finalizeCancelBtn')?.addEventListener('click', ()=> this.closeModal('finalizeModal'));
+        document.getElementById('finalizeApplyBtn')?.addEventListener('click', ()=> this.applyFinalize());
+    }
+    , finalizeCurrentMonth(){
+        const month = this.currentCalendarMonth; if (!month) return;
+        this.ensureFinalizeModal();
+        const sched = appState.scheduleData?.[month] || {};
+        const unfilled = [];
+        Object.entries(sched).forEach(([dateStr, day])=>{
+            const applicable = this.getApplicableShifts(dateStr);
+            applicable.forEach(sh => { if (!day.assignments?.[sh]) unfilled.push({ dateStr, sh }); });
+        });
+        const summary = document.getElementById('finalizeSummary');
+        if (summary){
+            if (!unfilled.length) summary.innerHTML = '<strong>Alle kritischen Schichten sind gefüllt.</strong>';
+            else {
+                const first = unfilled.slice(0,15).map(u=>`${u.dateStr} ${u.sh}`).join('<br/>');
+                summary.innerHTML = `<strong>Offene Schichten (${unfilled.length}):</strong><br/>${first}${unfilled.length>15?'<br/>…':''}`;
+            }
+        }
+        this.openModal('finalizeModal');
+        try { const issues = this.runA11yAudit?.(); if (issues) console.info('[a11y] audit after finalize modal', { issues: issues.length }); } catch {}
+    }
+    , applyFinalize(){
+        const month = this.currentCalendarMonth; if (!month) return;
+        appState.finalizedMonths = appState.finalizedMonths || {};
+        const ts = new Date().toISOString();
+        appState.finalizedMonths[month] = { ts, by: (window.__currentUser?.id)||'unknown' };
+        appState.save?.();
+        this.closeModal('finalizeModal');
+        const btn = document.getElementById('finalizeMonthBtn');
+        if (btn){ btn.textContent = 'Abgeschlossen ✓'; btn.classList.add('btn-success'); }
+        const bannerId = 'finalizedBanner';
+        if (!document.getElementById(bannerId)){
+            const host = document.getElementById('scheduleGrid');
+            if (host){
+                const b = document.createElement('div');
+                b.id = bannerId;
+                b.className = 'finalized-banner';
+                b.textContent = `Monat abgeschlossen am ${new Date(ts).toLocaleDateString()}`;
+                host.prepend(b);
+            }
+        }
+        console.info('[finalize] month marked finalized (non-locking)', { month });
     }
 }); }
 

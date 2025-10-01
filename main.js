@@ -14,20 +14,30 @@ function initApp(){
     if (window.__APP_READY__) return; // idempotent guard
     appState.load();
         // --- Multi-tab synchronization & cooperative edit lock (Sprint 3) ---
-        const TAB_ID = Math.random().toString(36).slice(2);
-        const bc = ('BroadcastChannel' in window) ? new BroadcastChannel('scheduler_sync') : null;
-        function announce(type, payload){ try{ bc && bc.postMessage({ type, from:TAB_ID, ts:Date.now(), payload }); }catch{} }
-        let currentLockOwner = null;
-        function showLockStatus(){
-            let el = document.getElementById('tabLockStatus');
-            if (!el){ el = document.createElement('div'); el.id='tabLockStatus'; el.style.cssText='position:fixed;bottom:8px;right:8px;font:11px system-ui;padding:4px 8px;border-radius:4px;background:#198754;color:#fff;z-index:3000;opacity:.9'; document.body.appendChild(el); }
-            el.textContent = currentLockOwner===TAB_ID ? 'Bearbeitung: Dieser Tab' : 'Nur Ansicht (anderer Tab aktiv)';
-            el.style.background = currentLockOwner===TAB_ID ? '#198754' : '#6c757d';
-            const canEdit = currentLockOwner===TAB_ID;
-            window.__TAB_CAN_EDIT = canEdit;
-            document.body.classList.toggle('view-only', !canEdit);
+        // Phase defer: For now ALL users/tabs are allowed to edit. Multi-tab locking UI retained
+        // for later reactivation; we introduce a force flag that overrides lock outcome.
+        if (window.__FORCE_EDIT_MODE === undefined) {
+            window.__FORCE_EDIT_MODE = true; // set once; future phases can flip to false to restore locking
         }
-        function claimLock(){ if (currentLockOwner===TAB_ID) return; announce('lock-acquire'); }
+        function showLockStatus(){
+            const forced = window.__FORCE_EDIT_MODE === true;
+            let el = document.getElementById('tabLockStatus');
+            if (!el){
+                el = document.createElement('div');
+                el.id='tabLockStatus';
+                el.style.cssText='position:fixed;bottom:8px;right:8px;font:11px system-ui;padding:4px 8px;border-radius:4px;background:#198754;color:#fff;z-index:3000;opacity:.9';
+                document.body.appendChild(el);
+            }
+            const canEdit = true; // permanently true while locking disabled
+            el.textContent = 'Bearbeitung aktiviert';
+            el.style.background = '#198754';
+            window.__TAB_CAN_EDIT = true;
+            // Ensure any stale view-only class is removed
+            document.body.classList.remove('view-only');
+        }
+            // No-op placeholders for legacy references
+            const announce = ()=>{};
+            const claimLock = ()=>{};
 
         // Unified toast helper (ensure available early so later handlers can use it)
         if (!window.__toast){
@@ -110,22 +120,7 @@ function initApp(){
                 setTimeout(()=>{ div.style.transition='opacity .6s'; div.style.opacity='0'; setTimeout(()=>div.remove(),800); }, 8000);
             }
         });
-        // Guard editing actions in view-only mode
-        document.addEventListener('click', (ev)=>{
-            if (window.__TAB_CAN_EDIT || ev.defaultPrevented) return;
-            const el = ev.target.closest('button, [data-editing], input, select, textarea');
-            if (!el) return;
-            const id = el.id || '';
-            const editIds = new Set(['generateScheduleBtn','clearScheduleBtn','saveStaffBtn','addStaffVacationBtn','addStaffIllnessBtn','addVacationPeriodBtn','addOtherStaffBtn','addOtherVacationPeriodBtn','executeAssignBtn','executeSwapBtn','executeSearchAssignBtn']);
-            if (editIds.has(id) || el.hasAttribute('data-editing')){
-                ev.preventDefault(); ev.stopPropagation();
-                // Replace legacy inline toast with unified helper
-                if (!window.__TOAST_VIEWONLY_SHOWN){
-                    window.__TOAST_VIEWONLY_SHOWN = Date.now();
-                    window.__toast('Schreib-Lock in anderem Tab. Dort bearbeiten.', { variant:'error', small:true });
-                }
-            }
-        }, true);
+        // View-only guard removed (locking disabled). If reintroduced later, add conditional here.
     // Seed demo data only once (if never seeded and no staff exist). Persist flag after first seed or after first manual modification.
     // Do not seed in production environment to avoid confusing real deployments.
     const DEMO_FLAG_KEY = 'demoSeeded';
@@ -174,52 +169,26 @@ function initApp(){
     // Render UI first so buttons/inputs exist
     scheduleUI.refreshDisplay();
     try { scheduleUI.ensureGlobalGenerateBridge?.(); } catch(e){ console.warn('[main] generate bridge init failed', e); }
-    // Then bind handlers to the rendered elements
-    console.log('[main.js] About to create EventHandler');
-    const eventHandler = new EventHandler(scheduleUI);
-    console.log('[main.js] EventHandler created:', eventHandler);
-    
-    // Expose working handlers to window for eventBindings fallback
-    (function exposeHandlers(){
-        // Avoid clobbering if rehydrated twice
-        window.handlers = window.handlers || {};
-
-        window.handlers.generateSchedule = () => {
-            console.log('[handlers] generateSchedule called');
-            try {
-                const month = scheduleUI?.currentCalendarMonth || (new Date()).toISOString().slice(0,7);
-                const engine = new SchedulingEngine(month);
-                const schedule = engine.generateSchedule();
-                // ensure UI redraw
-                if (scheduleUI?.renderSchedule) {
-                    scheduleUI.renderSchedule(schedule);
-                } else {
-                    console.warn('[handlers] scheduleUI.renderSchedule missing; schedule stored but not drawn');
-                }
-            } catch (e) {
-                console.error('[handlers] generateSchedule failed', e);
-                alert('Fehler beim Erstellen des Dienstplans (Details in Konsole).');
-            }
-        };
-
-        window.handlers.clearSchedule = () => {
-            console.log('[handlers] clearSchedule called');
-            const month = scheduleUI?.currentCalendarMonth || (new Date()).toISOString().slice(0,7);
-            if (!appState.scheduleData) appState.scheduleData = {};
-            appState.scheduleData[month] = {};
-            appState.save?.();
-            if (scheduleUI?.renderSchedule) {
-                scheduleUI.renderSchedule(new Schedule(month));
-            }
-        };
-
-        // Optional: holidays popup bridge if modal manager is class-based
-        if (!window.showHolidaysPopup && window.modalManager?.openHolidays) {
-            window.showHolidaysPopup = () => window.modalManager.openHolidays();
+    // Fallback: explicitly bind generate button if not already firing (defensive)
+    setTimeout(()=>{
+        const genBtn = document.getElementById('generateScheduleBtn');
+        if (genBtn && !genBtn.__boundGenerate){
+            genBtn.addEventListener('click', () => {
+                console.info('[fallback] generateScheduleBtn click -> ScheduleUI.generateScheduleForCurrentMonth');
+                try { scheduleUI.generateScheduleForCurrentMonth(); } catch(err){ console.error('[fallback] generate failed', err); }
+            });
+            genBtn.__boundGenerate = true;
         }
-        
-        console.log('[main.js] Handlers exposed to window.handlers');
-    })();
+    }, 50);
+
+    // Periodic status refresh (kept for banner visibility)
+    setInterval(()=>{ showLockStatus(); }, 15000);
+    showLockStatus();
+
+    // Optional: holidays popup bridge if modal manager is class-based
+    if (!window.showHolidaysPopup && window.modalManager?.openHolidays) {
+        window.showHolidaysPopup = () => window.modalManager.openHolidays();
+    }
     
     // App UI for staff/availability/vacation
     const appUI = new AppUI(scheduleUI);
