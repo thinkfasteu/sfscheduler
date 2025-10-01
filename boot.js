@@ -1,5 +1,7 @@
 // Boot loader with dev vs dist auto-detection; config.local.js (optional) loads first.
 (async()=>{
+  // Inject static version fallback (overwritten by manifest.version in dist mode)
+  if (!window.__APP_VERSION__) window.__APP_VERSION__ = '1.2.4';
   // Optional local overrides ONLY in dev and only if explicitly opted-in
   (function maybeLoadLocalConfig() {
     const expectLocal = (window.CONFIG && window.CONFIG.EXPECT_LOCAL_CONFIG) === true;

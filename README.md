@@ -71,3 +71,14 @@ Console prints top contributors.
 ### Notes
 - CSP already allows only `style-src 'self'`; no inline script usage.
 - Future improvements: hash-based filename for long-term caching; environment injection via small pre-build step.
+
+### Version Badge & Lock Removal (v1.2.4)
+As of version 1.2.4 the legacy multi‑tab cooperative locking (BroadcastChannel + storage events) was fully removed. The app now always operates in edit mode. A small floating badge (bottom-right) shows the active application version (derived from `manifest.json` when in dist mode, or falling back to the static version string). This replaces the previous lock status indicator.
+
+Re‑introducing locking later would involve:
+1. Initializing a `BroadcastChannel('scheduler')`.
+2. Generating a per‑tab ID and broadcasting `lock-acquire` / `lock-granted` messages.
+3. Gating mutating actions behind a `window.__TAB_CAN_EDIT` flag.
+4. (Optional) Using localStorage events only for cross‑tab state refresh, not locking.
+
+Until such a reintroduction is required, the simplified model reduces bundle size and startup logic while keeping the UI responsive.
