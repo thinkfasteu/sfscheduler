@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - Pilot Readiness Release
 
+## [1.2.4] - 2025-10-01
+### Added
+- Finalize month (informal) workflow with modal summary of unfilled critical shifts (`finalizeMonthBtn`, `finalizeCurrentMonth`, `applyFinalize`).
+- Automatic accessibility audit invocation after calendar renders and when finalize modal opens; console summaries per render.
+- Busy state ref-count integration for availability hydration and recovery preview/apply paths.
+
+### Changed
+- Repurposed former lock status badge into a persistent version badge (bottom-right) showing active build version and editing availability.
+- Calendar toolbar enhanced with finalize action and improved recovery controls.
+
+### Removed
+- Legacy multi-tab cooperative locking system (BroadcastChannel + storage fallback + periodic lock claims) fully stripped from `main.js`.
+
+### Fixed
+- Runtime `bc is not defined` error on dist bundles by eliminating stale references during lock removal.
+- Ensured recovery preview/apply always releases busy state on early exits.
+
+### Internal / Dev
+- Updated `package.json` version to 1.2.4.
+- README augmented with version badge / lock removal rationale and reintroduction outline.
+
+### Notes
+This release intentionally keeps schedules editable post-finalization; the finalize marker is an operational governance aid, not an enforcement barrier.
+
+
 ### Major Features Added
 
 #### 🛡️ GDPR Compliance Framework

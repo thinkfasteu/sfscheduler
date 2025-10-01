@@ -13,31 +13,21 @@ import './ui/checklistOverlay.js';
 function initApp(){
     if (window.__APP_READY__) return; // idempotent guard
     appState.load();
-        // --- Multi-tab synchronization & cooperative edit lock (Sprint 3) ---
-        // Phase defer: For now ALL users/tabs are allowed to edit. Multi-tab locking UI retained
-        // for later reactivation; we introduce a force flag that overrides lock outcome.
-        if (window.__FORCE_EDIT_MODE === undefined) {
-            window.__FORCE_EDIT_MODE = true; // set once; future phases can flip to false to restore locking
+    // --- Multi-tab locking removed (simplified edit model) ---
+    if (window.__FORCE_EDIT_MODE === undefined) window.__FORCE_EDIT_MODE = true;
+    function showLockStatus(){
+        let el = document.getElementById('tabLockStatus');
+        if (!el){
+            el = document.createElement('div');
+            el.id='tabLockStatus';
+            el.style.cssText='position:fixed;bottom:8px;right:8px;font:11px system-ui;padding:4px 8px;border-radius:4px;background:#0d6efd;color:#fff;z-index:3000;opacity:.92;display:flex;align-items:center;gap:6px;';
+            document.body.appendChild(el);
         }
-        function showLockStatus(){
-            const forced = window.__FORCE_EDIT_MODE === true;
-            let el = document.getElementById('tabLockStatus');
-            if (!el){
-                el = document.createElement('div');
-                el.id='tabLockStatus';
-                el.style.cssText='position:fixed;bottom:8px;right:8px;font:11px system-ui;padding:4px 8px;border-radius:4px;background:#198754;color:#fff;z-index:3000;opacity:.9';
-                document.body.appendChild(el);
-            }
-            const canEdit = true; // permanently true while locking disabled
-            el.textContent = 'Bearbeitung aktiviert';
-            el.style.background = '#198754';
-            window.__TAB_CAN_EDIT = true;
-            // Ensure any stale view-only class is removed
-            document.body.classList.remove('view-only');
-        }
-            // No-op placeholders for legacy references
-            const announce = ()=>{};
-            const claimLock = ()=>{};
+        const ver = window.__APP_VERSION__ || '1.2.4';
+        el.innerHTML = `<span style="font-weight:600;">Version ${ver}</span><span style="opacity:.75;">(Editing enabled)</span>`;
+        window.__TAB_CAN_EDIT = true;
+        document.body.classList.remove('view-only');
+    }
 
         // Unified toast helper (ensure available early so later handlers can use it)
         if (!window.__toast){
@@ -64,63 +54,7 @@ function initApp(){
                 if (ttl>0) setTimeout(()=>{ div.style.transition='opacity .6s'; div.style.opacity='0'; setTimeout(()=>div.remove(),650); }, ttl);
             };
         }
-        if (bc){
-            bc.addEventListener('message', ev=>{
-                const { data } = ev; if (!data || data.from===TAB_ID) return;
-                if (data.type==='state-saved'){
-                    try { Object.keys(localStorage).forEach(k=>{ if (appState.isDurableKey && appState.isDurableKey(k)){ const v = localStorage.getItem(k); if (v){ try { appState[k] = JSON.parse(v); } catch{} } } }); } catch{}
-                    // External update banner
-                    if (!document.getElementById('externalUpdateNotice')){
-                        const div = document.createElement('div');
-                        div.id='externalUpdateNotice';
-                        div.style.cssText='position:fixed;bottom:8px;left:8px;background:#0d6efd;color:#fff;padding:6px 10px;font:12px system-ui;border-radius:4px;box-shadow:0 2px 4px rgba(0,0,0,.3);cursor:pointer;z-index:3000';
-                        div.textContent='Änderungen aus anderem Tab geladen – Aktualisieren?';
-                        div.onclick=()=>{ try { window.appUI && window.appUI.refreshAll && window.appUI.refreshAll(); } catch{} div.remove(); };
-                        document.body.appendChild(div);
-                        setTimeout(()=>{ div.style.transition='opacity .6s'; div.style.opacity='0'; setTimeout(()=>div.remove(),800); }, 8000);
-                    }
-                } else if (data.type==='lock-acquire'){
-                    if (!currentLockOwner){ announce('lock-granted', { to:data.from }); }
-                } else if (data.type==='lock-granted'){
-                    if (data.payload?.to===TAB_ID){ currentLockOwner = TAB_ID; announce('lock-claim'); showLockStatus(); }
-                } else if (data.type==='lock-claim'){
-                    if (currentLockOwner!==data.from){ currentLockOwner = data.from; showLockStatus(); }
-                }
-            });
-        }
-        setInterval(()=>{ claimLock(); showLockStatus(); }, 5000);
-        claimLock();
-        // Single-tab fallback: if no peer grants lock within 300ms, self-assign so UI is editable.
-        setTimeout(()=>{
-            if (!currentLockOwner){
-                currentLockOwner = TAB_ID;
-                showLockStatus();
-                try { 
-                    console.info('[lock] self-assigned (no competing tabs detected)'); 
-                    // Also explicitly enable the generate button
-                    const btn = document.getElementById('generateScheduleBtn');
-                    if (btn && btn.disabled) {
-                        btn.disabled = false;
-                        console.info('[lock] enabled generateScheduleBtn');
-                    }
-                } catch {}
-            }
-        }, 300);
-        // Fallback via storage events if BroadcastChannel unavailable
-        window.addEventListener('storage', (e)=>{
-            if (!e.key || !appState.isDurableKey || !appState.isDurableKey(e.key)) return;
-            try { const v = localStorage.getItem(e.key); if (v){ appState[e.key] = JSON.parse(v); } } catch{}
-            if (!document.getElementById('externalUpdateNotice')){
-                const div = document.createElement('div');
-                div.id='externalUpdateNotice';
-                div.style.cssText='position:fixed;bottom:8px;left:8px;background:#0d6efd;color:#fff;padding:6px 10px;font:12px system-ui;border-radius:4px;box-shadow:0 2px 4px rgba(0,0,0,.3);cursor:pointer;z-index:3000';
-                div.textContent='Änderungen in anderem Tab – Aktualisieren?';
-                div.onclick=()=>{ try { window.appUI && window.appUI.refreshAll && window.appUI.refreshAll(); } catch{} div.remove(); };
-                document.body.appendChild(div);
-                setTimeout(()=>{ div.style.transition='opacity .6s'; div.style.opacity='0'; setTimeout(()=>div.remove(),800); }, 8000);
-            }
-        });
-        // View-only guard removed (locking disabled). If reintroduced later, add conditional here.
+        // View-only guard removed (locking disabled).
     // Seed demo data only once (if never seeded and no staff exist). Persist flag after first seed or after first manual modification.
     // Do not seed in production environment to avoid confusing real deployments.
     const DEMO_FLAG_KEY = 'demoSeeded';
