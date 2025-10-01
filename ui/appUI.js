@@ -212,12 +212,7 @@ export class AppUI {
   showHolidaysPopup(){
     this.fetchAndShowHolidays().catch(()=>{
       // fallback to local modal if fetch fails
-      if (window.__openModal) {
-        window.__openModal('holidaysModal');
-      } else {
-        const modal = document.getElementById('holidaysModal');
-        if (modal){ modal.classList.add('open'); document.body.classList.add('no-scroll'); }
-      }
+      try { window.modalManager ? window.modalManager.open('holidaysModal') : window.showModal?.('holidaysModal'); } catch(e){ console.warn('[AppUI] fallback open modal failed', e); }
       this.initHolidays();
     });
   }
@@ -309,7 +304,7 @@ export class AppUI {
       alert(`Fehler beim Laden der Feiertage für ${year}. Bitte versuchen Sie es später erneut.`);
     }
   // Open modal and render
-  if (window.__openModal) window.__openModal('holidaysModal'); else { const m=document.getElementById('holidaysModal'); if(m){ m.classList.add('open'); document.body.classList.add('no-scroll'); } }
+  try { window.modalManager ? window.modalManager.open('holidaysModal') : window.showModal?.('holidaysModal'); } catch(e){ console.warn('[AppUI] open holidaysModal failed', e); }
     this.initHolidays();
   // Also refresh availability grid if visible
   try { this.handleAvailabilityDisplay(); } catch {}

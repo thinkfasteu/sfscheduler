@@ -116,7 +116,7 @@ export class EventHandler {
     try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
         
     this.ui.refreshDisplay();
-    if (window.__closeModal) window.__closeModal('swapModal'); else { modal?.classList.remove('open'); document.body.classList.remove('no-scroll'); }
+    try { window.modalManager ? window.modalManager.close('swapModal') : window.closeModal?.('swapModal'); } catch(e){ console.warn('[EventHandler] close swapModal failed', e); }
     }
 
     async generateSchedule() {

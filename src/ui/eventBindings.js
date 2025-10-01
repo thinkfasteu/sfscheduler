@@ -83,16 +83,16 @@ function __initEventBindings(){
   bind('addOtherStaffBtn','click', ()=> window.addOtherStaff && window.addOtherStaff());
   bind('addOtherVacationPeriodBtn','click', ()=> window.addOtherVacationPeriod && window.addOtherVacationPeriod());
   // Holidays modal
-  bind('holidaysModalCloseBtn','click', ()=> { const m=document.getElementById('holidaysModal'); if (!m) return; if (window.__modalA11y?.closeModal) window.__modalA11y.closeModal(m); else { m.classList.remove('open'); document.body.classList.remove('no-scroll'); } });
+  bind('holidaysModalCloseBtn','click', ()=> { try { window.modalManager ? window.modalManager.close('holidaysModal') : window.closeModal?.('holidaysModal'); } catch(e){ console.warn('[eventBindings] close holidaysModal failed', e); } });
   bind('addHolidayBtn','click', ()=> window.addHoliday && window.addHoliday());
   bind('addIcsSourceBtn','click', ()=> window.addIcsSource && window.addIcsSource());
   bind('refreshAcademicTermsBtn','click', ()=> window.refreshAcademicTerms && window.refreshAcademicTerms());
   // Swap modal
-  bind('swapModalCloseBtn','click', ()=> { const m=document.getElementById('swapModal'); if (!m) return; if (window.__modalA11y?.closeModal) window.__modalA11y.closeModal(m); else { m.classList.remove('open'); document.body.classList.remove('no-scroll'); } });
+  bind('swapModalCloseBtn','click', ()=> { try { window.modalManager ? window.modalManager.close('swapModal') : window.closeModal?.('swapModal'); } catch(e){ console.warn('[eventBindings] close swapModal failed', e); } });
   bind('executeSwapBtn','click', ()=> window.executeSwap && window.executeSwap());
   bind('executeAssignBtn','click', ()=> window.executeAssign && window.executeAssign());
   // Search modal
-  bind('searchModalCloseBtn','click', ()=> { const m=document.getElementById('searchModal'); if (!m) return; if (window.__modalA11y?.closeModal) window.__modalA11y.closeModal(m); else { m.classList.remove('open'); document.body.classList.remove('no-scroll'); } });
+  bind('searchModalCloseBtn','click', ()=> { try { window.modalManager ? window.modalManager.close('searchModal') : window.closeModal?.('searchModal'); } catch(e){ console.warn('[eventBindings] close searchModal failed', e); } });
   bind('executeSearchAssignBtn','click', ()=> window.executeSearchAssign && window.executeSearchAssign());
   // Backup / Restore
   bind('exportBackupBtn','click', ()=> window.__backup && window.__backup.export());

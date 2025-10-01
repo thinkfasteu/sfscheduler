@@ -16,27 +16,97 @@ export class ScheduleUI {
     if (!window.__perf) window.__perf = {}; // lightweight counters
     window.__perf.calendarFullRenders = window.__perf.calendarFullRenders || 0;
     window.__perf.calendarDiffUpdates = window.__perf.calendarDiffUpdates || 0;
+        this._delegatesBound = false; // ensure we bind global delegation once
         this.setupTabs();
         // Expose modal helpers if not already present (scoped to this file's lifecycle)
         if (!window.__uiModalHelpersInstalled) {
             window.__uiModalHelpersInstalled = true;
-            window.openModal = function openModal(id){
+            // Maintain a stack for focus restoration
+            window.__modalFocusStack = [];
+            const FOCUSABLE_SELECTOR = 'a[href], area[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), iframe, object, embed, [tabindex]:not([tabindex="-1"]), [contenteditable]';
+            const trapFocus = (modal) => {
+                const nodes = Array.from(modal.querySelectorAll(FOCUSABLE_SELECTOR)).filter(el=>el.offsetParent!==null);
+                if (!nodes.length) return;
+                let first = nodes[0];
+                let last = nodes[nodes.length-1];
+                const handler = (e) => {
+                    if (e.key !== 'Tab') return;
+                    if (e.shiftKey){
+                        if (document.activeElement === first){ e.preventDefault(); last.focus(); }
+                    } else {
+                        if (document.activeElement === last){ e.preventDefault(); first.focus(); }
+                    }
+                };
+                modal.__focusHandler = handler;
+                modal.addEventListener('keydown', handler);
+            };
+            const releaseFocus = (modal) => {
+                if (modal?.__focusHandler) modal.removeEventListener('keydown', modal.__focusHandler);
+            };
+            window.showModal = function showModal(id, opts={}){
                 const m = document.getElementById(id);
-                if (!m) return;
+                if (!m){ console.warn('[showModal] missing modal', id); return; }
+                // Record previously focused element
+                window.__modalFocusStack.push({ id, el: document.activeElement });
                 m.classList.add('open');
+                m.setAttribute('aria-modal','true');
+                m.setAttribute('role', m.getAttribute('role')||'dialog');
                 document.body.classList.add('no-scroll');
                 document.getElementById('scheduleChecklistRoot')?.classList.add('modal-open');
+                // Ensure focus sentinels (always enabled per design)
+                if (!m.__sentinels){
+                    const makeSentinel = (pos) => {
+                        const s = document.createElement('div');
+                        s.className = 'sr-only focus-sentinel';
+                        s.tabIndex = 0;
+                        s.dataset.sentinel = pos;
+                        return s;
+                    };
+                    const start = makeSentinel('start');
+                    const end = makeSentinel('end');
+                    m.prepend(start);
+                    m.appendChild(end);
+                    const focusables = () => Array.from(m.querySelectorAll(FOCUSABLE_SELECTOR)).filter(el=> el.offsetParent!==null && !el.classList.contains('focus-sentinel'));
+                    start.addEventListener('focus', ()=> {
+                        const f = focusables();
+                        if (f.length) f[f.length-1].focus(); else m.focus();
+                    });
+                    end.addEventListener('focus', ()=> {
+                        const f = focusables();
+                        if (f.length) f[0].focus(); else m.focus();
+                    });
+                    m.__sentinels = { start, end };
+                }
+                // Move focus to first focusable or modal itself
+                const focusable = m.querySelector(FOCUSABLE_SELECTOR);
+                if (focusable) focusable.focus(); else m.setAttribute('tabindex','-1'), m.focus();
+                trapFocus(m);
+                if (opts.onOpen) { try { opts.onOpen(m); } catch(e){ console.warn('[showModal:onOpen]', e); } }
             };
-            window.closeModal = function closeModal(id){
+            // Backward compatible aliases
+            window.openModal = function openModal(id, opts){ return window.showModal(id, opts); };
+            window.__openModal = window.openModal; // canonical
+            window.hideModal = function hideModal(id){ return window.closeModal(id); };
+            window.closeModal = function closeModal(id, opts={}){
                 const m = document.getElementById(id);
                 if (!m) return;
+                releaseFocus(m);
                 m.classList.remove('open');
+                m.removeAttribute('aria-modal');
+                // Restore focus to previous element if top of stack
+                const stack = window.__modalFocusStack;
+                let prev; if (stack && stack.length){
+                    while(stack.length){ const top = stack.pop(); if (top.id === id){ prev = top.el; break; } }
+                }
                 const anyOpen = !!document.querySelector('.modal.open');
                 if (!anyOpen){
                     document.body.classList.remove('no-scroll');
                     document.getElementById('scheduleChecklistRoot')?.classList.remove('modal-open');
                 }
+                if (prev && typeof prev.focus==='function') setTimeout(()=>prev.focus(), 30);
+                if (opts.onClose){ try { opts.onClose(m); } catch(e){ console.warn('[closeModal:onClose]', e); } }
             };
+            window.__closeModal = window.closeModal;
             // Global escape handler to close the top-most modal
             window.addEventListener('keydown', (e)=>{
                 if (e.key === 'Escape'){ // close last opened modal
@@ -48,11 +118,28 @@ export class ScheduleUI {
                     }
                 }
             });
+            // Click outside to close (optional)
+            window.addEventListener('click', (e)=>{
+                const open = document.querySelectorAll('.modal.open[data-backdrop-close="true"]');
+                if (!open.length) return;
+                open.forEach(m => {
+                    if (!m.contains(e.target)){
+                        window.closeModal(m.id);
+                    }
+                });
+            });
             // Bind close buttons once DOM likely loaded; if not present yet, defer a tick
             const bindModalCloseButtons = () => {
-                document.getElementById('swapModalCloseBtn')?.addEventListener('click', ()=> closeModal('swapModal'));
-                document.getElementById('searchModalCloseBtn')?.addEventListener('click', ()=> closeModal('searchModal'));
-                document.getElementById('holidaysModalCloseBtn')?.addEventListener('click', ()=> closeModal('holidaysModal'));
+                document.querySelectorAll('[data-modal-close]').forEach(btn => {
+                    btn.addEventListener('click', ()=>{
+                        const target = btn.getAttribute('data-modal-close') || btn.closest('.modal')?.id;
+                        if (target) window.closeModal(target);
+                    });
+                });
+                // Legacy ids
+                document.getElementById('swapModalCloseBtn')?.addEventListener('click', ()=> window.closeModal('swapModal'));
+                document.getElementById('searchModalCloseBtn')?.addEventListener('click', ()=> window.closeModal('searchModal'));
+                document.getElementById('holidaysModalCloseBtn')?.addEventListener('click', ()=> window.closeModal('holidaysModal'));
             };
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', bindModalCloseButtons, { once:true });
@@ -106,6 +193,39 @@ export class ScheduleUI {
         console.log('Add vacation period clicked');
     }
 
+    // Compute canonical day type using latest holiday + weekend logic
+    computeDayType(dateStr){
+        try {
+            const hol = this.getHolidayName(dateStr);
+            if (hol) return 'holiday';
+            const d = parseYMD(dateStr).getDay();
+            if (d===0 || d===6) return 'weekend';
+            return 'weekday';
+        } catch(e){ return 'weekday'; }
+    }
+
+    // Reclassify all cells of the current month after late holiday load
+    reclassifyMonthDayTypes(monthKey){
+        if (!monthKey) return [];
+        const nodes = Array.from(document.querySelectorAll(`.cal-body[data-date^="${monthKey}"]`));
+        const changed = [];
+        nodes.forEach(n => {
+            const dateStr = n.getAttribute('data-date');
+            const prevType = n.getAttribute('data-type');
+            const newType = this.computeDayType(dateStr);
+            if (prevType !== newType){
+                n.setAttribute('data-type', newType);
+                changed.push({ dateStr, from: prevType, to: newType });
+            }
+        });
+        if (changed.length){
+            console.log(`[reclassifyMonthDayTypes] ${changed.length} day(s) changed`, changed.slice(0,5));
+            // Re-render assignments for changed dates (ensure shift set matches)
+            changed.forEach(ch => this.updateDay(ch.dateStr));
+        }
+        return changed;
+    }
+
     ensureHolidaysLoaded(year) {
         // Check if holidays are already loaded for this year
         const yearStr = String(year);
@@ -144,7 +264,12 @@ export class ScheduleUI {
                             console.log(`❌ October 3rd NOT found in loaded data`);
                         }
                         // Update calendar cells to show newly loaded holiday badges
-                        console.log(`Calling updateHolidayBadges for ${year}...`);
+                        console.log(`Calling updateHolidayBadges + reclassification for ${year}...`);
+                        try {
+                            if (this.currentCalendarMonth && this.currentCalendarMonth.startsWith(String(year))){
+                                this.reclassifyMonthDayTypes(this.currentCalendarMonth);
+                            }
+                        } catch(e){ console.warn('[ensureHolidaysLoaded] reclassify failed', e); }
                         this.updateHolidayBadges(year);
                     })
                     .catch(err => {
@@ -267,6 +392,7 @@ export class ScheduleUI {
     }
 
     updateCalendarFromSelect() {
+        console.log('[scheduleUI] updateCalendarFromSelect:start');
         const el = document.getElementById('scheduleMonth');
         const month = el?.value;
         if (!month) return;
@@ -326,27 +452,18 @@ export class ScheduleUI {
         }
         html += '</div>';
     grid.innerHTML = html;
+    // Set current month BEFORE attempting holiday badge update so filter works
+    this.currentCalendarMonth = month;
     // Kick off holiday load after initial paint (non-blocking)
     try { this.ensureHolidaysLoaded(y); } catch(e){ console.warn('ensureHolidaysLoaded failed', e); }
     // Immediately apply any already-known holiday badges from persisted state/service fallback
-    try { this.updateHolidayBadges(y); } catch(e){ /* non-fatal */ }
-        // Bind Feiertage button to open holidays modal
-        try {
-            document.getElementById('showHolidaysBtn')?.addEventListener('click', () => {
-                if (window.__openModal) window.__openModal('holidaysModal'); else openModal('holidaysModal');
-            });
-        } catch(e){ console.warn('[ScheduleUI] failed to bind Feiertage button', e); }
-    this.currentCalendarMonth = month;
+    try { this.updateHolidayBadges(y); } catch(e){ console.warn('[updateHolidayBadges] failed (initial render)', e); }
+    // Delegated listeners will handle toolbar buttons (bind once)
+    this.bindDelegatesOnce();
     window.__perf.calendarFullRenders++;
-        // Track a selected date for the search modal
-        let selectedDateForSearch = null;
-        const setSelectedDate = (dateStr) => { selectedDateForSearch = dateStr; };
-        // Open search modal button
-        document.getElementById('openSearchAssignBtn')?.addEventListener('click', ()=>{
-            const dateStr = selectedDateForSearch || document.querySelector('.cal-body[data-date]')?.getAttribute('data-date');
-            if (!dateStr){ alert('Bitte ein Datum im Kalender wählen.'); return; }
-            this.openSearchAssignModal(dateStr);
-        });
+        // Track a selected date for search modal (stored on instance)
+        this._selectedDateForSearch = null;
+        const setSelectedDate = (dateStr) => { this._selectedDateForSearch = dateStr; };
         // Recovery preview button
         const recoveryPreviewBtn = document.getElementById('recoveryPreviewBtn');
         const recoveryApplyBtn = document.getElementById('recoveryApplyBtn');
@@ -426,31 +543,7 @@ export class ScheduleUI {
             this.updateCalendarFromSelect();
         });
         // Click handlers
-    grid.querySelectorAll('.cal-body').forEach(cell => {
-            cell.addEventListener('click', () => {
-                const dateStr = cell.getAttribute('data-date');
-        setSelectedDate(dateStr);
-                this.openAssignModal(dateStr);
-            });
-            cell.addEventListener('dblclick', () => {
-                const dateStr = cell.getAttribute('data-date');
-        setSelectedDate(dateStr);
-                // Prefer first unassigned shift for that date
-                const [yy,mm,dd] = dateStr.split('-').map(Number);
-                const date = new Date(yy, mm-1, dd);
-                const isWeekend = [0,6].includes(date.getDay());
-                const holName = this.getHolidayName(dateStr);
-                const allShifts = Object.entries(SHIFTS).filter(([k,v]) => {
-                    if (holName) return v.type === 'holiday';
-                    if (isWeekend) return v.type === 'weekend';
-                    return v.type === 'weekday';
-                }).map(([k])=>k);
-                const monthKey = dateStr.substring(0,7);
-                const cur = window.appState?.scheduleData?.[monthKey]?.[dateStr]?.assignments || {};
-                const firstUnassigned = allShifts.find(s => !cur[s]);
-                this.openAssignModal(dateStr, firstUnassigned);
-            });
-        });
+    // Calendar cell clicks handled via delegation
 
     // Sync checkboxes from state for this month
     const exc = document.getElementById('studentExceptionCheckbox');
@@ -473,6 +566,83 @@ export class ScheduleUI {
                 this.setStatus('Synchronisiert ✓', true, false);
                 setTimeout(()=>{ this.clearStatus(); }, 900);
         }).catch((e)=>{ console.warn(e); this.clearStatus(); });
+        console.log('[scheduleUI] updateCalendarFromSelect:done');
+    }
+
+    bindDelegatesOnce(){
+        if (this._delegatesBound) return;
+        this._delegatesBound = true;
+        // Toolbar & calendar delegation
+        document.addEventListener('click', (e)=>{
+            const btn = e.target.closest('button');
+            if (btn){
+                const id = btn.id;
+                if (id === 'showHolidaysBtn'){
+                    try { (window.modalManager||window).open ? window.modalManager.open('holidaysModal') : window.showModal?.('holidaysModal'); }
+                    catch(err){ console.warn('[delegation] holidaysModal open failed', err); }
+                } else if (id === 'openSearchAssignBtn'){
+                    const dateStr = this._selectedDateForSearch || document.querySelector('.cal-body[data-date]')?.getAttribute('data-date');
+                    if (!dateStr){ alert('Bitte ein Datum im Kalender wählen.'); return; }
+                    this.openSearchAssignModal(dateStr);
+                } else if (id === 'recoveryPreviewBtn'){
+                    // The actual preview logic bound earlier is now moved into a method we can call
+                    if (typeof this._runRecoveryPreview === 'function') this._runRecoveryPreview();
+                } else if (id === 'recoveryApplyBtn'){
+                    if (typeof this._applyRecovery === 'function') this._applyRecovery();
+                } else if (id === 'generateScheduleBtn'){
+                    this.generateScheduleForCurrentMonth();
+                }
+            }
+            const body = e.target.closest('.cal-body[data-date]');
+            if (body){
+                const dateStr = body.getAttribute('data-date');
+                this._selectedDateForSearch = dateStr;
+                if (e.detail === 2){
+                    // double click -> open with first unassigned
+                    try {
+                        const [yy,mm,dd] = dateStr.split('-').map(Number);
+                        const dt = new Date(yy, mm-1, dd);
+                        const isWeekend = [0,6].includes(dt.getDay());
+                        const holName = this.getHolidayName(dateStr);
+                        const allShifts = Object.entries(SHIFTS).filter(([k,v]) => {
+                            if (holName) return v.type === 'holiday';
+                            if (isWeekend) return v.type === 'weekend';
+                            return v.type === 'weekday';
+                        }).map(([k])=>k);
+                        const monthKey = dateStr.substring(0,7);
+                        const cur = window.appState?.scheduleData?.[monthKey]?.[dateStr]?.assignments || {};
+                        const firstUnassigned = allShifts.find(s => !cur[s]);
+                        this.openAssignModal(dateStr, firstUnassigned);
+                    } catch(err){ console.warn('[delegation] dblclick openAssign failed', err); }
+                } else if (e.detail === 1){
+                    this.openAssignModal(dateStr);
+                }
+            }
+        }, true);
+    }
+
+    generateScheduleForCurrentMonth(){
+        const month = this.currentCalendarMonth;
+        if (!month){ console.warn('[generateSchedule] no current month'); return; }
+        if (!window.__TAB_CAN_EDIT){ console.warn('[generateSchedule] blocked: view-only mode'); return; }
+        try {
+            this.setStatus('Erzeuge Plan…', true);
+            // Ensure structure exists
+            const schedule = appState.scheduleData[month] || (appState.scheduleData[month] = {});
+            const engine = new SchedulingEngine(month);
+            const generated = engine.generateSchedule();
+            // Merge generated into state (basic replace)
+            appState.scheduleData[month] = generated;
+            appState.save?.();
+            this.renderAssignments(month);
+            this.renderWeekendReport(month);
+            this.setStatus('Plan erstellt ✓', true, false);
+            setTimeout(()=> this.clearStatus(), 1200);
+        } catch(e){
+            console.error('[generateSchedule] failed', e);
+            this.setStatus('Fehler bei Planerzeugung', true, false);
+            setTimeout(()=> this.clearStatus(), 1800);
+        }
     }
 
     async prehydrateAvailability(month){
@@ -512,7 +682,8 @@ export class ScheduleUI {
     }
     clearStatus(){ this.setStatus('', false); }
     disableScheduleControls(disabled=true, snapshot=null){
-        const ids = ['openSearchAssignBtn','recoveryPreviewBtn','recoveryApplyBtn','generateScheduleBtn','clearScheduleBtn','exportScheduleBtn','exportPdfBtn','printScheduleBtn'];
+        // Narrow set: only mutation-heavy controls are disabled during hydration
+        const ids = ['recoveryApplyBtn','generateScheduleBtn','clearScheduleBtn','exportScheduleBtn','exportPdfBtn','printScheduleBtn'];
         if (!snapshot){ snapshot = {}; }
         ids.forEach(id=>{ const el = document.getElementById(id); if (!el) return; if (disabled){ snapshot[id] = el.disabled; el.disabled = true; } else if (snapshot && id in snapshot){ el.disabled = snapshot[id]; } else { el.disabled = false; } });
         return snapshot;
@@ -892,7 +1063,7 @@ export class ScheduleUI {
                 delete schedule[dateStr].assignments[sh];
                 appState.save?.();
                 this.updateDay(dateStr);
-                if (window.__closeModal) window.__closeModal('swapModal'); else { modal.classList.remove('open'); document.body.classList.remove('no-scroll'); }
+                if (window.modalManager) window.modalManager.close('swapModal'); else window.closeModal?.('swapModal');
             };
         }
         // Stash selection into modal dataset for handler
@@ -942,7 +1113,7 @@ export class ScheduleUI {
         });
 
     // Show modal
-    if (window.__openModal) window.__openModal('swapModal'); else openModal('swapModal');
+    (window.modalManager||window).open ? window.modalManager.open('swapModal') : window.showModal?.('swapModal');
     }
 
     // New: Search & Assign dialog separate from availability tab
@@ -1093,12 +1264,12 @@ export class ScheduleUI {
                 delete schedule[dateStr].assignments[sh];
                 appState.save?.();
                 this.updateDay(dateStr);
-                if (window.__closeModal) window.__closeModal('searchModal'); else closeModal('searchModal');
+                if (window.modalManager) window.modalManager.close('searchModal'); else window.closeModal?.('searchModal');
             };
         }
         // Stash context
         modal.dataset.date = dateStr;
-    if (window.__openModal) window.__openModal('searchModal'); else openModal('searchModal');
+    (window.modalManager||window).open ? window.modalManager.open('searchModal') : window.showModal?.('searchModal');
         // Bind assign button
         const execBtn = document.getElementById('executeSearchAssignBtn');
     execBtn.onclick = async () => {
@@ -1151,8 +1322,8 @@ export class ScheduleUI {
             // Weekend report can change fairness stats; refresh only if weekend or holiday
             const dow = date.getDay();
             if (dow===0 || dow===6){ this.renderWeekendReport(month); }
-            if (window.__closeModal) window.__closeModal('searchModal'); else { modal.classList.remove('open'); document.body.classList.remove('no-scroll'); }
-            if (window.__closeModal) window.__closeModal('searchModal'); else closeModal('searchModal');
+            if (window.modalManager) window.modalManager.close('searchModal'); else window.closeModal?.('searchModal');
+            if (window.modalManager) window.modalManager.close('searchModal'); else window.closeModal?.('searchModal');
         };
     }
 }
