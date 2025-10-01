@@ -30,10 +30,10 @@ export class EventHandler {
 
         // Schedule generation handlers
         const generateBtn = document.getElementById('generateScheduleBtn');
-        console.log('[EventHandler] generateScheduleBtn found:', !!generateBtn, generateBtn);
+        console.log('[EventHandler] generateScheduleBtn found (delegated to ScheduleUI):', !!generateBtn);
         generateBtn?.addEventListener('click', () => {
-            console.log('[EventHandler] Generate Schedule button clicked');
-            this.generateSchedule();
+            console.warn('[DEPRECATED][EventHandler] generateScheduleBtn handler delegating to ScheduleUI.generateScheduleForCurrentMonth');
+            try { window.ui?.generateScheduleForCurrentMonth?.(); } catch(e){ console.warn('[EventHandler] delegation failed', e); }
         });
 
         document.getElementById('clearScheduleBtn')?.addEventListener('click', () => {
@@ -119,137 +119,7 @@ export class EventHandler {
     try { window.modalManager ? window.modalManager.close('swapModal') : window.closeModal?.('swapModal'); } catch(e){ console.warn('[EventHandler] close swapModal failed', e); }
     }
 
-    async generateSchedule() {
-        console.info('Schedule generation started');
-        const month = document.getElementById('scheduleMonth').value;
-        
-        if (!month) {
-            alert('Bitte wählen Sie einen Monat aus.');
-            return;
-        }
-        if (!month) {
-            alert('Bitte Monat auswählen');
-            return;
-        }
-        // UI: disable controls and show status
-        try { window.ui?.setStatus?.('Erstelle Dienstplan…', true); window.ui?.disableScheduleControls?.(true); } catch {}
-        // Ensure availability is hydrated from backend before generation (if using remote store)
-        const ensureAvailabilityHydrated = async () => {
-            try {
-                if (!window.__services) {
-                    const m = await import('../src/services/index.js');
-                    window.__services = m.createServices({});
-                }
-                await window.__services.ready;
-                const usingRemote = !!(window.__services?.store && (window.__services.store.remote || window.__services.store instanceof (await import('../src/storage/SupabaseAdapter.js')).SupabaseAdapter));
-                if (!usingRemote) return; // local mode: nothing to hydrate
-                const staffList = window.__services.staff?.list() || [];
-                const [y,m] = month.split('-').map(Number);
-                const fromDate = `${y}-${String(m).padStart(2,'0')}-01`;
-                const toDate = `${y}-${String(m).padStart(2,'0')}-${String(new Date(y, m, 0).getDate()).padStart(2,'0')}`;
-                const avail = window.__services.availability;
-                if (!avail || !staffList.length) return;
-                // Kick off hydration sequentially to avoid overwhelming backend; ignore results (HydratingStore merges into appState)
-                for (const s of staffList) {
-                    try { await avail.listRange(s.id, fromDate, toDate); } catch {}
-                }
-            } catch(e){ console.warn('Availability hydration skipped', e); }
-        };
-        // Checklist start (driven by real events)
-        try {
-            if (window.__services?.uiChecklist && document.getElementById('showChecklistToggle')?.checked){
-                window.__services.uiChecklist.start({ month, mode:'generate' });
-            }
-            window.__services?.events?.emit('schedule:validate:start',{ month });
-        } catch {}
-        try {
-            // Await availability hydration first
-            const t0 = performance.now?.()||0;
-            await ensureAvailabilityHydrated();
-            const t1 = performance.now?.()||0; if ((t1-t0)>5) console.info(`[gen] availability hydrated in ${Math.round(t1-t0)}ms`);
-            
-            // Start monitoring schedule generation
-            const genStartTime = performance.now();
-            let generationSuccessful = false;
-            let unfilledShifts = 0;
-            let constraintViolations = 0;
-            
-            const engine = new SchedulingEngine(month);
-            const schedule = engine.generateSchedule();
-            
-            // Count unfilled shifts for monitoring
-            Object.values(schedule.data).forEach(day => {
-                const shifts = day.shifts || ['early', 'midday', 'evening', 'closing'];
-                const assignments = day.assignments || {};
-                shifts.forEach(shift => {
-                    if (!assignments[shift]) {
-                        unfilledShifts++;
-                    }
-                });
-            });
-            
-            // Fairness + overtime validations (reuse validator for flag extraction)
-            let flags=[]; try {
-                const validator = new (window.ScheduleValidator||window.ScheduleValidatorImported||require('../validation.js').ScheduleValidator)(month); // fallback dynamic
-                const { issues } = validator.validateScheduleWithIssues(schedule.data);
-                const sample = [];
-                Object.values(issues).forEach(arr=>{ (arr||[]).forEach(it=> sample.push(it)); });
-                flags = sample.slice(0,12).map(i=> i.message || `${i.type}`);
-                constraintViolations = sample.length;
-                
-                // Record validation issues for monitoring
-                if (window.__services?.monitoring) {
-                    window.__services.monitoring.recordValidationIssues(issues);
-                }
-                
-                window.__services?.uiChecklist?.addFlags(flags);
-            } catch {}
-            
-            generationSuccessful = true;
-            
-            // Record performance metrics
-            const genEndTime = performance.now();
-            const generationDuration = genEndTime - genStartTime;
-            if (window.__services?.monitoring) {
-                window.__services.monitoring.recordPerformance('schedule_generation', generationDuration, {
-                    success: generationSuccessful,
-                    unfilledShifts,
-                    constraintViolations,
-                    month
-                });
-            }
-            
-            window.__services?.events?.emit('schedule:validate:done',{ month, flags });
-            window.__services?.uiChecklist?.updateStep('validate','ok');
-            window.__services?.events?.emit('schedule:fairness:start',{ month });
-            window.__services?.uiChecklist?.updateStep('fairness','ok');
-            window.__services?.events?.emit('schedule:overtime:start',{ month });
-            window.__services?.uiChecklist?.updateStep('overtime','ok');
-            // Persist without calling schedule.save() (which references saveData)
-            appState.scheduleData[month] = schedule.data;
-            appState.save();
-            window.__services?.events?.emit('schedule:save:done',{ month });
-            window.__services?.uiChecklist?.updateStep('save','ok');
-            try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
-            window.__services?.events?.emit('schedule:reindex:start',{ month });
-            window.__services?.uiChecklist?.updateStep('reindex','ok');
-            window.__services?.uiChecklist?.complete({ message:'Plan erstellt', month, flagsCount: (flags||[]).length });
-            window.__services?.events?.emit('schedule:complete',{ month, flagsCount:(flags||[]).length });
-            // Re-render calendar and assignments
-            if (typeof this.ui.updateCalendarFromSelect === 'function') {
-                this.ui.updateCalendarFromSelect();
-            } else {
-                this.ui.refreshDisplay();
-            }
-            window.__toast && window.__toast('Dienstplan erstellt', { small:true });
-        } catch (e) {
-            console.error('Schedule generation failed', e);
-            alert('Fehler beim Erstellen des Dienstplans. Details in der Konsole.');
-            try { window.__services?.uiChecklist?.updateStep('validate','error'); window.__services?.uiChecklist?.complete({ message:'Fehler bei Erstellung' }); } catch {}
-            window.__toast && window.__toast('Fehler bei der Erstellung', { variant:'error', small:true });
-        }
-        finally { try { window.ui?.clearStatus?.(); window.ui?.disableScheduleControls?.(false); } catch {} }
-    }
+    async generateSchedule() { console.warn('[DEPRECATED][EventHandler.generateSchedule] Use ScheduleUI.generateScheduleForCurrentMonth instead.'); return window.ui?.generateScheduleForCurrentMonth?.(); }
 
     clearSchedule() {
         const month = document.getElementById('scheduleMonth').value;

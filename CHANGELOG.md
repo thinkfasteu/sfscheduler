@@ -158,6 +158,46 @@ WHERE weekly_hours_min_practical IS NULL OR weekly_hours_max_practical IS NULL;
 - **Enhanced rest-period calculation** with optimized historical data filtering
 - **Improved scoring algorithm** integrating practical hour limits
 - **Performance tracking** with sub-5-second generation targets for 50+ staff
+
+### UI & Scheduling Engine Hardening (Current Unreleased Work)
+
+#### 🗓 Holiday & Day-Type Consistency
+- Unified canonical day-type resolution via `computeDayType()` + `getHolidayName()`; late-loaded holidays trigger reclassification (`reclassifyMonthDayTypes`) to keep shift sets aligned.
+- Added `updateHolidayBadgesExt(year, { retype:true })` to repaint badges and retype day cells after service hydration (fixes missing October 3rd badge edge case).
+
+#### ⚙️ Single Generation Entry Path
+- All schedule creation now flows through `ScheduleUI.generateScheduleForCurrentMonth()` with an in-flight guard and legacy global bridge preserved for older bindings.
+- Availability hydration enforced pre-generation when remote store is active.
+
+#### 🛠 Recovery Workflow Refactor
+- Extracted recovery gap detection and fill preview into `_collectCriticalGaps`, `_runRecoveryPreview`, `_applyRecovery` prototype methods.
+- Added in-flight prevention + timing logs (`[recovery][preview]` / `[recovery][apply]`).
+
+#### ❗ Invalid Shift Highlighting
+- Cells now flag assignments whose shift key no longer applies to the recomputed day type (`invalid-shift` + `badge-error`).
+- Ensures visibility when holiday/weekend status changes after initial assignment.
+
+#### ♿ Modal Accessibility & Routing
+- Focus trap, sentinels, automatic `aria-labelledby`, and backdrop/escape close standardized.
+- Wrapped existing `modalManager.open/close` to ensure a11y instrumentation always applied.
+
+#### 🪪 Observability & Diagnostics
+- Phase logs added for calendar render steps (start, holidays-initial, done).
+- Console instrumentation for generation duration and recovery candidate counts.
+- Added `runA11yAudit()` utility (prototype) to detect missing roles / labels (not auto-run yet).
+
+#### 🔌 Event Delegation Progress
+- Toolbar, calendar day clicks, and recovery buttons now delegated at document level (reduces per-render listeners).
+- Remaining per-pill assignment listeners slated for delegation in upcoming refinement.
+
+#### 🧼 Misc Improvements
+- Removed duplicate search modal close call.
+- Normalized modal open/close behavior; deprecated legacy `__openModal`/`__closeModal` with warnings.
+
+#### Planned Next (Not Yet Included)
+- Delegate assignment pill & swap button events.
+- Integrate busy state (aria-busy) around generation, hydration, and recovery.
+- Execute and surface results of `runA11yAudit()`.
 - **Memory usage optimization** for extended operational sessions
 
 ### Documentation Updates
