@@ -173,6 +173,7 @@ function initApp(){
     const scheduleUI = new ScheduleUI('#scheduleContent');
     // Render UI first so buttons/inputs exist
     scheduleUI.refreshDisplay();
+    try { scheduleUI.ensureGlobalGenerateBridge?.(); } catch(e){ console.warn('[main] generate bridge init failed', e); }
     // Then bind handlers to the rendered elements
     console.log('[main.js] About to create EventHandler');
     const eventHandler = new EventHandler(scheduleUI);

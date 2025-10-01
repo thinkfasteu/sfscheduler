@@ -51,6 +51,19 @@ export class ScheduleUI {
                 m.classList.add('open');
                 m.setAttribute('aria-modal','true');
                 m.setAttribute('role', m.getAttribute('role')||'dialog');
+                // A11y: auto-bind aria-labelledby if absent
+                try {
+                    if (!m.hasAttribute('aria-labelledby')) {
+                        let titleEl = m.querySelector('[data-modal-title]') || m.querySelector('h1,h2,h3,h4,h5') || document.getElementById(`${id}Title`);
+                        if (titleEl){
+                            if (!titleEl.id) titleEl.id = `${id}__title`;
+                            m.setAttribute('aria-labelledby', titleEl.id);
+                        }
+                    }
+                    // Add role=document to a primary content wrapper if present
+                    const content = m.querySelector('.modal-content');
+                    if (content && !content.hasAttribute('role')) content.setAttribute('role','document');
+                } catch(a11yErr){ /* non-fatal */ }
                 document.body.classList.add('no-scroll');
                 document.getElementById('scheduleChecklistRoot')?.classList.add('modal-open');
                 // Ensure focus sentinels (always enabled per design)
@@ -107,6 +120,42 @@ export class ScheduleUI {
                 if (opts.onClose){ try { opts.onClose(m); } catch(e){ console.warn('[closeModal:onClose]', e); } }
             };
             window.__closeModal = window.closeModal;
+            // If a modalManager exists, normalize its open/close to always use our a11y wrappers
+            try {
+                if (window.modalManager && !window.modalManager.__wrappedForA11y){
+                    const mm = window.modalManager;
+                    const origOpen = mm.open ? mm.open.bind(mm) : null; // keep for diagnostics if needed
+                    const origClose = mm.close ? mm.close.bind(mm) : null;
+                    mm.open = function(id, opts){
+                        // Always route through showModal so focus trap & sentinels apply
+                        window.showModal(id, opts||{});
+                    };
+                    mm.close = function(id, opts){
+                        window.closeModal(id, opts||{});
+                    };
+                    mm.__wrappedForA11y = { origOpen: !!origOpen, origClose: !!origClose };
+                    console.info('[modalManager] wrapped for unified a11y modal handling');
+                }
+            } catch(modWrapErr){ console.warn('[modalManager] wrap failed', modWrapErr); }
+            // Deprecation warnings for legacy globals
+            try {
+                if (!window.__openModal.__deprecatedWrapped){
+                    const _orig = window.__openModal;
+                    window.__openModal = function(...args){
+                        console.warn('[DEPRECATED] __openModal: use modalManager.open(id) or showModal(id).');
+                        return _orig.apply(this,args);
+                    };
+                    window.__openModal.__deprecatedWrapped = true;
+                }
+                if (!window.__closeModal.__deprecatedWrapped){
+                    const _origC = window.__closeModal;
+                    window.__closeModal = function(...args){
+                        console.warn('[DEPRECATED] __closeModal: use modalManager.close(id) or closeModal(id).');
+                        return _origC.apply(this,args);
+                    };
+                    window.__closeModal.__deprecatedWrapped = true;
+                }
+            } catch(deprecWrapErr){ /* ignore */ }
             // Global escape handler to close the top-most modal
             window.addEventListener('keydown', (e)=>{
                 if (e.key === 'Escape'){ // close last opened modal
@@ -184,7 +233,8 @@ export class ScheduleUI {
         }
         document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
         document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-        targetContent.classList.add('active');
+                targetContent.classList.add('active');
+                this.updateCalendarFromSelect(); // Ensure calendar updates when tab is shown
         targetButton.classList.add('active');
     }
 
@@ -310,6 +360,11 @@ export class ScheduleUI {
         } catch(e){ /* swallow */ }
         return window.appState?.holidays?.[yearStr]?.[dateStr] || null;
     }
+    // Canonical shift resolution based on computed day type
+    getApplicableShifts(dateStr){
+        const type = this.computeDayType(dateStr);
+        return Object.entries(SHIFTS).filter(([_,v])=>v.type===type).map(([k])=>k);
+    }
 
     updateHolidayBadges(year) {
         // Paint holiday badges only for the currently rendered month to avoid log spam
@@ -331,6 +386,34 @@ export class ScheduleUI {
                 calDate.innerHTML = `${dayText} <span class="badge">${holidayName}</span>`;
             }
         }
+    }
+
+    // Extended version with options
+    updateHolidayBadgesExt(year, { retype=false }={}){
+        const yearStr = String(year);
+        const svcMap = window.holidayService?.getHolidaysForYear?.(Number(year)) || {};
+        const holidays = Object.keys(svcMap).length ? svcMap : (window.appState?.holidays?.[yearStr] || {});
+        const monthKey = this.currentCalendarMonth;
+        if (!monthKey) return 0;
+        if (retype){
+            try { this.reclassifyMonthDayTypes(monthKey); } catch(e){ console.warn('[holiday][retype] failed', e); }
+        }
+        const entries = Object.entries(holidays).filter(([dateStr]) => dateStr.startsWith(monthKey));
+        console.log(`[updateHolidayBadges] Painting ${entries.length} holiday(s) for ${monthKey}${retype?' (after retype)':''}`);
+        let painted=0;
+        for (const [dateStr, holidayName] of entries) {
+            const calBody = document.querySelector(`.cal-body[data-date="${dateStr}"]`);
+            if (!calBody) continue;
+            const calCell = calBody.parentElement;
+            const calDate = calCell?.querySelector('.cal-date');
+            if (!calDate) continue;
+            if (!calDate.querySelector('.badge')) {
+                const dayText = calDate.textContent.trim();
+                calDate.innerHTML = `${dayText} <span class="badge">${holidayName}</span>`;
+                painted++;
+            }
+        }
+        return painted;
     }
 
     refreshDisplay() {
@@ -392,12 +475,13 @@ export class ScheduleUI {
     }
 
     updateCalendarFromSelect() {
-        console.log('[scheduleUI] updateCalendarFromSelect:start');
+        console.log('[scheduleUI][phase] start updateCalendarFromSelect');
         const el = document.getElementById('scheduleMonth');
         const month = el?.value;
         if (!month) return;
         // If calendar already rendered for this month, skip full rebuild – just refresh assignments + weekend report
         if (this.currentCalendarMonth === month && document.getElementById('scheduleGrid')) {
+            console.log('[scheduleUI][phase] fast-refresh existing month');
             this.renderAssignments(month);
             this.renderWeekendReport(month);
             return;
@@ -418,6 +502,9 @@ export class ScheduleUI {
         let html = '<div id="scheduleStatus" class="status-line hidden"><span class="spinner"></span><span id="scheduleStatusText">Synchronisiere Verfügbarkeiten…</span></div>'
             + '<div class="flex flex-wrap jc-end gap-8 mb-8">'
             + '<button class="btn btn-secondary" id="showHolidaysBtn">Feiertage</button>'
+            // If base page markup already supplies generate/clear/etc buttons, we do not duplicate them here.
+            + (!document.getElementById('generateScheduleBtn') ? '<button class="btn btn-success" id="generateScheduleBtn">Dienstplan erstellen</button>' : '')
+            + (!document.getElementById('clearScheduleBtn') ? '<button class="btn btn-danger" id="clearScheduleBtn">Plan löschen</button>' : '')
             + '<button class="btn btn-secondary" id="openSearchAssignBtn">Suchen & Zuweisen (Datum wählen)</button>'
             + '<button class="btn btn-secondary" id="recoveryPreviewBtn" title="Offene kritische Schichten anzeigen">Lücken prüfen</button>'
             + '<button class="btn btn-secondary hidden" id="recoveryApplyBtn" title="Versuchen kritische Lücken zu füllen (mit gelockerten Fairness-Penalties)">Lücken füllen</button>'
@@ -454,94 +541,15 @@ export class ScheduleUI {
     grid.innerHTML = html;
     // Set current month BEFORE attempting holiday badge update so filter works
     this.currentCalendarMonth = month;
-    // Kick off holiday load after initial paint (non-blocking)
-    try { this.ensureHolidaysLoaded(y); } catch(e){ console.warn('ensureHolidaysLoaded failed', e); }
-    // Immediately apply any already-known holiday badges from persisted state/service fallback
-    try { this.updateHolidayBadges(y); } catch(e){ console.warn('[updateHolidayBadges] failed (initial render)', e); }
+    console.log('[scheduleUI][phase] holidays-initial');
+    try { this.ensureHolidaysLoaded(y); } catch(e){ console.warn('[phase] ensureHolidaysLoaded failed', e); }
+    try { this.updateHolidayBadgesExt(y, { retype:true }); } catch(e){ console.warn('[phase] updateHolidayBadges initial failed', e); }
     // Delegated listeners will handle toolbar buttons (bind once)
     this.bindDelegatesOnce();
     window.__perf.calendarFullRenders++;
         // Track a selected date for search modal (stored on instance)
         this._selectedDateForSearch = null;
-        const setSelectedDate = (dateStr) => { this._selectedDateForSearch = dateStr; };
-        // Recovery preview button
-        const recoveryPreviewBtn = document.getElementById('recoveryPreviewBtn');
-        const recoveryApplyBtn = document.getElementById('recoveryApplyBtn');
-        const recoveryReport = document.getElementById('recoveryReport');
-        const monthKey = month;
-        const collectCriticalGaps = () => {
-            const sched = appState.scheduleData?.[monthKey] || {};
-            const gaps = [];
-            Object.entries(sched).forEach(([dateStr, day])=>{
-                const assignments = day?.assignments || {};
-                // Determine critical shifts for date (mirrors engine logic)
-                const allShifts = Object.entries(SHIFTS).filter(([k,v])=>{
-                    const d = parseYMD(dateStr).getDay();
-                    if (v.type==='weekday'){
-                        if (k==='evening' && (APP_CONFIG?.EVENING_OPTIONAL_DAYS||[]).includes(d)) return true; // still list it; critical decided below
-                        return true;
-                    }
-                    return v.type==='weekend' || v.type==='holiday';
-                }).map(([k])=>k);
-                allShifts.forEach(sh => {
-                    const d = parseYMD(dateStr).getDay();
-                    const isCritical = !(sh==='evening' && (APP_CONFIG?.EVENING_OPTIONAL_DAYS||[]).includes(d));
-                    if (!isCritical) return; // only critical gaps
-                    if (!assignments[sh]) gaps.push({ dateStr, shiftKey: sh });
-                });
-            });
-            return gaps.sort((a,b)=> a.dateStr.localeCompare(b.dateStr));
-        };
-        const dryRunRecovery = () => {
-            const gaps = collectCriticalGaps();
-            if (!gaps.length){ recoveryReport.innerHTML = '<em>Keine offenen kritischen Schichten.</em>'; recoveryApplyBtn.classList.add('hidden'); return; }
-            const engine = new SchedulingEngine(monthKey);
-            const preview = [];
-            gaps.forEach(g => {
-                const weekNum = engine.getWeekNumber(parseYMD(g.dateStr));
-                const scheduledToday = new Set(Object.values(appState.scheduleData?.[monthKey]?.[g.dateStr]?.assignments||{}));
-                let cands = engine.findCandidatesForShift(g.dateStr, g.shiftKey, scheduledToday, weekNum);
-                // Relax fairness: neutralize weekend & typical day penalties by boosting negatives upward minimally
-                cands = cands.map(c => ({ ...c, adjScore: c.score < 0 ? Math.max(c.score, (APP_CONFIG?.RECOVERY_MIN_SCORE_FLOOR||-800)) : c.score }));
-                cands.sort((a,b)=> b.adjScore - a.adjScore);
-                const best = cands[0];
-                if (best && best.adjScore >= (APP_CONFIG?.RECOVERY_MIN_SCORE_FLOOR||-800)){
-                    preview.push({ ...g, staffId: best.staff.id, name: best.staff.name, score: best.score, adjScore: best.adjScore });
-                }
-            });
-            if (!preview.length){ recoveryReport.innerHTML = '<em>Keine geeigneten Kandidaten für offene kritische Schichten.</em>'; recoveryApplyBtn.classList.add('hidden'); return; }
-            recoveryReport.innerHTML = '<strong>Vorschau Füllung:</strong><br/>' + preview.map(p=> `${p.dateStr} – ${p.shiftKey} → ${p.name} (Score ${Math.round(p.score)} / adj ${Math.round(p.adjScore)})`).join('<br/>');
-            recoveryApplyBtn.classList.remove('hidden');
-            recoveryApplyBtn.dataset.preview = JSON.stringify(preview);
-        };
-        recoveryPreviewBtn?.addEventListener('click', dryRunRecovery);
-        recoveryApplyBtn?.addEventListener('click', ()=>{
-            const raw = recoveryApplyBtn.dataset.preview;
-            if (!raw) return;
-            let preview; try{ preview = JSON.parse(raw);}catch{ return; }
-            const sched = appState.scheduleData?.[monthKey] || (appState.scheduleData[monthKey] = {});
-            let applied=0;
-            preview.forEach(p => {
-                // Skip if already filled since preview
-                const day = sched[p.dateStr] || (sched[p.dateStr] = { assignments:{} });
-                if (day.assignments[p.shiftKey]) return;
-                // Business rule validation via validator (simulate assignment & check for blockers)
-                day.assignments[p.shiftKey] = p.staffId;
-                const validator = new ScheduleValidator(monthKey);
-                const { schedule: consolidated } = validator.validateScheduleWithIssues(sched);
-                const blocker = consolidated[p.dateStr]?.blockers?.[p.shiftKey];
-                if (blocker){
-                    // revert
-                    delete day.assignments[p.shiftKey];
-                } else {
-                    applied++; appState.scheduleData[monthKey] = consolidated;
-                }
-            });
-            appState.save?.();
-            recoveryReport.innerHTML += `<div class="mt-4"><strong>Angewendet:</strong> ${applied} Schichten gefüllt.</div>`;
-            recoveryApplyBtn.classList.add('hidden');
-            this.updateCalendarFromSelect();
-        });
+        // Recovery preview/apply now handled via delegated events calling _runRecoveryPreview/_applyRecovery
         // Click handlers
     // Calendar cell clicks handled via delegation
 
@@ -566,7 +574,7 @@ export class ScheduleUI {
                 this.setStatus('Synchronisiert ✓', true, false);
                 setTimeout(()=>{ this.clearStatus(); }, 900);
         }).catch((e)=>{ console.warn(e); this.clearStatus(); });
-        console.log('[scheduleUI] updateCalendarFromSelect:done');
+        console.log('[scheduleUI][phase] done updateCalendarFromSelect');
     }
 
     bindDelegatesOnce(){
@@ -600,15 +608,7 @@ export class ScheduleUI {
                 if (e.detail === 2){
                     // double click -> open with first unassigned
                     try {
-                        const [yy,mm,dd] = dateStr.split('-').map(Number);
-                        const dt = new Date(yy, mm-1, dd);
-                        const isWeekend = [0,6].includes(dt.getDay());
-                        const holName = this.getHolidayName(dateStr);
-                        const allShifts = Object.entries(SHIFTS).filter(([k,v]) => {
-                            if (holName) return v.type === 'holiday';
-                            if (isWeekend) return v.type === 'weekend';
-                            return v.type === 'weekday';
-                        }).map(([k])=>k);
+                        const allShifts = this.getApplicableShifts(dateStr);
                         const monthKey = dateStr.substring(0,7);
                         const cur = window.appState?.scheduleData?.[monthKey]?.[dateStr]?.assignments || {};
                         const firstUnassigned = allShifts.find(s => !cur[s]);
@@ -625,24 +625,53 @@ export class ScheduleUI {
         const month = this.currentCalendarMonth;
         if (!month){ console.warn('[generateSchedule] no current month'); return; }
         if (!window.__TAB_CAN_EDIT){ console.warn('[generateSchedule] blocked: view-only mode'); return; }
-        try {
-            this.setStatus('Erzeuge Plan…', true);
-            // Ensure structure exists
-            const schedule = appState.scheduleData[month] || (appState.scheduleData[month] = {});
-            const engine = new SchedulingEngine(month);
-            const generated = engine.generateSchedule();
-            // Merge generated into state (basic replace)
-            appState.scheduleData[month] = generated;
-            appState.save?.();
-            this.renderAssignments(month);
-            this.renderWeekendReport(month);
-            this.setStatus('Plan erstellt ✓', true, false);
-            setTimeout(()=> this.clearStatus(), 1200);
-        } catch(e){
-            console.error('[generateSchedule] failed', e);
-            this.setStatus('Fehler bei Planerzeugung', true, false);
-            setTimeout(()=> this.clearStatus(), 1800);
+        if (this._generating){ console.warn('[generateSchedule] already in progress'); return; }
+        this._generating = true;
+        (async ()=> {
+            const startedAt = performance.now?.()||0;
+            try {
+                this.setStatus('Erzeuge Plan…', true);
+                // Ensure availability hydration if not yet done
+                if (!this._hydratedMonths.has(month)){
+                    this.setStatus('Lade Verfügbarkeiten…', true);
+                    try { await this.prehydrateAvailability(month); } catch(hErr){ console.warn('[generateSchedule] hydration failed (continuing)', hErr); }
+                }
+                // Ensure structure exists
+                appState.scheduleData[month] = appState.scheduleData[month] || {};
+                const engine = new SchedulingEngine(month);
+                console.info('[generateSchedule] start compute', { month });
+                const generated = engine.generateSchedule();
+                const genDuration = (performance.now?.()||0) - startedAt;
+                // Merge generated into state (basic replace)
+                appState.scheduleData[month] = generated;
+                appState.save?.();
+                this.renderAssignments(month);
+                this.renderWeekendReport(month);
+                this.setStatus('Plan erstellt ✓', true, false);
+                console.info('[generateSchedule] complete', { month, ms: Math.round(genDuration) });
+                setTimeout(()=> this.clearStatus(), 1200);
+            } catch(e){
+                console.error('[generateSchedule] failed', e);
+                this.setStatus('Fehler bei Planerzeugung', true, false);
+                setTimeout(()=> this.clearStatus(), 1800);
+            } finally {
+                this._generating = false;
+            }
+        })();
+    }
+
+    // Provide a stable bridge for legacy bindings (eventBindings.js expects either window.handlers.generateSchedule or window.generateSchedule)
+    ensureGlobalGenerateBridge(){
+        if (!window.generateSchedule){
+            window.generateSchedule = async () => {
+                try { await this.generateScheduleForCurrentMonth(); } catch(e){ console.warn('[bridge] generateSchedule failed', e); }
+            };
         }
+        if (!window.handlers || typeof window.handlers.generateSchedule !== 'function'){
+            window.handlers = window.handlers || {};
+            window.handlers.generateSchedule = () => window.generateSchedule();
+        }
+        window.__GEN_ENTRYPOINT = 'scheduleUI';
     }
 
     async prehydrateAvailability(month){
@@ -692,35 +721,40 @@ export class ScheduleUI {
 
     renderAssignments(month) {
         const data = window.appState?.scheduleData?.[month] || {};
-        // For each day cell, show all shifts for its type and fill assignments if present, placeholders otherwise
         document.querySelectorAll('.cal-body[data-date]').forEach(cell => {
             const dateStr = cell.getAttribute('data-date');
             const type = cell.getAttribute('data-type');
-            // Find which shifts apply
-            const shifts = Object.entries(SHIFTS)
-                .filter(([_, v]) => v.type === type)
-                .map(([k]) => k);
+            const shifts = Object.entries(SHIFTS).filter(([_, v]) => v.type === type).map(([k]) => k);
             const assignments = data[dateStr]?.assignments || {};
-            const html = shifts.map(shift => {
+            const invalidKeys = Object.keys(assignments).filter(k => !shifts.includes(k));
+            const validHtml = shifts.map(shift => {
                 const staffId = assignments[shift];
-                const shiftMeta = (window.SHIFTS||{})[shift] || {};
-                if (staffId) {
+                const meta = SHIFTS[shift] || {};
+                if (staffId){
                     const staff = (window.appState?.staffData||[]).find(s=>s.id==staffId);
                     const name = staff?.name || staffId;
-                    const title = `${shiftMeta.name||shift} ${shiftMeta.time?`(${shiftMeta.time})`:''} - ${name}`;
+                    const title = `${meta.name||shift} ${meta.time?`(${meta.time})`:''} - ${name}`;
                     return `<div class="staff-assignment" title="${title}" data-date="${dateStr}" data-shift="${shift}">
                         <span class="badge">${shift}</span>
                         <span class="assignee-name">${name}</span>
                         <button class="btn btn-secondary btn-sm swap-btn ml-6" data-date="${dateStr}" data-shift="${shift}">Wechseln</button>
                     </div>`;
                 }
-                // Unassigned placeholder keeps the slot visible and clickable
-                const title = `${shiftMeta.name||shift} ${shiftMeta.time?`(${shiftMeta.time})`:''} - nicht zugewiesen`;
+                const title = `${meta.name||shift} ${meta.time?`(${meta.time})`:''} - nicht zugewiesen`;
                 return `<div class="staff-assignment unassigned" title="${title}" data-date="${dateStr}" data-shift="${shift}"><span class="badge">${shift}</span> —</div>`;
             }).join('');
-            cell.innerHTML = html;
+            const invalidHtml = invalidKeys.map(shift => {
+                const staffId = assignments[shift];
+                const staff = (window.appState?.staffData||[]).find(s=>s.id==staffId);
+                const name = staff?.name || staffId;
+                return `<div class="staff-assignment invalid-shift" data-invalid="true" data-date="${dateStr}" data-shift="${shift}" title="Nicht gültig für ${type}">
+                    <span class="badge badge-error">${shift}!</span>
+                    <span class="assignee-name">${name}</span>
+                    <button class="btn btn-secondary btn-sm swap-btn ml-6" data-date="${dateStr}" data-shift="${shift}">Anpassen</button>
+                </div>`;
+            }).join('');
+            cell.innerHTML = validHtml + invalidHtml;
         });
-        // Enable pill-click to open modal with preselected shift (assigned or unassigned)
         document.querySelectorAll('.staff-assignment[data-date]').forEach(pill => {
             pill.addEventListener('click', (e)=>{
                 e.stopPropagation();
@@ -729,7 +763,6 @@ export class ScheduleUI {
                 this.openAssignModal(dateStr, shiftKey);
             });
         });
-        // Bind direct 'Wechseln' buttons
         document.querySelectorAll('.swap-btn[data-date]').forEach(btn => {
             btn.addEventListener('click', (e)=>{
                 e.stopPropagation();
@@ -810,24 +843,34 @@ export class ScheduleUI {
         const shifts = Object.entries(SHIFTS).filter(([_,v])=>v.type===type).map(([k])=>k);
         const data = window.appState?.scheduleData?.[month] || {};
         const assignments = data[dateStr]?.assignments || {};
-        const html = shifts.map(shift => {
+        const invalidKeys = Object.keys(assignments).filter(k => !shifts.includes(k));
+        const validHtml = shifts.map(shift => {
             const staffId = assignments[shift];
-            const shiftMeta = (window.SHIFTS||{})[shift] || {};
+            const meta = SHIFTS[shift] || {};
             if (staffId){
                 const staff = (window.appState?.staffData||[]).find(s=>s.id==staffId);
                 const name = staff?.name || staffId;
-                const title = `${shiftMeta.name||shift} ${shiftMeta.time?`(${shiftMeta.time})`:''} - ${name}`;
+                const title = `${meta.name||shift} ${meta.time?`(${meta.time})`:''} - ${name}`;
                 return `<div class="staff-assignment" title="${title}" data-date="${dateStr}" data-shift="${shift}">
                         <span class="badge">${shift}</span>
                         <span class="assignee-name">${name}</span>
                         <button class="btn btn-secondary btn-sm swap-btn ml-6" data-date="${dateStr}" data-shift="${shift}">Wechseln</button>
                     </div>`;
             }
-            const title = `${shiftMeta.name||shift} ${shiftMeta.time?`(${shiftMeta.time})`:''} - nicht zugewiesen`;
+            const title = `${meta.name||shift} ${meta.time?`(${meta.time})`:''} - nicht zugewiesen`;
             return `<div class="staff-assignment unassigned" title="${title}" data-date="${dateStr}" data-shift="${shift}"><span class="badge">${shift}</span> —</div>`;
         }).join('');
-        cellEl.innerHTML = html;
-        // Re-bind events for this cell only
+        const invalidHtml = invalidKeys.map(shift => {
+            const staffId = assignments[shift];
+            const staff = (window.appState?.staffData||[]).find(s=>s.id==staffId);
+            const name = staff?.name || staffId;
+            return `<div class="staff-assignment invalid-shift" data-invalid="true" data-date="${dateStr}" data-shift="${shift}" title="Nicht gültig für ${type}">
+                <span class="badge badge-error">${shift}!</span>
+                <span class="assignee-name">${name}</span>
+                <button class="btn btn-secondary btn-sm swap-btn ml-6" data-date="${dateStr}" data-shift="${shift}">Anpassen</button>
+            </div>`;
+        }).join('');
+        cellEl.innerHTML = validHtml + invalidHtml;
         cellEl.querySelectorAll('.staff-assignment[data-date]').forEach(pill => {
             pill.addEventListener('click', (e)=>{
                 e.stopPropagation();
@@ -844,19 +887,24 @@ export class ScheduleUI {
         });
     }
 
+    // Busy state helpers (ref-counted)
+    setBusy(b=true){
+        if (b){ this._busyCount = (this._busyCount||0)+1; } else { this._busyCount = Math.max(0,(this._busyCount||0)-1); }
+        const active = (this._busyCount||0) > 0;
+        const root = this.container || document.body; if (!root) return;
+        root.classList.toggle('busy', active);
+        if (active) root.setAttribute('aria-busy','true'); else root.removeAttribute('aria-busy');
+    }
+
     openAssignModal(dateStr, presetShift){
         const modal = document.getElementById('swapModal');
         if (!modal) return;
         // Build shift list for that date based on SHIFTS and holiday/weekend detection
         const [y,m,d] = dateStr.split('-').map(Number);
     const date = new Date(y, m-1, d);
+        const holName = this.getHolidayName(dateStr);
         const isWeekend = [0,6].includes(date.getDay());
-        const holName = window.appState?.holidays?.[String(y)]?.[dateStr] || null;
-        const allShifts = Object.entries(SHIFTS).filter(([k,v]) => {
-            if (holName) return v.type === 'holiday';
-            if (isWeekend) return v.type === 'weekend';
-            return v.type === 'weekday';
-        }).map(([k])=>k);
+        const allShifts = this.getApplicableShifts(dateStr);
 
         const shiftSel = document.getElementById('swapShiftSelect');
         shiftSel.innerHTML = allShifts.map(s=>`<option value="${s}">${s}</option>`).join('');
@@ -1123,12 +1171,8 @@ export class ScheduleUI {
         const [y,m,d] = dateStr.split('-').map(Number);
         const date = new Date(y, m-1, d);
         const isWeekendSearch = [0,6].includes(date.getDay());
-        const holName = window.appState?.holidays?.[String(y)]?.[dateStr] || null;
-        const allShifts = Object.entries(SHIFTS).filter(([k,v]) => {
-            if (holName) return v.type === 'holiday';
-            if (isWeekendSearch) return v.type === 'weekend';
-            return v.type === 'weekday';
-        }).map(([k])=>k);
+        const holName = this.getHolidayName(dateStr);
+        const allShifts = this.getApplicableShifts(dateStr);
         document.getElementById('searchTitle').textContent = `Suchen & Zuweisen – ${dateStr}`;
         document.getElementById('searchDetail').textContent = holName ? `Feiertag: ${holName}` : isWeekendSearch ? 'Wochenende' : 'Wochentag';
         // Populate shifts
@@ -1323,10 +1367,110 @@ export class ScheduleUI {
             const dow = date.getDay();
             if (dow===0 || dow===6){ this.renderWeekendReport(month); }
             if (window.modalManager) window.modalManager.close('searchModal'); else window.closeModal?.('searchModal');
-            if (window.modalManager) window.modalManager.close('searchModal'); else window.closeModal?.('searchModal');
         };
     }
 }
+
+// Recovery helper methods appended (if class export above already closed, attach via prototype as fallback)
+if (typeof ScheduleUI !== 'undefined'){ Object.assign(ScheduleUI.prototype, {
+    _collectCriticalGaps(monthKey){
+        monthKey = monthKey || this.currentCalendarMonth; if (!monthKey) return [];
+        const sched = appState.scheduleData?.[monthKey] || {};
+        const gaps = [];
+        Object.entries(sched).forEach(([dateStr, day])=>{
+            const assignments = day?.assignments || {};
+            const allShifts = Object.entries(SHIFTS).filter(([k,v])=>{
+                const d = parseYMD(dateStr).getDay();
+                if (v.type==='weekday'){
+                    if (k==='evening' && (APP_CONFIG?.EVENING_OPTIONAL_DAYS||[]).includes(d)) return true; return true;
+                }
+                return v.type==='weekend' || v.type==='holiday';
+            }).map(([k])=>k);
+            allShifts.forEach(sh => {
+                const d = parseYMD(dateStr).getDay();
+                const isCritical = !(sh==='evening' && (APP_CONFIG?.EVENING_OPTIONAL_DAYS||[]).includes(d));
+                if (!isCritical) return;
+                if (!assignments[sh]) gaps.push({ dateStr, shiftKey: sh });
+            });
+        });
+        return gaps.sort((a,b)=> a.dateStr.localeCompare(b.dateStr));
+    },
+    _runRecoveryPreview(){
+        if (this._recoveryInFlight){ console.warn('[recovery] preview already running'); return; }
+        const monthKey = this.currentCalendarMonth; if (!monthKey) return;
+        const started = performance.now?.()||0;
+        this._recoveryInFlight = true;
+        console.info('[recovery][preview] start', { month: monthKey });
+        const recoveryReport = document.getElementById('recoveryReport');
+        const applyBtn = document.getElementById('recoveryApplyBtn');
+        const gaps = this._collectCriticalGaps(monthKey);
+        if (!gaps.length){ if(recoveryReport) recoveryReport.innerHTML = '<em>Keine offenen kritischen Schichten.</em>'; applyBtn?.classList.add('hidden'); return; }
+        const engine = new SchedulingEngine(monthKey);
+        const preview = [];
+        gaps.forEach(g => {
+            const weekNum = engine.getWeekNumber(parseYMD(g.dateStr));
+            const scheduledToday = new Set(Object.values(appState.scheduleData?.[monthKey]?.[g.dateStr]?.assignments||{}));
+            let cands = engine.findCandidatesForShift(g.dateStr, g.shiftKey, scheduledToday, weekNum);
+            cands = cands.map(c => ({ ...c, adjScore: c.score < 0 ? Math.max(c.score, (APP_CONFIG?.RECOVERY_MIN_SCORE_FLOOR||-800)) : c.score }));
+            cands.sort((a,b)=> b.adjScore - a.adjScore);
+            const best = cands[0];
+            if (best && best.adjScore >= (APP_CONFIG?.RECOVERY_MIN_SCORE_FLOOR||-800)) preview.push({ ...g, staffId: best.staff.id, name: best.staff.name, score: best.score, adjScore: best.adjScore });
+        });
+        if (!preview.length){ if (recoveryReport) recoveryReport.innerHTML = '<em>Keine geeigneten Kandidaten für offene kritischen Schichten.</em>'; applyBtn?.classList.add('hidden'); this._recoveryInFlight=false; console.info('[recovery][preview] complete (none)', { ms: Math.round((performance.now?.()||0)-started) }); return; }
+        if (recoveryReport) recoveryReport.innerHTML = '<strong>Vorschau Füllung:</strong><br/>' + preview.map(p=> `${p.dateStr} – ${p.shiftKey} → ${p.name} (Score ${Math.round(p.score)} / adj ${Math.round(p.adjScore)})`).join('<br/>' );
+        applyBtn?.classList.remove('hidden');
+        if (applyBtn) applyBtn.dataset.preview = JSON.stringify(preview);
+        this._recoveryInFlight = false;
+        console.info('[recovery][preview] complete', { candidates: preview.length, ms: Math.round((performance.now?.()||0)-started) });
+    },
+    _applyRecovery(){
+        if (this._recoveryInFlight){ console.warn('[recovery] apply already running'); return; }
+        const monthKey = this.currentCalendarMonth; if (!monthKey) return;
+        const started = performance.now?.()||0; this._recoveryInFlight = true; console.info('[recovery][apply] start', { month: monthKey });
+        const applyBtn = document.getElementById('recoveryApplyBtn'); if (!applyBtn) return;
+        const raw = applyBtn.dataset.preview; if (!raw) return;
+        let preview; try { preview = JSON.parse(raw); } catch { return; }
+        const sched = appState.scheduleData?.[monthKey] || (appState.scheduleData[monthKey] = {});
+        let applied=0;
+        preview.forEach(p => {
+            const day = sched[p.dateStr] || (sched[p.dateStr] = { assignments:{} });
+            if (day.assignments[p.shiftKey]) return;
+            day.assignments[p.shiftKey] = p.staffId;
+            const validator = new ScheduleValidator(monthKey);
+            const { schedule: consolidated } = validator.validateScheduleWithIssues(sched);
+            const blocker = consolidated[p.dateStr]?.blockers?.[p.shiftKey];
+            if (blocker){ delete day.assignments[p.shiftKey]; } else { applied++; appState.scheduleData[monthKey] = consolidated; }
+        });
+        appState.save?.();
+        const recoveryReport = document.getElementById('recoveryReport');
+        if (recoveryReport) recoveryReport.innerHTML += `<div class=\"mt-4\"><strong>Angewendet:</strong> ${applied} Schichten gefüllt.</div>`;
+        applyBtn.classList.add('hidden');
+        this.updateCalendarFromSelect();
+        this._recoveryInFlight = false;
+        console.info('[recovery][apply] complete', { applied, ms: Math.round((performance.now?.()||0)-started) });
+    }
+    , runA11yAudit(){
+        const issues = [];
+        const modals = document.querySelectorAll('.modal');
+        modals.forEach(m => {
+            const id = m.id || '(no-id)';
+            if (!m.hasAttribute('role')) issues.push({ id, type: 'missing-role' });
+            if (!m.hasAttribute('aria-labelledby')) issues.push({ id, type: 'missing-aria-labelledby' });
+            const labelled = m.getAttribute('aria-labelledby');
+            if (labelled && !document.getElementById(labelled)) issues.push({ id, type: 'aria-labelledby-target-missing', target: labelled });
+            const focusables = m.querySelectorAll('a,button,input,select,textarea,[tabindex]:not([tabindex="-1"])');
+            if (!focusables.length) issues.push({ id, type: 'no-focusable-content' });
+        });
+        // Buttons without accessible name
+        document.querySelectorAll('button').forEach(b => {
+            const txt = (b.textContent||'').trim();
+            const hasLabel = !!(txt || b.getAttribute('aria-label'));
+            if (!hasLabel) issues.push({ id: b.id||'(button)', type: 'button-missing-label' });
+        });
+        if (!issues.length) console.info('[a11y] audit passed (no issues)'); else console.warn('[a11y] issues', issues);
+        return issues;
+    }
+}); }
 
 
 
