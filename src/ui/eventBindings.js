@@ -53,17 +53,6 @@ function __initEventBindings(){
   });
   bind('showHolidaysBtn','click', ()=> window.showHolidaysPopup && window.showHolidaysPopup());
   // Schedule - both fallback bindings AND EventHandler class
-  bind('generateScheduleBtn','click', ()=> {
-    console.log('[eventBindings] Generate button clicked - trying both handlers');
-    if (window.handlers && window.handlers.generateSchedule) {
-      window.handlers.generateSchedule();
-    } else if (window.generateSchedule) {
-      window.generateSchedule();
-    } else {
-      console.error('[eventBindings] No generate schedule handler found!');
-      alert('Generate schedule handler not available. Check console for errors.');
-    }
-  });
   bind('clearScheduleBtn','click', ()=> {
     console.log('[eventBindings] Clear button clicked - trying both handlers');
     if (window.handlers && window.handlers.clearSchedule) {

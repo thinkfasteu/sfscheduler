@@ -31,6 +31,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Notes
 This release intentionally keeps schedules editable post-finalization; the finalize marker is an operational governance aid, not an enforcement barrier.
 
+## [1.2.5] - 2025-10-02
+### Removed
+- Manuelle Plan-Erstellung Schaltfläche (Plan wird jetzt automatisch erzeugt, sobald ein Monat geöffnet und Verfügbarkeiten geladen sind)
+- Finale/"Monat abschließen" Logik (informelle Markierung entfällt)
+- Lücken prüfen / Lücken füllen (Recovery-Vorschau & Apply) Feature
+
+### Changed
+- Dienstplan-Tab auf ein schlankes Grundlayout reduziert (nur Kalender, Suchen & Zuweisen, Export / Löschen)
+- Automatische Generierung wird nach Verfügbarkeits-Hydration ausgelöst, falls noch kein Plan existiert
+
+### Notes
+- Bestehende bereits generierte Pläne bleiben unverändert in local/remote storage
+- Eventuelle verbliebene generieren/finalize Referenzen entfernt; fallback Listener entfernt
+
 
 ### Major Features Added
 

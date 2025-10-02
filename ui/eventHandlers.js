@@ -29,13 +29,7 @@ export class EventHandler {
         });
 
         // Schedule generation handlers
-        const generateBtn = document.getElementById('generateScheduleBtn');
-        // Generation now fully handled inside ScheduleUI; retain silent fallback only if button still wired.
-        if (generateBtn) {
-            generateBtn.addEventListener('click', () => {
-                try { window.ui?.generateScheduleForCurrentMonth?.(); } catch(e){ console.warn('[EventHandler] generation fallback failed', e); }
-            });
-        }
+    // Generate button removed; no binding maintained.
 
         document.getElementById('clearScheduleBtn')?.addEventListener('click', () => {
             this.clearSchedule();
