@@ -24,10 +24,12 @@ export class EventHandler {
         });
 
         // Schedule generation handlers
-        document.getElementById('generateScheduleBtn')?.addEventListener('click', () => {
-            console.warn('[LEGACY][modules/EventHandler] generateScheduleBtn click delegated to ScheduleUI. Remove legacy handler import.');
-            try { window.ui?.generateScheduleForCurrentMonth?.(); } catch(e){ console.warn('[modules/EventHandler] delegation failed', e); }
-        });
+        const genBtn = document.getElementById('generateScheduleBtn');
+        if (genBtn) {
+            genBtn.addEventListener('click', () => {
+                try { window.ui?.generateScheduleForCurrentMonth?.(); } catch(e){ console.warn('[modules/EventHandler] generation fallback failed', e); }
+            });
+        }
 
         document.getElementById('clearScheduleBtn')?.addEventListener('click', () => {
             this.clearSchedule();
@@ -78,7 +80,7 @@ export class EventHandler {
         this.closeModal('swapModal');
     }
 
-    generateSchedule() { console.warn('[LEGACY][modules/EventHandler.generateSchedule] Deprecated; delegating to ScheduleUI.'); return window.ui?.generateScheduleForCurrentMonth?.(); }
+    generateSchedule() { return window.ui?.generateScheduleForCurrentMonth?.(); }
 
     clearSchedule() {
         const month = document.getElementById('scheduleMonth').value;

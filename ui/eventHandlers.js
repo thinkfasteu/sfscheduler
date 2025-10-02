@@ -30,11 +30,12 @@ export class EventHandler {
 
         // Schedule generation handlers
         const generateBtn = document.getElementById('generateScheduleBtn');
-        console.log('[EventHandler] generateScheduleBtn found (delegated to ScheduleUI):', !!generateBtn);
-        generateBtn?.addEventListener('click', () => {
-            console.warn('[DEPRECATED][EventHandler] generateScheduleBtn handler delegating to ScheduleUI.generateScheduleForCurrentMonth');
-            try { window.ui?.generateScheduleForCurrentMonth?.(); } catch(e){ console.warn('[EventHandler] delegation failed', e); }
-        });
+        // Generation now fully handled inside ScheduleUI; retain silent fallback only if button still wired.
+        if (generateBtn) {
+            generateBtn.addEventListener('click', () => {
+                try { window.ui?.generateScheduleForCurrentMonth?.(); } catch(e){ console.warn('[EventHandler] generation fallback failed', e); }
+            });
+        }
 
         document.getElementById('clearScheduleBtn')?.addEventListener('click', () => {
             this.clearSchedule();
@@ -119,7 +120,7 @@ export class EventHandler {
     try { window.modalManager ? window.modalManager.close('swapModal') : window.closeModal?.('swapModal'); } catch(e){ console.warn('[EventHandler] close swapModal failed', e); }
     }
 
-    async generateSchedule() { console.warn('[DEPRECATED][EventHandler.generateSchedule] Use ScheduleUI.generateScheduleForCurrentMonth instead.'); return window.ui?.generateScheduleForCurrentMonth?.(); }
+    async generateSchedule() { return window.ui?.generateScheduleForCurrentMonth?.(); }
 
     clearSchedule() {
         const month = document.getElementById('scheduleMonth').value;

@@ -137,25 +137,6 @@ export class ScheduleUI {
                     console.info('[modalManager] wrapped for unified a11y modal handling');
                 }
             } catch(modWrapErr){ console.warn('[modalManager] wrap failed', modWrapErr); }
-            // Deprecation warnings for legacy globals
-            try {
-                if (!window.__openModal.__deprecatedWrapped){
-                    const _orig = window.__openModal;
-                    window.__openModal = function(...args){
-                        console.warn('[DEPRECATED] __openModal: use modalManager.open(id) or showModal(id).');
-                        return _orig.apply(this,args);
-                    };
-                    window.__openModal.__deprecatedWrapped = true;
-                }
-                if (!window.__closeModal.__deprecatedWrapped){
-                    const _origC = window.__closeModal;
-                    window.__closeModal = function(...args){
-                        console.warn('[DEPRECATED] __closeModal: use modalManager.close(id) or closeModal(id).');
-                        return _origC.apply(this,args);
-                    };
-                    window.__closeModal.__deprecatedWrapped = true;
-                }
-            } catch(deprecWrapErr){ /* ignore */ }
             // Global escape handler to close the top-most modal
             window.addEventListener('keydown', (e)=>{
                 if (e.key === 'Escape'){ // close last opened modal
@@ -575,13 +556,15 @@ export class ScheduleUI {
                 this.setStatus('Synchronisiert ✓', true, false);
                 setTimeout(()=>{ this.clearStatus(); }, 900);
         }).catch((e)=>{ console.warn(e); this.clearStatus(); });
-        try {
-            const issues = this.runA11yAudit?.();
-            if (issues) {
-                const counts = issues.reduce((acc,i)=>{ acc[i.type]=(acc[i.type]||0)+1; return acc; },{});
-                console.info('[a11y] audit summary after render', { total: issues.length, counts });
-            }
-        } catch(ae){ console.warn('[a11y] audit invocation failed', ae); }
+        if (window.CONFIG?.A11Y_AUDIT_AUTO){
+            try {
+                const issues = this.runA11yAudit?.();
+                if (issues) {
+                    const counts = issues.reduce((acc,i)=>{ acc[i.type]=(acc[i.type]||0)+1; return acc; },{});
+                    console.info('[a11y] audit summary after render', { total: issues.length, counts });
+                }
+            } catch(ae){ console.warn('[a11y] audit invocation failed', ae); }
+        }
         console.log('[scheduleUI][phase] done updateCalendarFromSelect');
     }
 
@@ -650,7 +633,6 @@ export class ScheduleUI {
     generateScheduleForCurrentMonth(){
         const month = this.currentCalendarMonth;
         if (!month){ console.warn('[generateSchedule] no current month'); return; }
-    // View-only mode disabled: always allow generation
         if (this._generating){ console.warn('[generateSchedule] already in progress'); return; }
         this._generating = true;
         (async ()=> {
@@ -1473,7 +1455,7 @@ if (typeof ScheduleUI !== 'undefined'){ Object.assign(ScheduleUI.prototype, {
             const hasLabel = !!(txt || b.getAttribute('aria-label'));
             if (!hasLabel) issues.push({ id: b.id||'(button)', type: 'button-missing-label' });
         });
-        if (!issues.length) console.info('[a11y] audit passed (no issues)'); else console.warn('[a11y] issues', issues);
+    if (!issues.length) console.info('[a11y] audit passed (no issues)'); else console.info('[a11y] issues', issues);
         return issues;
     }
     , ensureFinalizeModal(){
