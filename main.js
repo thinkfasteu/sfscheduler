@@ -103,18 +103,7 @@ function initApp(){
     window.ui = scheduleUI;
     // Render UI first so buttons/inputs exist
     scheduleUI.refreshDisplay();
-    try { scheduleUI.ensureGlobalGenerateBridge?.(); } catch(e){ console.warn('[main] generate bridge init failed', e); }
-    // Fallback: explicitly bind generate button if not already firing (defensive)
-    setTimeout(()=>{
-        const genBtn = document.getElementById('generateScheduleBtn');
-        if (genBtn && !genBtn.__boundGenerate){
-            genBtn.addEventListener('click', () => {
-                console.info('[fallback] generateScheduleBtn click -> ScheduleUI.generateScheduleForCurrentMonth');
-                try { scheduleUI.generateScheduleForCurrentMonth(); } catch(err){ console.error('[fallback] generate failed', err); }
-            });
-            genBtn.__boundGenerate = true;
-        }
-    }, 50);
+    // Manual generate button & bridge removed (auto-generation on first open)
 
     // Periodic status refresh (kept for banner visibility)
     setInterval(()=>{ showLockStatus(); }, 15000);

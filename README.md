@@ -82,3 +82,15 @@ Re‑introducing locking later would involve:
 4. (Optional) Using localStorage events only for cross‑tab state refresh, not locking.
 
 Until such a reintroduction is required, the simplified model reduces bundle size and startup logic while keeping the UI responsive.
+
+### Automatische Plan-Erzeugung & Entfernte Funktionen (v1.2.5)
+Ab Version 1.2.5 wird der Dienstplan eines Monats automatisch erzeugt, sobald der Monat im Dienstplan-Tab geöffnet und (falls Remote-Backend aktiv) die Verfügbarkeiten vorab geladen wurden. Existiert bereits ein Plan (`appState.scheduleData[YYYY-MM]`), findet keine automatische Erzeugung statt.
+
+Entfernt wurden zur Vereinfachung der Oberfläche:
+* Manueller Button "Dienstplan erstellen"
+* Informelles "Monat abschließen" (Finalize) – Metadaten-Markierung
+* "Lücken prüfen" / "Lücken füllen" (Recovery-Heuristik)
+
+Manuelle Anpassungen erfolgen weiterhin durch Anklicken eines Kalendertages (Zuweisungs-Modal) oder über den Dialog "Suchen & Zuweisen".
+
+Hinweis: Bereits zuvor generierte Pläne bleiben unverändert gespeichert.

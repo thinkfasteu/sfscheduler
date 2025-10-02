@@ -483,15 +483,8 @@ export class ScheduleUI {
         let html = '<div id="scheduleStatus" class="status-line hidden"><span class="spinner"></span><span id="scheduleStatusText">Synchronisiere Verfügbarkeiten…</span></div>'
             + '<div class="flex flex-wrap jc-end gap-8 mb-8">'
             + '<button class="btn btn-secondary" id="showHolidaysBtn">Feiertage</button>'
-            // If base page markup already supplies generate/clear/etc buttons, we do not duplicate them here.
-            + (!document.getElementById('generateScheduleBtn') ? '<button class="btn btn-success" id="generateScheduleBtn">Dienstplan erstellen</button>' : '')
-            + (!document.getElementById('clearScheduleBtn') ? '<button class="btn btn-danger" id="clearScheduleBtn">Plan löschen</button>' : '')
             + '<button class="btn btn-secondary" id="openSearchAssignBtn">Suchen & Zuweisen (Datum wählen)</button>'
-            + '<button class="btn btn-secondary" id="recoveryPreviewBtn" title="Offene kritische Schichten anzeigen">Lücken prüfen</button>'
-            + '<button class="btn btn-secondary hidden" id="recoveryApplyBtn" title="Versuchen kritische Lücken zu füllen (mit gelockerten Fairness-Penalties)">Lücken füllen</button>'
-            + '<button class="btn btn-secondary" id="finalizeMonthBtn" title="Monat abschließen (informell – Plan bleibt bearbeitbar)">Monat abschließen</button>'
-            + '</div>'
-            + '<div id="recoveryReport" class="full-width text-small mt-neg-4"></div>';
+            + '</div>';
         html += '<div class="cal"><div class="cal-row cal-head">';
         const wk = ['Mo','Di','Mi','Do','Fr','Sa','So'];
         wk.forEach(d => html += `<div class="cal-cell cal-head-cell">${d}</div>`);
@@ -531,8 +524,7 @@ export class ScheduleUI {
     window.__perf.calendarFullRenders++;
         // Track a selected date for search modal (stored on instance)
         this._selectedDateForSearch = null;
-        // Recovery preview/apply now handled via delegated events calling _runRecoveryPreview/_applyRecovery
-        // Click handlers
+    // Click handlers
     // Calendar cell clicks handled via delegation
 
     // Sync checkboxes from state for this month
@@ -551,6 +543,13 @@ export class ScheduleUI {
       if (this.currentCalendarMonth === month){
         this.renderAssignments(month);
         this.renderWeekendReport(month);
+                    // Auto-generate schedule if none exists yet for this month
+                    try {
+                            const hasAny = !!Object.keys(appState.scheduleData?.[month]||{}).length;
+                            if (!hasAny) {
+                                    this.generateScheduleForCurrentMonth();
+                            }
+                    } catch(e){ console.warn('[auto-gen] failed to trigger generation', e); }
       }
                 // brief confirmation
                 this.setStatus('Synchronisiert ✓', true, false);
@@ -583,15 +582,6 @@ export class ScheduleUI {
                     const dateStr = this._selectedDateForSearch || document.querySelector('.cal-body[data-date]')?.getAttribute('data-date');
                     if (!dateStr){ alert('Bitte ein Datum im Kalender wählen.'); return; }
                     this.openSearchAssignModal(dateStr);
-                } else if (id === 'recoveryPreviewBtn'){
-                    // The actual preview logic bound earlier is now moved into a method we can call
-                    if (typeof this._runRecoveryPreview === 'function') this._runRecoveryPreview();
-                } else if (id === 'recoveryApplyBtn'){
-                    if (typeof this._applyRecovery === 'function') this._applyRecovery();
-                } else if (id === 'generateScheduleBtn'){
-                    this.generateScheduleForCurrentMonth();
-                } else if (id === 'finalizeMonthBtn'){
-                    this.finalizeCurrentMonth();
                 }
             }
             const body = e.target.closest('.cal-body[data-date]');
@@ -725,7 +715,7 @@ export class ScheduleUI {
     clearStatus(){ this.setStatus('', false); }
     disableScheduleControls(disabled=true, snapshot=null){
         // Narrow set: only mutation-heavy controls are disabled during hydration
-        const ids = ['recoveryApplyBtn','generateScheduleBtn','clearScheduleBtn','exportScheduleBtn','exportPdfBtn','printScheduleBtn'];
+    const ids = ['clearScheduleBtn','exportScheduleBtn','exportPdfBtn','printScheduleBtn'];
         if (!snapshot){ snapshot = {}; }
         ids.forEach(id=>{ const el = document.getElementById(id); if (!el) return; if (disabled){ snapshot[id] = el.disabled; el.disabled = true; } else if (snapshot && id in snapshot){ el.disabled = snapshot[id]; } else { el.disabled = false; } });
         return snapshot;
@@ -1358,86 +1348,7 @@ export class ScheduleUI {
 
 // Recovery helper methods appended (if class export above already closed, attach via prototype as fallback)
 if (typeof ScheduleUI !== 'undefined'){ Object.assign(ScheduleUI.prototype, {
-    _collectCriticalGaps(monthKey){
-        monthKey = monthKey || this.currentCalendarMonth; if (!monthKey) return [];
-        const sched = appState.scheduleData?.[monthKey] || {};
-        const gaps = [];
-        Object.entries(sched).forEach(([dateStr, day])=>{
-            const assignments = day?.assignments || {};
-            const allShifts = Object.entries(SHIFTS).filter(([k,v])=>{
-                const d = parseYMD(dateStr).getDay();
-                if (v.type==='weekday'){
-                    if (k==='evening' && (APP_CONFIG?.EVENING_OPTIONAL_DAYS||[]).includes(d)) return true; return true;
-                }
-                return v.type==='weekend' || v.type==='holiday';
-            }).map(([k])=>k);
-            allShifts.forEach(sh => {
-                const d = parseYMD(dateStr).getDay();
-                const isCritical = !(sh==='evening' && (APP_CONFIG?.EVENING_OPTIONAL_DAYS||[]).includes(d));
-                if (!isCritical) return;
-                if (!assignments[sh]) gaps.push({ dateStr, shiftKey: sh });
-            });
-        });
-        return gaps.sort((a,b)=> a.dateStr.localeCompare(b.dateStr));
-    },
-    _runRecoveryPreview(){
-        if (this._recoveryInFlight){ console.warn('[recovery] preview already running'); return; }
-        const monthKey = this.currentCalendarMonth; if (!monthKey) return;
-        const started = performance.now?.()||0;
-        this._recoveryInFlight = true; this.setBusy(true);
-        try {
-            console.info('[recovery][preview] start', { month: monthKey });
-            const recoveryReport = document.getElementById('recoveryReport');
-            const applyBtn = document.getElementById('recoveryApplyBtn');
-            const gaps = this._collectCriticalGaps(monthKey);
-            if (!gaps.length){ if(recoveryReport) recoveryReport.innerHTML = '<em>Keine offenen kritischen Schichten.</em>'; applyBtn?.classList.add('hidden'); return; }
-            const engine = new SchedulingEngine(monthKey);
-            const preview = [];
-            gaps.forEach(g => {
-                const weekNum = engine.getWeekNumber(parseYMD(g.dateStr));
-                const scheduledToday = new Set(Object.values(appState.scheduleData?.[monthKey]?.[g.dateStr]?.assignments||{}));
-                let cands = engine.findCandidatesForShift(g.dateStr, g.shiftKey, scheduledToday, weekNum);
-                cands = cands.map(c => ({ ...c, adjScore: c.score < 0 ? Math.max(c.score, (APP_CONFIG?.RECOVERY_MIN_SCORE_FLOOR||-800)) : c.score }));
-                cands.sort((a,b)=> b.adjScore - a.adjScore);
-                const best = cands[0];
-                if (best && best.adjScore >= (APP_CONFIG?.RECOVERY_MIN_SCORE_FLOOR||-800)) preview.push({ ...g, staffId: best.staff.id, name: best.staff.name, score: best.score, adjScore: best.adjScore });
-            });
-            if (!preview.length){ if (recoveryReport) recoveryReport.innerHTML = '<em>Keine geeigneten Kandidaten für offene kritischen Schichten.</em>'; applyBtn?.classList.add('hidden'); console.info('[recovery][preview] complete (none)', { ms: Math.round((performance.now?.()||0)-started) }); return; }
-            if (recoveryReport) recoveryReport.innerHTML = '<strong>Vorschau Füllung:</strong><br/>' + preview.map(p=> `${p.dateStr} – ${p.shiftKey} → ${p.name} (Score ${Math.round(p.score)} / adj ${Math.round(p.adjScore)})`).join('<br/>' );
-            applyBtn?.classList.remove('hidden');
-            if (applyBtn) applyBtn.dataset.preview = JSON.stringify(preview);
-            console.info('[recovery][preview] complete', { candidates: preview.length, ms: Math.round((performance.now?.()||0)-started) });
-        } finally { this._recoveryInFlight = false; this.setBusy(false); }
-    },
-    _applyRecovery(){
-        if (this._recoveryInFlight){ console.warn('[recovery] apply already running'); return; }
-        const monthKey = this.currentCalendarMonth; if (!monthKey) return;
-        const started = performance.now?.()||0; this._recoveryInFlight = true; this.setBusy(true);
-        try {
-            console.info('[recovery][apply] start', { month: monthKey });
-            const applyBtn = document.getElementById('recoveryApplyBtn'); if (!applyBtn) return;
-            const raw = applyBtn.dataset.preview; if (!raw) return;
-            let preview; try { preview = JSON.parse(raw); } catch { return; }
-            const sched = appState.scheduleData?.[monthKey] || (appState.scheduleData[monthKey] = {});
-            let applied=0;
-            preview.forEach(p => {
-                const day = sched[p.dateStr] || (sched[p.dateStr] = { assignments:{} });
-                if (day.assignments[p.shiftKey]) return;
-                day.assignments[p.shiftKey] = p.staffId;
-                const validator = new ScheduleValidator(monthKey);
-                const { schedule: consolidated } = validator.validateScheduleWithIssues(sched);
-                const blocker = consolidated[p.dateStr]?.blockers?.[p.shiftKey];
-                if (blocker){ delete day.assignments[p.shiftKey]; } else { applied++; appState.scheduleData[monthKey] = consolidated; }
-            });
-            appState.save?.();
-            const recoveryReport = document.getElementById('recoveryReport');
-            if (recoveryReport) recoveryReport.innerHTML += `<div class=\"mt-4\"><strong>Angewendet:</strong> ${applied} Schichten gefüllt.</div>`;
-            applyBtn.classList.add('hidden');
-            this.updateCalendarFromSelect();
-            console.info('[recovery][apply] complete', { applied, ms: Math.round((performance.now?.()||0)-started) });
-        } finally { this._recoveryInFlight = false; this.setBusy(false); }
-    }
-    , runA11yAudit(){
+    runA11yAudit(){
         const issues = [];
         const modals = document.querySelectorAll('.modal');
         modals.forEach(m => {
@@ -1457,56 +1368,6 @@ if (typeof ScheduleUI !== 'undefined'){ Object.assign(ScheduleUI.prototype, {
         });
     if (!issues.length) console.info('[a11y] audit passed (no issues)'); else console.info('[a11y] issues', issues);
         return issues;
-    }
-    , ensureFinalizeModal(){
-        if (document.getElementById('finalizeModal')) return;
-        const wrapper = document.createElement('div');
-        wrapper.innerHTML = `<div class="modal hidden" id="finalizeModal" role="dialog" aria-labelledby="finalizeModalTitle">\n  <div class="modal-content">\n    <h2 id="finalizeModalTitle">Monat abschließen</h2>\n    <p class="text-small mb-8">Dies markiert den Plan als "abgeschlossen" (informell). Weitere Änderungen bleiben möglich; dies dient nur zur Nachverfolgung.</p>\n    <div id="finalizeSummary" class="mb-12 text-small"></div>\n    <div class="flex gap-8 jc-end">\n      <button class="btn btn-secondary" id="finalizeCancelBtn">Abbrechen</button>\n      <button class="btn btn-success" id="finalizeApplyBtn">Bestätigen</button>\n    </div>\n  </div>\n</div>`;
-        document.body.appendChild(wrapper.firstElementChild);
-        document.getElementById('finalizeCancelBtn')?.addEventListener('click', ()=> this.closeModal('finalizeModal'));
-        document.getElementById('finalizeApplyBtn')?.addEventListener('click', ()=> this.applyFinalize());
-    }
-    , finalizeCurrentMonth(){
-        const month = this.currentCalendarMonth; if (!month) return;
-        this.ensureFinalizeModal();
-        const sched = appState.scheduleData?.[month] || {};
-        const unfilled = [];
-        Object.entries(sched).forEach(([dateStr, day])=>{
-            const applicable = this.getApplicableShifts(dateStr);
-            applicable.forEach(sh => { if (!day.assignments?.[sh]) unfilled.push({ dateStr, sh }); });
-        });
-        const summary = document.getElementById('finalizeSummary');
-        if (summary){
-            if (!unfilled.length) summary.innerHTML = '<strong>Alle kritischen Schichten sind gefüllt.</strong>';
-            else {
-                const first = unfilled.slice(0,15).map(u=>`${u.dateStr} ${u.sh}`).join('<br/>');
-                summary.innerHTML = `<strong>Offene Schichten (${unfilled.length}):</strong><br/>${first}${unfilled.length>15?'<br/>…':''}`;
-            }
-        }
-        this.openModal('finalizeModal');
-        try { const issues = this.runA11yAudit?.(); if (issues) console.info('[a11y] audit after finalize modal', { issues: issues.length }); } catch {}
-    }
-    , applyFinalize(){
-        const month = this.currentCalendarMonth; if (!month) return;
-        appState.finalizedMonths = appState.finalizedMonths || {};
-        const ts = new Date().toISOString();
-        appState.finalizedMonths[month] = { ts, by: (window.__currentUser?.id)||'unknown' };
-        appState.save?.();
-        this.closeModal('finalizeModal');
-        const btn = document.getElementById('finalizeMonthBtn');
-        if (btn){ btn.textContent = 'Abgeschlossen ✓'; btn.classList.add('btn-success'); }
-        const bannerId = 'finalizedBanner';
-        if (!document.getElementById(bannerId)){
-            const host = document.getElementById('scheduleGrid');
-            if (host){
-                const b = document.createElement('div');
-                b.id = bannerId;
-                b.className = 'finalized-banner';
-                b.textContent = `Monat abgeschlossen am ${new Date(ts).toLocaleDateString()}`;
-                host.prepend(b);
-            }
-        }
-        console.info('[finalize] month marked finalized (non-locking)', { month });
     }
 }); }
 
