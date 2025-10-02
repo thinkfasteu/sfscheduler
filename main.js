@@ -54,7 +54,6 @@ function initApp(){
                 if (ttl>0) setTimeout(()=>{ div.style.transition='opacity .6s'; div.style.opacity='0'; setTimeout(()=>div.remove(),650); }, ttl);
             };
         }
-        // View-only guard removed (locking disabled).
     // Seed demo data only once (if never seeded and no staff exist). Persist flag after first seed or after first manual modification.
     // Do not seed in production environment to avoid confusing real deployments.
     const DEMO_FLAG_KEY = 'demoSeeded';
@@ -100,6 +99,8 @@ function initApp(){
 
     // Initialize UI components
     const scheduleUI = new ScheduleUI('#scheduleContent');
+    // Legacy global alias for backwards compatibility (some modules reference window.ui)
+    window.ui = scheduleUI;
     // Render UI first so buttons/inputs exist
     scheduleUI.refreshDisplay();
     try { scheduleUI.ensureGlobalGenerateBridge?.(); } catch(e){ console.warn('[main] generate bridge init failed', e); }
@@ -142,9 +143,10 @@ function initApp(){
         appState.save = function(immediate){
             _origSave(immediate);
             try{ overtimeUI.render(); }catch{}
-            announce('state-saved', { keys: Object.keys(appState).filter(k=> appState.isDurableKey && appState.isDurableKey(k)) });
+            // Previously broadcast via announce(); locking removed so this is a no-op placeholder.
         };
-    // Expose for compatibility
+    // Instantiate legacy EventHandler for compatibility (swap/assign modal flows, etc.)
+    const eventHandler = new EventHandler(scheduleUI);
     window.handlers = eventHandler;
     window.appUI = appUI;
     
