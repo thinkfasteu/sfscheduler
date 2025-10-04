@@ -47,10 +47,10 @@ export class SupabaseAdapter {
                 if (!document.getElementById('rlsNotice')){
                   const div = document.createElement('div');
                   div.id = 'rlsNotice';
-                  div.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2000;background:#ffc107;color:#222;padding:6px 10px;font:14px system-ui;box-shadow:0 2px 4px rgba(0,0,0,.2);';
+                  div.className = 'supabase-warning-bar';
                   div.textContent = msg;
                   document.body.appendChild(div);
-                  setTimeout(()=>{ div.style.transition='opacity .6s'; div.style.opacity='0'; setTimeout(()=>div.remove(),4000); }, 6000);
+                  setTimeout(()=>{ div.classList.add('fade-out'); setTimeout(()=>div.remove(),4000); }, 6000);
                 }
               }
             } catch {}

@@ -53,7 +53,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         const btn = document.createElement('button');
         btn.textContent = 'Debug Availability';
-        btn.style.cssText = 'position:fixed;top:10px;right:10px;z-index:9999;background:#007bff;color:white;border:none;padding:8px;border-radius:4px;';
+    btn.className = 'btn btn-secondary debug-float-btn';
         btn.onclick = debugAvailability;
         document.body.appendChild(btn);
         

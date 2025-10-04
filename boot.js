@@ -65,10 +65,10 @@
       if (missing){
         const id='supabaseConfigMissing';
         if (!document.getElementById(id)){
-          const div=document.createElement('div');
-          div.id=id; div.style.cssText='position:fixed;top:0;left:0;right:0;background:#ffdede;color:#222;padding:6px 10px;font:13px system-ui;z-index:3500;box-shadow:0 2px 4px rgba(0,0,0,.2)';
+      const div=document.createElement('div');
+      div.id=id; div.className='boot-error-banner';
           div.textContent='Supabase BACKEND requested but keys missing – edit config.local.js with SUPABASE_URL & SUPABASE_ANON_KEY (CSP connect-src must include its domain).';
-          const close=document.createElement('button'); close.textContent='×'; close.style.cssText='margin-left:8px;background:transparent;border:none;cursor:pointer;font-size:16px'; close.onclick=()=>div.remove(); div.appendChild(close);
+      const close=document.createElement('button'); close.textContent='×'; close.className='close'; close.onclick=()=>div.remove(); div.appendChild(close);
           document.body.appendChild(div);
         }
       }
