@@ -52,21 +52,12 @@ function __initEventBindings(){
     });
   });
   bind('showHolidaysBtn','click', ()=> window.showHolidaysPopup && window.showHolidaysPopup());
-  // Schedule - both fallback bindings AND EventHandler class
-  bind('clearScheduleBtn','click', ()=> {
-    console.log('[eventBindings] Clear button clicked - trying both handlers');
-    if (window.handlers && window.handlers.clearSchedule) {
-      window.handlers.clearSchedule();
-    } else if (window.clearSchedule) {
-      window.clearSchedule();
-    } else {
-      console.error('[eventBindings] No clear schedule handler found!');
-      alert('Clear schedule handler not available. Check console for errors.');
-    }
-  });
-  bind('exportScheduleBtn','click', ()=> window.exportSchedule && window.exportSchedule());
-  bind('exportPdfBtn','click', ()=> window.exportPDF && window.exportPDF());
-  bind('printScheduleBtn','click', ()=> window.printSchedule && window.printSchedule());
+  // Schedule - direct bindings to window.handlers methods
+  bind('generateScheduleBtn','click', ()=> window.handlers?.generateNewSchedule?.());
+  bind('clearScheduleBtn','click', ()=> window.handlers?.clearSchedule?.());
+  bind('exportScheduleBtn','click', ()=> window.handlers?.exportSchedule?.());
+  bind('exportPdfBtn','click', ()=> window.handlers?.exportPdf?.());
+  bind('printScheduleBtn','click', ()=> window.print?.());
   // Vacation
   bind('addVacationPeriodBtn','click', ()=> window.addVacationPeriod && window.addVacationPeriod());
   bind('addOtherStaffBtn','click', ()=> window.addOtherStaff && window.addOtherStaff());

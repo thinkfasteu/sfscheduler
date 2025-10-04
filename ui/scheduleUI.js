@@ -225,9 +225,8 @@ export class ScheduleUI {
     }
 
     setupHandlers() {
-        const root = document.getElementById('schedule-tab') || document;
-        // Use delegation for better reliability - single event listener handles all clicks
-        this.bindDelegatesOnce();
+        // Event handlers are now bound directly via eventBindings.js
+        // No need for delegation since direct binding is more reliable
     }
 
     // Compute canonical day type using latest holiday + weekend logic
@@ -525,8 +524,7 @@ export class ScheduleUI {
     console.log('[scheduleUI][phase] holidays-initial');
     try { this.ensureHolidaysLoaded(y); } catch(e){ console.warn('[phase] ensureHolidaysLoaded failed', e); }
     try { this.updateHolidayBadgesExt(y, { retype:true }); } catch(e){ console.warn('[phase] updateHolidayBadges initial failed', e); }
-    // Delegated listeners will handle toolbar buttons (bind once)
-    this.bindDelegatesOnce();
+    // Toolbar buttons now handled via direct binding in eventBindings.js
     window.__perf.calendarFullRenders++;
         // Track a selected date for search modal (stored on instance)
         this._selectedDateForSearch = null;
@@ -568,54 +566,25 @@ export class ScheduleUI {
     }
 
     bindDelegatesOnce(){
+        // Delegation system removed - schedule buttons now use direct binding in eventBindings.js
+        // Calendar interaction events are still handled separately
         if (this._delegatesBound) {
-            console.log('[bindDelegatesOnce] already bound, skipping');
             return;
         }
-        console.log('[bindDelegatesOnce] setting up click delegation');
         this._delegatesBound = true;
-        // Toolbar & calendar delegation
+        // Calendar delegation only (toolbar buttons moved to direct binding)
         document.addEventListener('click', (e)=>{
-            console.log('[delegation] document click detected, target=', e.target);
+            // Check for modal-specific buttons that still need delegation
             const btn = e.target.closest('button');
             if (btn){
-                console.log('[delegation] button click detected, id=', btn.id);
                 const id = btn.id;
-                if (id === 'showHolidaysBtn'){
-                    try { (window.modalManager||window).open ? window.modalManager.open('holidaysModal') : window.showModal?.('holidaysModal'); }
-                    catch(err){ console.warn('[delegation] holidaysModal open failed', err); }
-                } else if (id === 'openSearchAssignBtn'){
+                if (id === 'openSearchAssignBtn'){
                     const dateStr = this._selectedDateForSearch || document.querySelector('.cal-body[data-date]')?.getAttribute('data-date');
                     if (!dateStr){ alert('Bitte ein Datum im Kalender wählen.'); return; }
                     this.openSearchAssignModal(dateStr);
                 } else if (id === 'executeSwapBtn'){
-                    console.log('[delegation] attempting executeSwap, handlers=', window.handlers);
                     try { window.handlers?.executeSwap?.(); }
                     catch(err){ console.warn('[delegation] executeSwap failed', err); }
-                } else if (id === 'generateScheduleBtn'){
-                    console.log('[delegation] attempting generateNewSchedule, handlers=', window.handlers);
-                    try { window.handlers?.generateNewSchedule?.(); }
-                    catch(err){ console.warn('[delegation] generateNewSchedule failed', err); }
-                } else if (id === 'clearScheduleBtn'){
-                    console.log('[delegation] attempting clearSchedule, handlers=', window.handlers);
-                    try { window.handlers?.clearSchedule?.(); }
-                    catch(err){ console.warn('[delegation] clearSchedule failed', err); }
-                } else if (id === 'exportScheduleBtn'){
-                    try { 
-                        window.handlers?.exportSchedule?.();
-                    }
-                    catch(err){ console.warn('[delegation] exportSchedule failed', err); }
-                } else if (id === 'exportPdfBtn'){
-                    try { 
-                        window.handlers?.exportPdf?.();
-                    }
-                    catch(err){ console.warn('[delegation] exportPdf failed', err); }
-                } else if (id === 'printScheduleBtn'){
-                    try { 
-                        // Use browser's native print function
-                        window.print(); 
-                    }
-                    catch(err){ console.warn('[delegation] print failed', err); }
                 }
             }
             // Modal backdrop click to close
