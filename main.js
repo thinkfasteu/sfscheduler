@@ -24,9 +24,11 @@ function initApp(){
             document.body.appendChild(el);
         }
         const ver = window.__APP_VERSION__ || '1.2.4';
+        // Truncate long hash versions to first 7 characters
+        const displayVer = ver.length > 10 ? ver.substring(0, 7) : ver;
         el.replaceChildren(
-            Object.assign(document.createElement('span'), { className: 'fw-600', textContent: `Version ${ver} ` }),
-            Object.assign(document.createElement('span'), { className: 'text-muted', textContent: '(Editing enabled)' })
+            Object.assign(document.createElement('span'), { className: 'fw-600', textContent: `v${displayVer} ` }),
+            Object.assign(document.createElement('span'), { className: 'text-muted', textContent: '(Ready)' })
         );
         window.__TAB_CAN_EDIT = true;
         document.body.classList.remove('view-only');
@@ -67,6 +69,48 @@ function initApp(){
             { id: 2, name: 'Ben', role: 'student', contractHours: 20, typicalWorkdays: 4 },
             { id: 3, name: 'Clara', role: 'permanent', contractHours: 35, typicalWorkdays: 5 }
         ];
+        
+        // Add some demo availability data for current month
+        const currentMonth = new Date().toISOString().substring(0, 7); // e.g., "2025-10"
+        if (!appState.availabilityData) appState.availabilityData = {};
+        if (!appState.availabilityData[currentMonth]) {
+            appState.availabilityData[currentMonth] = {
+                1: { // Anna - minijob, available weekdays
+                    'mo-morning': 'yes', 'mo-afternoon': 'no', 'mo-evening': 'prefer',
+                    'tu-morning': 'yes', 'tu-afternoon': 'prefer', 'tu-evening': 'no',
+                    'we-morning': 'prefer', 'we-afternoon': 'yes', 'we-evening': 'no',
+                    'th-morning': 'no', 'th-afternoon': 'yes', 'th-evening': 'prefer',
+                    'fr-morning': 'yes', 'fr-afternoon': 'no', 'fr-evening': 'yes'
+                },
+                2: { // Ben - student, more flexible
+                    'mo-morning': 'no', 'mo-afternoon': 'yes', 'mo-evening': 'yes',
+                    'tu-morning': 'prefer', 'tu-afternoon': 'yes', 'tu-evening': 'prefer',
+                    'we-morning': 'yes', 'we-afternoon': 'prefer', 'we-evening': 'yes',
+                    'th-morning': 'yes', 'th-afternoon': 'no', 'th-evening': 'yes',
+                    'fr-morning': 'prefer', 'fr-afternoon': 'yes', 'fr-evening': 'no',
+                    'sa-morning': 'yes', 'sa-afternoon': 'prefer', 'sa-evening': 'no'
+                },
+                3: { // Clara - permanent, consistent availability
+                    'mo-morning': 'yes', 'mo-afternoon': 'yes', 'mo-evening': 'no',
+                    'tu-morning': 'yes', 'tu-afternoon': 'yes', 'tu-evening': 'prefer',
+                    'we-morning': 'yes', 'we-afternoon': 'yes', 'we-evening': 'no',
+                    'th-morning': 'yes', 'th-afternoon': 'yes', 'th-evening': 'yes',
+                    'fr-morning': 'yes', 'fr-afternoon': 'yes', 'fr-evening': 'no'
+                }
+            };
+        }
+        
+        // Add some demo schedule data to test clearSchedule
+        if (!appState.scheduleData) appState.scheduleData = {};
+        const testMonth = "2025-11"; // Use next month for testing
+        if (!appState.scheduleData[testMonth]) {
+            appState.scheduleData[testMonth] = {
+                "2025-11-03": { assignments: { "morning": 1, "afternoon": 2 } },
+                "2025-11-04": { assignments: { "morning": 2, "evening": 3 } },
+                "2025-11-05": { assignments: { "afternoon": 3, "evening": 1 } }
+            };
+        }
+        
         try { localStorage.setItem(DEMO_FLAG_KEY, '1'); } catch {}
         appState.save();
     }
@@ -106,8 +150,6 @@ function initApp(){
     window.ui = scheduleUI;
     // Render UI first so buttons/inputs exist
     scheduleUI.refreshDisplay();
-    // Setup delegated event handlers after DOM is ready
-    scheduleUI.setupHandlers();
 
     // Periodic status refresh (kept for banner visibility)
     setInterval(()=>{ showLockStatus(); }, 15000);
@@ -142,6 +184,10 @@ function initApp(){
     const eventHandler = new EventHandler(scheduleUI);
     window.handlers = eventHandler;
     window.appUI = appUI;
+    
+    // Ensure handlers are available before setupHandlers is called
+    // Move setupHandlers call after handlers are defined
+    scheduleUI.setupHandlers();
     
     // Holiday functions (missing window mappings)
     window.showHolidaysPopup = function() { 
