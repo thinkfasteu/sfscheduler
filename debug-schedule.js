@@ -1,11 +1,17 @@
-// Debug helper now focused on auto-generation diagnostics (generate button removed)
+// Debug helper for manual schedule generation (no automatic generation)
 (function(){
-  console.log('=== AUTO-GENERATION DEBUG HELPER LOADED ===');
+  console.log('=== MANUAL SCHEDULE GENERATION DEBUG HELPER LOADED ===');
   function reportStatus(){
-    const monthEl = document.getElementById('scheduleMonth');
-    const month = monthEl?.value;
-    const hasData = month ? !!Object.keys(window.appState?.scheduleData?.[month]||{}).length : false;
-    console.log('[auto-gen][status]', { month, hydratedMonths:[...(window.ui?._hydratedMonths||[])], hasData, generating: !!window.ui?._generating });
+    if (!window.ui) { console.warn('[debug] window.ui not available'); return; }
+    const month = window.ui.currentCalendarMonth;
+    const hasData = !!(window.appState?.scheduleData?.[month] && Object.keys(window.appState.scheduleData[month]).length);
+    console.log('[manual-gen][status]', { month, hydratedMonths:[...(window.ui?._hydratedMonths||[])], hasData, generating: !!window.ui?._generating });
+    console.log('[manual-gen] To generate schedule, click "Plan erstellen" button or call window.handlers?.generateNewSchedule()');
   }
-  setInterval(()=>{ try { reportStatus(); } catch(e){ /* ignore */ } }, 4000);
+  setTimeout(()=>{
+    window.__reportScheduleStatus = reportStatus;
+    console.log('Use window.__reportScheduleStatus() to check generation state');
+    console.log('NOTE: No automatic generation - use "Plan erstellen" button only!');
+    reportStatus();
+  }, 1000);
 })();

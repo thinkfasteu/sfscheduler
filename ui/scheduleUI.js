@@ -549,17 +549,7 @@ export class ScheduleUI {
       if (this.currentCalendarMonth === month){
         this.renderAssignments(month);
         this.renderWeekendReport(month);
-                    // Auto-generate schedule if none exists yet for this month
-                    try {
-                            const hasAny = !!Object.keys(appState.scheduleData?.[month]||{}).length;
-                            console.log('[auto-gen] checking for existing schedule:', { month, hasAny, scheduleData: appState.scheduleData?.[month] });
-                            if (!hasAny) {
-                                    console.log('[auto-gen] no existing schedule, triggering auto-generation');
-                                    this.generateScheduleForCurrentMonth();
-                            } else {
-                                    console.log('[auto-gen] schedule already exists, skipping auto-generation');
-                            }
-                    } catch(e){ console.warn('[auto-gen] failed to trigger generation', e); }
+        // NO automatic generation - user must click "Plan erstellen" button
       }
                 // brief confirmation
                 this.setStatus('Synchronisiert ✓', true, false);
@@ -665,9 +655,11 @@ export class ScheduleUI {
 
     generateScheduleForCurrentMonth(){
         const month = this.currentCalendarMonth;
-        console.log('[generateSchedule] called for month=', month, 'currentCalendarMonth=', this.currentCalendarMonth);
+        console.log('[generateSchedule] manual generation called for month=', month);
         if (!month){ console.warn('[generateSchedule] no current month'); return; }
         if (this._generating){ console.warn('[generateSchedule] already in progress'); return; }
+        
+        // Manual generation - no automatic checks, always proceed
         this._generating = true;
         (async ()=> {
             const startedAt = performance.now?.()||0;

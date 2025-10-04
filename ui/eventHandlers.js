@@ -293,13 +293,13 @@ export class EventHandler {
 
         console.log('[generateNewSchedule] availability data found, starting generation');
         
-        // Generate fresh schedule
+        // Generate fresh schedule - manual generation only
         if (this.ui && typeof this.ui.generateScheduleForCurrentMonth === 'function') {
             try {
-                // Force generation even if there was existing data
-                this.ui._generating = false; // Reset generation lock if stuck
+                // Reset generation lock if stuck
+                this.ui._generating = false; 
                 this.ui.generateScheduleForCurrentMonth();
-                console.log('[generateNewSchedule] schedule generation initiated');
+                console.log('[generateNewSchedule] manual schedule generation initiated');
             } catch (e) {
                 console.error('[generateNewSchedule] generation failed:', e);
                 alert('Fehler beim Erstellen des Plans: ' + e.message);
