@@ -117,16 +117,53 @@ export class EventHandler {
     async generateSchedule() { return window.ui?.generateScheduleForCurrentMonth?.(); }
 
     clearSchedule() {
-        const month = document.getElementById('scheduleMonth').value;
-        if (!month || !appState.scheduleData[month]) return;
+        console.log('[clearSchedule] called');
+        const monthEl = document.getElementById('scheduleMonth');
+        const month = monthEl?.value || this.ui?.currentCalendarMonth;
+        console.log('[clearSchedule] monthEl=', monthEl, 'month=', month, 'currentCalendarMonth=', this.ui?.currentCalendarMonth);
+        console.log('[clearSchedule] scheduleData for month=', appState.scheduleData?.[month]);
+        
+        if (!month) {
+            console.log('[clearSchedule] no month selected');
+            alert('Bitte wählen Sie einen Monat aus.');
+            return;
+        }
+        
+        const hasScheduleData = appState.scheduleData?.[month] && Object.keys(appState.scheduleData[month]).length > 0;
+        
+        if (!hasScheduleData) {
+            console.log('[clearSchedule] no schedule data found');
+            alert('Kein Dienstplan zum Löschen verfügbar');
+            return;
+        }
+        
         if (confirm(`Soll der Dienstplan für ${month} wirklich gelöscht werden?`)) {
+            console.log('[clearSchedule] confirmed, deleting schedule');
+            
+            // Clear local schedule data
             delete appState.scheduleData[month];
+            
+            // Clear backend/service data if available
+            try {
+                if (window.__services?.schedule?.clearMonth) {
+                    console.log('[clearSchedule] clearing backend schedule data');
+                    window.__services.schedule.clearMonth(month);
+                }
+            } catch (e) {
+                console.warn('[clearSchedule] could not clear backend data:', e);
+            }
+            
+            // Save the cleared state
             appState.save();
+            
+            // Refresh the UI
             if (typeof this.ui.updateCalendarFromSelect === 'function') {
                 this.ui.updateCalendarFromSelect();
             } else {
                 this.ui.refreshDisplay();
             }
+            
+            console.log('[clearSchedule] schedule cleared and UI refreshed');
         }
     }
 
@@ -187,5 +224,89 @@ export class EventHandler {
 
     closeModal(id) {
         this.modalManager.closeModal(id);
+    }
+
+    exportSchedule() {
+        // Simple CSV export placeholder - would need to be implemented
+        const month = document.getElementById('scheduleMonth').value;
+        if (!month || !appState.scheduleData[month]) {
+            alert('Kein Dienstplan für Export verfügbar');
+            return;
+        }
+        alert('CSV Export wird noch nicht unterstützt');
+        // TODO: Implement CSV export functionality
+    }
+
+    exportPdf() {
+        // PDF export placeholder - would need to be implemented  
+        const month = document.getElementById('scheduleMonth').value;
+        if (!month || !appState.scheduleData[month]) {
+            alert('Kein Dienstplan für Export verfügbar');
+            return;
+        }
+        alert('PDF Export wird noch nicht unterstützt');
+        // TODO: Implement PDF export functionality
+    }
+
+    generateNewSchedule() {
+        console.log('[generateNewSchedule] called');
+        const monthEl = document.getElementById('scheduleMonth');
+        const month = monthEl?.value || this.ui?.currentCalendarMonth;
+        
+        if (!month) {
+            console.log('[generateNewSchedule] no month selected');
+            alert('Bitte wählen Sie einen Monat aus.');
+            return;
+        }
+
+        console.log('[generateNewSchedule] generating for month:', month);
+        
+        // Clear any existing schedule data for this month
+        if (appState.scheduleData && appState.scheduleData[month]) {
+            console.log('[generateNewSchedule] clearing existing schedule data');
+            delete appState.scheduleData[month];
+        }
+        
+        // Clear any backend/service data if available
+        try {
+            if (window.__services?.schedule?.clearMonth) {
+                console.log('[generateNewSchedule] clearing backend schedule data');
+                window.__services.schedule.clearMonth(month);
+            }
+        } catch (e) {
+            console.warn('[generateNewSchedule] could not clear backend data:', e);
+        }
+
+        // Save the cleared state
+        appState.save();
+        
+        // Check if we have availability data for this month
+        const hasAvailability = appState.availabilityData && 
+                               appState.availabilityData[month] && 
+                               Object.keys(appState.availabilityData[month]).length > 0;
+        
+        if (!hasAvailability) {
+            console.log('[generateNewSchedule] no availability data found');
+            alert(`Keine Verfügbarkeitsdaten für ${month} gefunden. Bitte zuerst Verfügbarkeiten eintragen.`);
+            return;
+        }
+
+        console.log('[generateNewSchedule] availability data found, starting generation');
+        
+        // Generate fresh schedule
+        if (this.ui && typeof this.ui.generateScheduleForCurrentMonth === 'function') {
+            try {
+                // Force generation even if there was existing data
+                this.ui._generating = false; // Reset generation lock if stuck
+                this.ui.generateScheduleForCurrentMonth();
+                console.log('[generateNewSchedule] schedule generation initiated');
+            } catch (e) {
+                console.error('[generateNewSchedule] generation failed:', e);
+                alert('Fehler beim Erstellen des Plans: ' + e.message);
+            }
+        } else {
+            console.error('[generateNewSchedule] generateScheduleForCurrentMonth not available');
+            alert('Plan-Generator nicht verfügbar');
+        }
     }
 }

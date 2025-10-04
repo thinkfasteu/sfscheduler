@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Reset Demo Data - SF Scheduler</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        button { padding: 10px 15px; margin: 5px; }
+        .success { color: green; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Reset Demo Data</h1>
+    
+    <p>Use this page to reset the application state and get fresh demo data.</p>
+    
+    <button onclick="clearStorage()">Clear LocalStorage</button>
+    <button onclick="showStorage()">Show Current Storage</button>
+    <button onclick="goToMain()">Go to Main App</button>
+    
+    <div id="output" style="margin-top: 20px; padding: 10px; background: #f5f5f5;"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const color = type === 'success' ? 'green' : type === 'error' ? 'red' : 'blue';
+            output.innerHTML += '<div style="color: ' + color + '">' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
+        }
+        
+        function clearStorage() {
+            try {
+                const keys = Object.keys(localStorage);
+                log('Found ' + keys.length + ' localStorage keys: ' + keys.join(', '));
+                
+                localStorage.clear();
+                log('LocalStorage cleared successfully!', 'success');
+                log('Refresh the main app to get fresh demo data.', 'info');
+            } catch (e) {
+                log('Error clearing storage: ' + e.message, 'error');
+            }
+        }
+        
+        function showStorage() {
+            try {
+                const keys = Object.keys(localStorage);
+                log('Current localStorage keys (' + keys.length + '):');
+                keys.forEach(key => {
+                    const value = localStorage.getItem(key);
+                    const preview = value.length > 100 ? value.substring(0, 100) + '...' : value;
+                    log('  ' + key + ': ' + preview);
+                });
+            } catch (e) {
+                log('Error reading storage: ' + e.message, 'error');
+            }
+        }
+        
+        function goToMain() {
+            window.location.href = '/';
+        }
+        
+        // Show initial storage on load
+        setTimeout(showStorage, 100);
+    </script>
+</body>
+</html>

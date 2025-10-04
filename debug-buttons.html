@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Buttons - SF Scheduler</title>
+    <meta charset="utf-8">
+            function testGenerateSchedule() {
+            try {
+                log('button', 'Testing generateNewSchedule method...');
+                if (window.handlers && window.handlers.generateNewSchedule) {
+                    window.handlers.generateNewSchedule();
+                    log('button', 'generateNewSchedule called successfully');
+                } else {
+                    log('button', 'generateNewSchedule method not available');
+                }
+            } catch (e) {
+                log('button', 'Error: ' + e.message);
+            }
+        }   body { font-family: sans-serif; padding: 20px; }
+        .debug-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        button { padding: 8px 16px; margin: 5px; }
+        .output { background: #f5f5f5; padding: 10px; margin: 10px 0; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>SF Scheduler Debug</h1>
+    
+    <div class="debug-section">
+        <h3>Application State</h3>
+        <button onclick="checkAppState()">Check App State</button>
+        <button onclick="checkHandlers()">Check Handlers</button>
+        <button onclick="checkScheduleData()">Check Schedule Data</button>
+        <div id="stateOutput" class="output"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h3>Manual Button Test</h3>
+        <button onclick="testClearSchedule()">Test Clear Schedule</button>
+        <button onclick="testGenerateSchedule()">Test Generate Schedule</button>
+        <div id="buttonOutput" class="output"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h3>Direct DOM Test</h3>
+        <select id="scheduleMonth">
+            <option value="2025-10">2025-10</option>
+            <option value="2025-11">2025-11</option>
+        </select>
+        <button id="clearScheduleBtn">Plan löschen (Direct)</button>
+        <div id="domOutput" class="output"></div>
+    </div>
+
+    <!-- Load the main app -->
+    <script src="/boot.js"></script>
+    
+    <script>
+        function log(section, message) {
+            const output = document.getElementById(section + 'Output');
+            output.textContent = new Date().toLocaleTimeString() + ': ' + message + '\n' + output.textContent;
+        }
+        
+        function checkAppState() {
+            try {
+                log('state', 'window.__APP_READY__: ' + window.__APP_READY__);
+                log('state', 'window.appState: ' + (window.appState ? 'exists' : 'missing'));
+                log('state', 'window.handlers: ' + (window.handlers ? 'exists' : 'missing'));
+                log('state', 'window.ui: ' + (window.ui ? 'exists' : 'missing'));
+                if (window.appState) {
+                    log('state', 'staffData length: ' + (window.appState.staffData ? window.appState.staffData.length : 'undefined'));
+                    log('state', 'scheduleData: ' + JSON.stringify(Object.keys(window.appState.scheduleData || {})));
+                }
+            } catch (e) {
+                log('state', 'Error: ' + e.message);
+            }
+        }
+        
+        function checkHandlers() {
+            try {
+                if (window.handlers) {
+                    log('state', 'handlers.clearSchedule: ' + typeof window.handlers.clearSchedule);
+                    log('state', 'handlers.executeSwap: ' + typeof window.handlers.executeSwap);
+                    log('state', 'handlers.generateSchedule: ' + typeof window.handlers.generateSchedule);
+                } else {
+                    log('state', 'window.handlers is not defined');
+                }
+            } catch (e) {
+                log('state', 'Error checking handlers: ' + e.message);
+            }
+        }
+        
+        function checkScheduleData() {
+            try {
+                if (window.appState && window.appState.scheduleData) {
+                    const months = Object.keys(window.appState.scheduleData);
+                    log('state', 'Schedule months: ' + JSON.stringify(months));
+                    months.forEach(month => {
+                        const dates = Object.keys(window.appState.scheduleData[month]);
+                        log('state', month + ' has ' + dates.length + ' dates: ' + dates.slice(0, 3).join(', '));
+                    });
+                } else {
+                    log('state', 'No schedule data found');
+                }
+            } catch (e) {
+                log('state', 'Error checking schedule data: ' + e.message);
+            }
+        }
+        
+        function testClearSchedule() {
+            try {
+                log('button', 'Testing clearSchedule method...');
+                if (window.handlers && window.handlers.clearSchedule) {
+                    window.handlers.clearSchedule();
+                    log('button', 'clearSchedule called successfully');
+                } else {
+                    log('button', 'clearSchedule method not available');
+                }
+            } catch (e) {
+                log('button', 'Error: ' + e.message);
+            }
+        }
+        
+        function testGenerateSchedule() {
+            try {
+                log('button', 'Testing generateSchedule method...');
+                if (window.ui && window.ui.generateScheduleForCurrentMonth) {
+                    window.ui.generateScheduleForCurrentMonth();
+                    log('button', 'generateScheduleForCurrentMonth called successfully');
+                } else {
+                    log('button', 'generateScheduleForCurrentMonth method not available');
+                }
+            } catch (e) {
+                log('button', 'Error: ' + e.message);
+            }
+        }
+        
+        // Wait for app to be ready, then run initial checks
+        setTimeout(() => {
+            checkAppState();
+            checkHandlers();
+            checkScheduleData();
+        }, 2000);
+        
+        // Add click listener to direct button
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('clearScheduleBtn').addEventListener('click', () => {
+                log('dom', 'Direct button clicked');
+                testClearSchedule();
+            });
+        });
+    </script>
+</body>
+</html>
