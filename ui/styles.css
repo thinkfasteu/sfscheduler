@@ -313,6 +313,26 @@ li { margin: 6px 0; }
     100% { opacity: 1; }
 }
 
+/* === CSP Inline Style Replacements === */
+#tabLockStatus { position:fixed; bottom:8px; right:8px; font:11px system-ui; padding:4px 8px; border-radius:4px; background:#0d6efd; color:#fff; z-index:3000; opacity:.92; display:flex; align-items:center; gap:6px; }
+.fade-out { opacity:0 !important; transition: opacity .6s; }
+.inline-banner { position:fixed; top:8px; left:50%; transform:translateX(-50%); background:#198754; color:#fff; padding:4px 10px; font:12px system-ui; border-radius:4px; z-index:5000; box-shadow:0 2px 6px rgba(0,0,0,.3); }
+.inline-banner.warn { background:#ffc107; color:#222; }
+.inline-banner.error { background:var(--danger); }
+.boot-error-banner { position:fixed; top:0; left:0; right:0; background:#ffdede; color:#222; padding:6px 10px; font:13px system-ui; z-index:3500; box-shadow:0 2px 4px rgba(0,0,0,.2); display:flex; align-items:center; gap:8px; }
+.supabase-warning-bar { position:fixed; top:0; left:0; right:0; z-index:2000; background:#ffc107; color:#222; padding:6px 10px; font:14px system-ui; box-shadow:0 2px 4px rgba(0,0,0,.2); }
+.monitoring-notification { position:fixed; top:72px; right:16px; background:var(--card); color:var(--text); border:1px solid var(--border); box-shadow:var(--shadow); padding:10px 14px; border-radius:8px; font:13px system-ui; z-index:3400; width:320px; display:flex; flex-direction:column; gap:6px; }
+.debug-float-btn { position:fixed; top:10px; right:10px; z-index:9999; }
+
+/* Progress bar width buckets (avoid inline width) */
+.cl-progress-bar { width:0%; }
+.w-pct-0 { width:0%; }
+.w-pct-20 { width:20%; }
+.w-pct-40 { width:40%; }
+.w-pct-60 { width:60%; }
+.w-pct-80 { width:80%; }
+.w-pct-100 { width:100%; }
+
 .btn-pilot {
     background: #ff6b35;
     color: white;
@@ -497,6 +517,29 @@ li { margin: 6px 0; }
 .alerts-container {
     max-height: 300px;
     overflow-y: auto;
+}
+
+/* Tab lock status styling */
+.tab-lock-status {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    z-index: 1000;
+    box-shadow: var(--shadow);
+}
+
+.tab-lock-status .fw-600 {
+    font-weight: 600;
+}
+
+.tab-lock-status .text-muted {
+    color: var(--muted);
+    margin-left: 4px;
 }
 
 /* Responsive adjustments */

@@ -1,5 +1,7 @@
 import { APP_CONFIG, SHIFTS } from './modules/config.js';
 import { appState } from '@state';
+// Safe window proxy for non-browser test runs
+const WIN = (typeof window !== 'undefined') ? window : { holidayService: null };
 import { parseYMD } from './utils/dateUtils.js';
 import { getStudentWeeklyCapSync } from './modules/academicTerms.js';
 
@@ -22,8 +24,8 @@ class Schedule {
         const d = parseYMD(dateStr);
         const isWeekend = [0,6].includes(d.getDay());
         // Use TS singleton as primary source, fallback to appState for compatibility
-        const isHoliday = window.holidayService
-            ? window.holidayService.isHoliday(dateStr)
+        const isHoliday = WIN.holidayService
+            ? WIN.holidayService.isHoliday(dateStr)
             : !!(appState.holidays?.[String(this.year)]?.[dateStr]);
         const type = isHoliday ? 'holiday' : isWeekend ? 'weekend' : 'weekday';
         return Object.entries(SHIFTS)
@@ -33,8 +35,8 @@ class Schedule {
     setAssignment(dateStr, shiftKey, staffId){
         if (!this.data[dateStr]){
             // Use TS singleton as primary source for holiday name
-            const holidayName = window.holidayService
-                ? window.holidayService.getHolidayName(dateStr)
+            const holidayName = WIN.holidayService
+                ? WIN.holidayService.getHolidayName(dateStr)
                 : (appState.holidays?.[String(this.year)]?.[dateStr] || null);
             this.data[dateStr] = { assignments: {}, holidayName };
         }

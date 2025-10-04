@@ -584,29 +584,14 @@ Klicken Sie auf "View Details" bei Alerts für detaillierte Logs.
     }
 
     showNotification(message, type = 'info') {
-        // Simple notification implementation
         const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
+        notification.className = `toast toast-sm notif`;
+        notification.dataset.type = type;
         notification.textContent = message;
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 12px 20px;
-            background: ${type === 'info' ? '#007bff' : type === 'success' ? '#28a745' : '#dc3545'};
-            color: white;
-            border-radius: 4px;
-            z-index: 10000;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        `;
-        
-        document.body.appendChild(notification);
-        
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, 3000);
+        // Reuse existing toast container if present
+        const host = document.querySelector('.toast-container') || (()=>{ const c=document.createElement('div'); c.className='toast-container'; document.body.appendChild(c); return c; })();
+        host.appendChild(notification);
+        setTimeout(()=>{ notification.classList.add('fade-out'); setTimeout(()=> notification.remove(), 650); }, 3000);
     }
 
     viewLogDetails(logId) {

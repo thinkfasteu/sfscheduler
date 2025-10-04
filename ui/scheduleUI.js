@@ -224,6 +224,12 @@ export class ScheduleUI {
         console.log('Add vacation period clicked');
     }
 
+    setupHandlers() {
+        const root = document.getElementById('schedule-tab') || document;
+        // Use delegation for better reliability - single event listener handles all clicks
+        this.bindDelegatesOnce();
+    }
+
     // Compute canonical day type using latest holiday + weekend logic
     computeDayType(dateStr){
         try {
@@ -582,7 +588,18 @@ export class ScheduleUI {
                     const dateStr = this._selectedDateForSearch || document.querySelector('.cal-body[data-date]')?.getAttribute('data-date');
                     if (!dateStr){ alert('Bitte ein Datum im Kalender wählen.'); return; }
                     this.openSearchAssignModal(dateStr);
+                } else if (id === 'executeSwapBtn'){
+                    try { window.handlers?.executeSwap?.(); }
+                    catch(err){ console.warn('[delegation] executeSwap failed', err); }
+                } else if (id === 'clearScheduleBtn'){
+                    try { window.handlers?.clearSchedule?.(); }
+                    catch(err){ console.warn('[delegation] clearSchedule failed', err); }
                 }
+            }
+            // Modal backdrop click to close
+            if (e.target.classList.contains('modal') && e.target.closest('.modal')?.classList.contains('open')){
+                const modalId = e.target.id;
+                if (modalId) window.closeModal?.(modalId);
             }
             const body = e.target.closest('.cal-body[data-date]');
             if (body){
@@ -660,19 +677,6 @@ export class ScheduleUI {
         })();
     }
 
-    // Provide a stable bridge for legacy bindings (eventBindings.js expects either window.handlers.generateSchedule or window.generateSchedule)
-    ensureGlobalGenerateBridge(){
-        if (!window.generateSchedule){
-            window.generateSchedule = async () => {
-                try { await this.generateScheduleForCurrentMonth(); } catch(e){ console.warn('[bridge] generateSchedule failed', e); }
-            };
-        }
-        if (!window.handlers || typeof window.handlers.generateSchedule !== 'function'){
-            window.handlers = window.handlers || {};
-            window.handlers.generateSchedule = () => window.generateSchedule();
-        }
-        window.__GEN_ENTRYPOINT = 'scheduleUI';
-    }
 
     async prehydrateAvailability(month){
         let releasing = false;

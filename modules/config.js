@@ -93,9 +93,7 @@ export const APP_CONFIG = {
     FAIRNESS_STRICT_MODE: true,
     // Enable priority logic that biases evening/closing shifts toward students until ratio reached
     STUDENT_EVENING_PRIORITY_ENABLED: true
-    ,
-    // Recovery pass configuration (manual gap fill)
-    RECOVERY_MIN_SCORE_FLOOR: -800 // lowest candidate score accepted in recovery fill
+    // (Former recovery pass configuration removed)
 };
 
 export const SHIFTS = {

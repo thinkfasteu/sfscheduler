@@ -181,8 +181,8 @@ export class EventHandler {
         appState.scheduleData[month] = consolidated;
         appState.save();
     try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
-        this.ui.updateCalendarFromSelect?.();
-        modal.style.display = 'none';
+    this.ui.updateCalendarFromSelect?.();
+    try { this.modalManager.closeModal('swapModal'); } catch {}
     }
 
     closeModal(id) {

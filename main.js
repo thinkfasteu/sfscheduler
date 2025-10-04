@@ -20,11 +20,14 @@ function initApp(){
         if (!el){
             el = document.createElement('div');
             el.id='tabLockStatus';
-            el.style.cssText='position:fixed;bottom:8px;right:8px;font:11px system-ui;padding:4px 8px;border-radius:4px;background:#0d6efd;color:#fff;z-index:3000;opacity:.92;display:flex;align-items:center;gap:6px;';
+            el.className = 'tab-lock-status';
             document.body.appendChild(el);
         }
         const ver = window.__APP_VERSION__ || '1.2.4';
-        el.innerHTML = `<span style="font-weight:600;">Version ${ver}</span><span style="opacity:.75;">(Editing enabled)</span>`;
+        el.replaceChildren(
+            Object.assign(document.createElement('span'), { className: 'fw-600', textContent: `Version ${ver} ` }),
+            Object.assign(document.createElement('span'), { className: 'text-muted', textContent: '(Editing enabled)' })
+        );
         window.__TAB_CAN_EDIT = true;
         document.body.classList.remove('view-only');
     }
@@ -51,7 +54,7 @@ function initApp(){
                 div.innerHTML = `<span>${text}</span>`;
                 const btn = document.createElement('button'); btn.className='close'; btn.textContent='×'; btn.onclick=()=>div.remove(); div.appendChild(btn);
                 document.body.appendChild(div);
-                if (ttl>0) setTimeout(()=>{ div.style.transition='opacity .6s'; div.style.opacity='0'; setTimeout(()=>div.remove(),650); }, ttl);
+                if (ttl>0) setTimeout(()=>{ div.classList.add('fade-out'); setTimeout(()=>div.remove(),650); }, ttl);
             };
         }
     // Seed demo data only once (if never seeded and no staff exist). Persist flag after first seed or after first manual modification.
@@ -103,7 +106,8 @@ function initApp(){
     window.ui = scheduleUI;
     // Render UI first so buttons/inputs exist
     scheduleUI.refreshDisplay();
-    // Manual generate button & bridge removed (auto-generation on first open)
+    // Setup delegated event handlers after DOM is ready
+    scheduleUI.setupHandlers();
 
     // Periodic status refresh (kept for banner visibility)
     setInterval(()=>{ showLockStatus(); }, 15000);
@@ -207,9 +211,9 @@ function initApp(){
             const o = document.createElement('div');
             o.id='appReadyOverlay';
             o.textContent='UI Ready';
-            o.style.cssText='position:fixed;top:8px;left:50%;transform:translateX(-50%);background:#198754;color:#fff;padding:4px 10px;font:12px system-ui;border-radius:4px;z-index:5000;box-shadow:0 2px 6px rgba(0,0,0,.3)';
+            o.className='inline-banner';
             document.body.appendChild(o);
-            setTimeout(()=>{ o.style.transition='opacity .6s'; o.style.opacity='0'; setTimeout(()=>o.remove(),700); }, 4000);
+            setTimeout(()=>{ o.classList.add('fade-out'); setTimeout(()=>o.remove(),700); }, 4000);
         }
     } catch {}
     // Backup API

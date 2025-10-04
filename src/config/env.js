@@ -39,12 +39,14 @@ export function showBanner(id, text, bg='#ffc107', ttl=8000){
     return;
   }
   // Fallback inline (rare: early boot before main.js)
-  if (typeof document==='undefined' || document.getElementById(id)) return;
-  const div = document.createElement('div');
-  div.id=id; div.className='app-banner';
-  div.textContent=text;
-  document.body.appendChild(div);
-  if (ttl>0) setTimeout(()=>{ div.style.transition='opacity .6s'; div.style.opacity='0'; setTimeout(()=>div.remove(),650); }, ttl);
+  if (typeof document==='undefined' || !document.body || document.getElementById(id)) return;
+  try {
+    const div = document.createElement('div');
+    div.id=id; div.className='app-banner';
+    div.textContent=text;
+    document.body.appendChild(div);
+    if (ttl>0) setTimeout(()=>{ try { div.classList.add('fade-out'); setTimeout(()=>div.remove(),650); } catch{} }, ttl);
+  } catch {/* non-browser or test env */}
 }
 
 // Schema version check
