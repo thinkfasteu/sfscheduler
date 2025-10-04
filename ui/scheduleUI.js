@@ -568,12 +568,18 @@ export class ScheduleUI {
     }
 
     bindDelegatesOnce(){
-        if (this._delegatesBound) return;
+        if (this._delegatesBound) {
+            console.log('[bindDelegatesOnce] already bound, skipping');
+            return;
+        }
+        console.log('[bindDelegatesOnce] setting up click delegation');
         this._delegatesBound = true;
         // Toolbar & calendar delegation
         document.addEventListener('click', (e)=>{
+            console.log('[delegation] document click detected, target=', e.target);
             const btn = e.target.closest('button');
             if (btn){
+                console.log('[delegation] button click detected, id=', btn.id);
                 const id = btn.id;
                 if (id === 'showHolidaysBtn'){
                     try { (window.modalManager||window).open ? window.modalManager.open('holidaysModal') : window.showModal?.('holidaysModal'); }
