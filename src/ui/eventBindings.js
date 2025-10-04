@@ -53,11 +53,26 @@ function __initEventBindings(){
   });
   bind('showHolidaysBtn','click', ()=> window.showHolidaysPopup && window.showHolidaysPopup());
   // Schedule - direct bindings to window.handlers methods
-  bind('generateScheduleBtn','click', ()=> window.handlers?.generateNewSchedule?.());
-  bind('clearScheduleBtn','click', ()=> window.handlers?.clearSchedule?.());
-  bind('exportScheduleBtn','click', ()=> window.handlers?.exportSchedule?.());
-  bind('exportPdfBtn','click', ()=> window.handlers?.exportPdf?.());
-  bind('printScheduleBtn','click', ()=> window.print?.());
+  bind('generateScheduleBtn','click', ()=> {
+    console.log('[eventBindings] Generate button clicked! window.handlers=', window.handlers);
+    window.handlers?.generateNewSchedule?.();
+  });
+  bind('clearScheduleBtn','click', ()=> {
+    console.log('[eventBindings] Clear button clicked! window.handlers=', window.handlers);
+    window.handlers?.clearSchedule?.();
+  });
+  bind('exportScheduleBtn','click', ()=> {
+    console.log('[eventBindings] Export CSV button clicked! window.handlers=', window.handlers);
+    window.handlers?.exportSchedule?.();
+  });
+  bind('exportPdfBtn','click', ()=> {
+    console.log('[eventBindings] Export PDF button clicked! window.handlers=', window.handlers);
+    window.handlers?.exportPdf?.();
+  });
+  bind('printScheduleBtn','click', ()=> {
+    console.log('[eventBindings] Print button clicked! window.print=', typeof window.print);
+    window.print?.();
+  });
   // Vacation
   bind('addVacationPeriodBtn','click', ()=> window.addVacationPeriod && window.addVacationPeriod());
   bind('addOtherStaffBtn','click', ()=> window.addOtherStaff && window.addOtherStaff());
