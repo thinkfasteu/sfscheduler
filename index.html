@@ -4,7 +4,7 @@
     <title>FTG Tools</title>
     <!-- CSP hardened: inline scripts removed -->
     <!-- Note: frame-ancestors ignored in meta (needs HTTP header); removed here to silence console warning. Add via server header when deployed. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdnjs.cloudflare.com 'sha256-HGMX8au7N+OClHrCOvOfpt3pxK1nbFs0LRWDdiBaYFM='; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://aoryovdttdujfunectpx.supabase.co https: wss://aoryovdttdujfunectpx.supabase.co; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdnjs.cloudflare.com 'sha256-qewOv7A4QKIhdNDfut4TsCMx+N+hnOs1LFtn2v9pWuw='; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://aoryovdttdujfunectpx.supabase.co https: wss://aoryovdttdujfunectpx.supabase.co; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';" />
     <link rel="stylesheet" href="./ui/styles.css">
         <link rel="icon" href="data:;base64,iVBORw0KGgo=">
             <!-- Explicit config.local.js inclusion (loads before boot if present) -->
@@ -17,7 +17,7 @@
             <script type="module" src="./boot.js"></script>
             <!-- NUCLEAR BUTTON DEBUG INLINE -->
             <script>
-            // Nuclear button test - bypasses ALL existing systems
+            // Nuclear button test - multiple binding strategies
             document.addEventListener('DOMContentLoaded', function() {
                 console.log('🚀 NUCLEAR BUTTON SYSTEM LOADING...');
                 
@@ -25,24 +25,53 @@
                 const clearBtn = document.getElementById('clearScheduleBtn');
                 
                 if (generateBtn) {
-                    generateBtn.onclick = function() {
+                    // Strategy 1: onclick (should work)
+                    generateBtn.onclick = function(e) {
+                        console.log('🔥 ONCLICK GENERATE FIRED!');
                         alert('🔥 NUCLEAR GENERATE BUTTON WORKS! 🔥');
-                        console.log('🔥 NUCLEAR GENERATE CLICKED!');
+                        e.stopPropagation();
+                        return false;
                     };
-                    console.log('✅ Nuclear generate button bound');
+                    
+                    // Strategy 2: addEventListener with capture (higher priority)
+                    generateBtn.addEventListener('click', function(e) {
+                        console.log('🔥 CAPTURE GENERATE FIRED!');
+                        alert('🔥 CAPTURE GENERATE BUTTON WORKS! 🔥');
+                        e.stopImmediatePropagation();
+                        e.preventDefault();
+                    }, true);
+                    
+                    console.log('✅ Nuclear generate button bound (both strategies)');
                 } else {
                     console.log('❌ Generate button not found');
                 }
                 
                 if (clearBtn) {
-                    clearBtn.onclick = function() {
+                    // Strategy 1: onclick
+                    clearBtn.onclick = function(e) {
+                        console.log('🚨 ONCLICK CLEAR FIRED!');
                         alert('🚨 NUCLEAR CLEAR BUTTON WORKS! 🚨');
-                        console.log('🚨 NUCLEAR CLEAR CLICKED!');
+                        e.stopPropagation();
+                        return false;
                     };
-                    console.log('✅ Nuclear clear button bound');
+                    
+                    // Strategy 2: addEventListener with capture
+                    clearBtn.addEventListener('click', function(e) {
+                        console.log('🚨 CAPTURE CLEAR FIRED!');
+                        alert('🚨 CAPTURE CLEAR BUTTON WORKS! 🚨');
+                        e.stopImmediatePropagation();
+                        e.preventDefault();
+                    }, true);
+                    
+                    console.log('✅ Nuclear clear button bound (both strategies)');
                 } else {
                     console.log('❌ Clear button not found');
                 }
+                
+                // Test if any click events work at all
+                document.body.addEventListener('click', function(e) {
+                    console.log('🎯 BODY CLICK DETECTED:', e.target.id || e.target.tagName);
+                }, true);
             });
             </script>
 
