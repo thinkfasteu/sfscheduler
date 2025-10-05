@@ -62,13 +62,31 @@ function __initEventBindings(){
   });
   bind('showHolidaysBtn','click', ()=> window.showHolidaysPopup && window.showHolidaysPopup());
   // Schedule - direct bindings to window.handlers methods
-  bind('generateScheduleBtn','click', ()=> {
-    console.log('[eventBindings] Generate button clicked! window.handlers=', window.handlers);
-    window.handlers?.generateNewSchedule?.();
+  bind('generateScheduleBtn','click', (e)=> {
+    console.log('[eventBindings] 🔥 GENERATE BUTTON CLICKED! 🔥');
+    console.log('[eventBindings] Event:', e);
+    console.log('[eventBindings] Target:', e.target);
+    console.log('[eventBindings] window.handlers=', window.handlers);
+    e.stopPropagation();
+    e.preventDefault();
+    if (window.handlers?.generateNewSchedule) {
+      console.log('[eventBindings] Calling generateNewSchedule...');
+      window.handlers.generateNewSchedule();
+    } else {
+      console.error('[eventBindings] No generateNewSchedule handler found!');
+    }
   });
-  bind('clearScheduleBtn','click', ()=> {
-    console.log('[eventBindings] Clear button clicked! window.handlers=', window.handlers);
-    window.handlers?.clearSchedule?.();
+  bind('clearScheduleBtn','click', (e)=> {
+    console.log('[eventBindings] 🧹 CLEAR BUTTON CLICKED! 🧹');
+    console.log('[eventBindings] Event:', e);
+    e.stopPropagation();
+    e.preventDefault();
+    if (window.handlers?.clearSchedule) {
+      console.log('[eventBindings] Calling clearSchedule...');
+      window.handlers.clearSchedule();
+    } else {
+      console.error('[eventBindings] No clearSchedule handler found!');
+    }
   });
   bind('exportScheduleBtn','click', ()=> {
     console.log('[eventBindings] Export CSV button clicked! window.handlers=', window.handlers);
