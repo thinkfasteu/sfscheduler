@@ -574,7 +574,10 @@ export class ScheduleUI {
         this._delegatesBound = true;
         // Calendar delegation only (toolbar buttons moved to direct binding)
         document.addEventListener('click', (e)=>{
-            // Check for modal-specific buttons that still need delegation
+            // Only handle specific calendar-related buttons and interactions
+            // DO NOT handle schedule toolbar buttons (they use direct binding)
+            
+            // Modal-specific buttons that need delegation
             const btn = e.target.closest('button');
             if (btn){
                 const id = btn.id;
@@ -586,6 +589,8 @@ export class ScheduleUI {
                     try { window.handlers?.executeSwap?.(); }
                     catch(err){ console.warn('[delegation] executeSwap failed', err); }
                 }
+                // Important: Don't prevent other button events from bubbling
+                return;
             }
             // Modal backdrop click to close
             if (e.target.classList.contains('modal') && e.target.closest('.modal')?.classList.contains('open')){

@@ -63,6 +63,7 @@ function __initEventBindings(){
   bind('showHolidaysBtn','click', ()=> window.showHolidaysPopup && window.showHolidaysPopup());
   // Schedule - direct bindings to window.handlers methods
   bind('generateScheduleBtn','click', (e)=> {
+    alert('🔥 GENERATE BUTTON WORKS! 🔥');
     console.log('[eventBindings] 🔥 GENERATE BUTTON CLICKED! 🔥');
     console.log('[eventBindings] Event:', e);
     console.log('[eventBindings] Target:', e.target);
@@ -77,6 +78,7 @@ function __initEventBindings(){
     }
   });
   bind('clearScheduleBtn','click', (e)=> {
+    alert('🧹 CLEAR BUTTON WORKS! 🧹');
     console.log('[eventBindings] 🧹 CLEAR BUTTON CLICKED! 🧹');
     console.log('[eventBindings] Event:', e);
     e.stopPropagation();
