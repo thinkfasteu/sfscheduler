@@ -15,8 +15,36 @@
 
 
             <script type="module" src="./boot.js"></script>
-            <!-- NUCLEAR BUTTON DEBUG -->
-            <script src="/sfscheduler/debug-buttons-simple.js"></script>
+            <!-- NUCLEAR BUTTON DEBUG INLINE -->
+            <script>
+            // Nuclear button test - bypasses ALL existing systems
+            document.addEventListener('DOMContentLoaded', function() {
+                console.log('🚀 NUCLEAR BUTTON SYSTEM LOADING...');
+                
+                const generateBtn = document.getElementById('generateScheduleBtn');
+                const clearBtn = document.getElementById('clearScheduleBtn');
+                
+                if (generateBtn) {
+                    generateBtn.onclick = function() {
+                        alert('🔥 NUCLEAR GENERATE BUTTON WORKS! 🔥');
+                        console.log('🔥 NUCLEAR GENERATE CLICKED!');
+                    };
+                    console.log('✅ Nuclear generate button bound');
+                } else {
+                    console.log('❌ Generate button not found');
+                }
+                
+                if (clearBtn) {
+                    clearBtn.onclick = function() {
+                        alert('🚨 NUCLEAR CLEAR BUTTON WORKS! 🚨');
+                        console.log('🚨 NUCLEAR CLEAR CLICKED!');
+                    };
+                    console.log('✅ Nuclear clear button bound');
+                } else {
+                    console.log('❌ Clear button not found');
+                }
+            });
+            </script>
 
 
 
