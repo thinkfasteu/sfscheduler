@@ -7,6 +7,7 @@ function onDomReady(fn) {
 }
 
 function bind(id, type, handler) {
+  console.log(`[bind] Attempting to bind ${type} on #${id}`);
   const attach = () => {
     const el = document.getElementById(id);
     if (!el) {
@@ -14,12 +15,20 @@ function bind(id, type, handler) {
       return;
     }
     el.addEventListener(type, handler);
-    console.log(`[bind] attached ${type} on #${id}`);
+    console.log(`[bind] ✅ SUCCESS: attached ${type} on #${id}`);
   };
-  onDomReady(attach);
+  
+  // Try immediate attachment first
+  if (document.readyState !== 'loading') {
+    attach();
+  } else {
+    // Fallback to DOM ready
+    onDomReady(attach);
+  }
 }
 
 function __initEventBindings(){
+  console.log('[eventBindings] Starting event binding initialization...');
   // Debug instrumentation: log tab clicks until confirmed working
   if (!window.__TAB_DEBUG_INSTALLED__){
     window.__TAB_DEBUG_INSTALLED__=true;
@@ -94,6 +103,8 @@ function __initEventBindings(){
   bind('importBackupBtn','click', ()=> { const inp=document.getElementById('backupFileInput'); if (inp) inp.click(); });
   const fileInput = document.getElementById('backupFileInput');
   if (fileInput){ fileInput.addEventListener('change', e=>{ const f=e.target.files && e.target.files[0]; if (f && window.__backup){ window.__backup.importFile(f); e.target.value=''; } }); }
+  
+  console.log('[eventBindings] ✅ Event binding initialization COMPLETE!');
 }
 
 if (document.readyState === 'loading'){
