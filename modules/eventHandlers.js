@@ -23,12 +23,8 @@ export class EventHandler {
             this.executeSwap();
         });
 
-        // Schedule generation handlers
-    // (manual generate button removed)
-
-        document.getElementById('clearScheduleBtn')?.addEventListener('click', () => {
-            this.clearSchedule();
-        });
+        // Schedule generation handlers moved to src/ui/eventBindings.js for consistency
+        // No direct button bindings here anymore
     }
 
     executeSwap() {
