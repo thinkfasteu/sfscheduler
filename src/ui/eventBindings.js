@@ -61,26 +61,53 @@ function __initEventBindings(){
     });
   });
   bind('showHolidaysBtn','click', ()=> window.showHolidaysPopup && window.showHolidaysPopup());
-  /* SCHEDULE EVENT BINDINGS REMOVED - TO BE REBUILT
-   * 
-   * The following buttons need event handlers when schedule tab is rebuilt:
-   * - generateScheduleBtn: Main schedule generation trigger  
-   * - clearScheduleBtn: Clears current schedule data
-   * - exportScheduleBtn: CSV export functionality
-   * - exportPdfBtn: PDF export functionality  
-   * - printScheduleBtn: Browser print dialog
-   * 
-   * Events were working with debugging alerts on button clicks
-   * Integration points: window.handlers.generateNewSchedule(), etc.
-   * 
-   * Previous working event binding pattern:
-   * bind('buttonId', 'click', (e) => {
-   *   // Add debugging alerts to verify events fire
-   *   if (window.handlers?.methodName) {
-   *     window.handlers.methodName();
-   *   }
-   * });
-   */
+  // Schedule tab
+  bind('generateScheduleBtn','click', (e)=> {
+    console.log('[eventBindings] Generate button clicked');
+    e?.preventDefault?.();
+    if (window.handlers?.generateNewSchedule) {
+      window.handlers.generateNewSchedule();
+    } else {
+      console.error('[eventBindings] No generateNewSchedule handler found!');
+    }
+  });
+
+  bind('clearScheduleBtn','click', (e)=> {
+    console.log('[eventBindings] Clear button clicked');
+    e?.preventDefault?.();
+    if (window.handlers?.clearSchedule) {
+      window.handlers.clearSchedule();
+    } else {
+      console.error('[eventBindings] No clearSchedule handler found!');
+    }
+  });
+
+  bind('exportScheduleBtn','click', ()=> {
+    console.log('[eventBindings] Export CSV clicked');
+    if (window.handlers?.exportSchedule) {
+      window.handlers.exportSchedule();
+    } else {
+      console.error('[eventBindings] No exportSchedule handler found!');
+    }
+  });
+
+  bind('exportPdfBtn','click', ()=> {
+    console.log('[eventBindings] Export PDF clicked');
+    if (window.handlers?.exportPdf) {
+      window.handlers.exportPdf();
+    } else {
+      console.error('[eventBindings] No exportPdf handler found!');
+    }
+  });
+
+  bind('printScheduleBtn','click', ()=> {
+    console.log('[eventBindings] Print clicked');
+    if (typeof window.print === 'function') {
+      window.print();
+    } else {
+      console.warn('[eventBindings] window.print not available');
+    }
+  });
   // Vacation
   bind('addVacationPeriodBtn','click', ()=> window.addVacationPeriod && window.addVacationPeriod());
   bind('addOtherStaffBtn','click', ()=> window.addOtherStaff && window.addOtherStaff());
@@ -92,11 +119,26 @@ function __initEventBindings(){
   bind('refreshAcademicTermsBtn','click', ()=> window.refreshAcademicTerms && window.refreshAcademicTerms());
   // Swap modal
   bind('swapModalCloseBtn','click', ()=> { try { window.modalManager ? window.modalManager.close('swapModal') : window.closeModal?.('swapModal'); } catch(e){ console.warn('[eventBindings] close swapModal failed', e); } });
-  bind('executeSwapBtn','click', ()=> window.executeSwap && window.executeSwap());
-  bind('executeAssignBtn','click', ()=> window.executeAssign && window.executeAssign());
+  bind('executeSwapBtn','click', ()=> {
+    if (window.handlers?.executeSwap) {
+      window.handlers.executeSwap();
+    } else if (window.executeSwap) {
+      window.executeSwap(); // legacy global fallback
+    } else {
+      console.error('[eventBindings] No executeSwap handler found');
+    }
+  });
+  bind('executeAssignBtn','click', ()=> {
+    if (window.handlers?.executeAssign) {
+      window.handlers.executeAssign();
+    } else if (window.executeAssign) {
+      window.executeAssign();
+    } else {
+      console.error('[eventBindings] No executeAssign handler found');
+    }
+  });
   // Search modal
   bind('searchModalCloseBtn','click', ()=> { try { window.modalManager ? window.modalManager.close('searchModal') : window.closeModal?.('searchModal'); } catch(e){ console.warn('[eventBindings] close searchModal failed', e); } });
-  bind('executeSearchAssignBtn','click', ()=> window.executeSearchAssign && window.executeSearchAssign());
   // Backup / Restore
   bind('exportBackupBtn','click', ()=> window.__backup && window.__backup.export());
   bind('importBackupBtn','click', ()=> { const inp=document.getElementById('backupFileInput'); if (inp) inp.click(); });
