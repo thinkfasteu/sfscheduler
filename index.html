@@ -15,50 +15,6 @@
 
 
             <script type="module" src="./boot.js"></script>
-            <!-- NUCLEAR BUTTON DEBUG INLINE -->
-            <script>
-            // Nuclear button test - enhanced debugging
-            document.addEventListener('DOMContentLoaded', function() {
-                console.log('🚀 NUCLEAR BUTTON SYSTEM LOADING...');
-                
-                let clickCount = 0;
-                
-                const generateBtn = document.getElementById('generateScheduleBtn');
-                const clearBtn = document.getElementById('clearScheduleBtn');
-                
-                // Enhanced debugging function
-                function debugButtonState(btn, name) {
-                    console.log(`🔍 ${name} button state:`, {
-                        exists: !!btn,
-                        disabled: btn?.disabled,
-                        style_pointerEvents: btn?.style.pointerEvents,
-                        onclick: !!btn?.onclick,
-                        classList: btn?.classList.toString()
-                    });
-                }
-                
-                if (generateBtn) {
-                    // Single strategy: onclick only
-                    generateBtn.onclick = function(e) {
-                        clickCount++;
-                        console.log(`🔥 GENERATE CLICK #${clickCount}!`);
-                        debugButtonState(generateBtn, 'GENERATE');
-                        alert(`🔥 GENERATE CLICK #${clickCount}! 🔥`);
-                        
-                        // Check if button state changed after alert
-                        setTimeout(() => {
-                            console.log('🕐 After alert timeout:');
-                            debugButtonState(generateBtn, 'GENERATE-POST');
-                        }, 100);
-                        
-                        return false;
-                    };
-                    
-                    console.log('✅ Nuclear generate button bound');
-                } else {
-                    console.log('❌ Generate button not found');
-                }
-                
                 if (clearBtn) {
                     // Single strategy: onclick only
                     clearBtn.onclick = function(e) {
