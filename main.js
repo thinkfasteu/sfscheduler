@@ -217,6 +217,10 @@ function initApp(){
         if (btn) btn.classList.add('active');
         const sec = document.getElementById(`${key}-tab`);
         if (sec) sec.classList.add('active');
+
+        if (key === 'schedule') {
+            console.log('[showTab] Switched to schedule tab - look for the buttons at the top: Plan erstellen, etc.');
+        }
     };
     
     // Ensure one tab active if none set yet
