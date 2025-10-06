@@ -21,23 +21,13 @@ export class EventHandler {
             }
         });
 
-        document.getElementById('executeSwapBtn')?.addEventListener('click', () => {
-            this.executeSwap();
-        });
-        document.getElementById('executeAssignBtn')?.addEventListener('click', () => {
-            this.executeAssign();
-        });
+        // Modal action buttons are wired centrally via src/ui/eventBindings.js
 
-        // Schedule generation handlers
-    // Generate button removed; no binding maintained.
-
-        document.getElementById('clearScheduleBtn')?.addEventListener('click', () => {
-            this.clearSchedule();
-        });
+        // Schedule button bindings are handled centrally via src/ui/eventBindings.js
     }
 
     executeSwap() {
-    const modal = document.getElementById('swapModal');
+        const modal = document.getElementById('swapModal');
         const dateStr = modal.dataset.date;
         const shiftKey = modal.dataset.shift;
         const currentStaffId = parseInt(modal.dataset.currentStaff);
@@ -108,10 +98,10 @@ export class EventHandler {
         // Apply validated schedule
         appState.scheduleData[month] = validated;
         appState.save();
-    try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
+        try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
         
-    this.ui.refreshDisplay();
-    try { window.modalManager ? window.modalManager.close('swapModal') : window.closeModal?.('swapModal'); } catch(e){ console.warn('[EventHandler] close swapModal failed', e); }
+        this.ui.refreshDisplay();
+        try { window.modalManager ? window.modalManager.close('swapModal') : window.closeModal?.('swapModal'); } catch(e){ console.warn('[EventHandler] close swapModal failed', e); }
     }
 
     async generateSchedule() { return window.ui?.generateScheduleForCurrentMonth?.(); }

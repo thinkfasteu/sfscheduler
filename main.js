@@ -148,6 +148,8 @@ function initApp(){
     const scheduleUI = new ScheduleUI('#scheduleContent');
     // Legacy global alias for backwards compatibility (some modules reference window.ui)
     window.ui = scheduleUI;
+    // Explicit alias used by various lazy utilities (e.g., holiday reload callbacks)
+    window.scheduleUI = scheduleUI;
     // Render UI first so buttons/inputs exist
     scheduleUI.refreshDisplay();
 
