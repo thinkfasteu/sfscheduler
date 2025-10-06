@@ -1,8 +1,8 @@
 // Unified application entry for bundling.
 // Imports existing modular script tags previously loaded individually.
+import '../main.js';
 import './config/bootstrap.js';
 import './ui/eventBindings.js';
-import '../main.js';
 import { installGlobalErrorHandlers, getHealthSnapshot } from './utils/errors.js';
 import { holidayService } from '../packages/shared/src/services/holidayService';
 
