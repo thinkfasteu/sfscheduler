@@ -61,12 +61,14 @@ function __initEventBindings(){
     });
   });
   bind('showHolidaysBtn','click', ()=> {
+    alert('[DEBUG] Show holidays button clicked');
     console.error('[eventBindings] Show holidays clicked');
     window.__toast && window.__toast('Show holidays clicked');
     window.showHolidaysPopup && window.showHolidaysPopup();
   });
   // Schedule tab
   bind('generateScheduleBtn','click', (e)=> {
+    alert('[DEBUG] Generate button clicked');
     console.error('[eventBindings] Generate button clicked');
     window.__toast && window.__toast('Generate button clicked');
     e?.preventDefault?.();
@@ -78,6 +80,7 @@ function __initEventBindings(){
   });
 
   bind('clearScheduleBtn','click', (e)=> {
+    alert('[DEBUG] Clear button clicked');
     console.error('[eventBindings] Clear button clicked');
     window.__toast && window.__toast('Clear button clicked');
     e?.preventDefault?.();
@@ -89,6 +92,7 @@ function __initEventBindings(){
   });
 
   bind('exportScheduleBtn','click', ()=> {
+    alert('[DEBUG] Export CSV button clicked');
     console.error('[eventBindings] Export CSV clicked');
     window.__toast && window.__toast('Export CSV clicked');
     if (window.handlers?.exportSchedule) {
@@ -99,6 +103,7 @@ function __initEventBindings(){
   });
 
   bind('exportPdfBtn','click', ()=> {
+    alert('[DEBUG] Export PDF button clicked');
     console.error('[eventBindings] Export PDF clicked');
     window.__toast && window.__toast('Export PDF clicked');
     if (window.handlers?.exportPdf) {
@@ -109,6 +114,8 @@ function __initEventBindings(){
   });
 
   bind('printScheduleBtn','click', ()=> {
+    alert('[DEBUG] Print button clicked');
+    console.error('[eventBindings] Print button clicked');
     console.log('[eventBindings] Print clicked');
     if (typeof window.print === 'function') {
       window.print();
