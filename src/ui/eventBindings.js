@@ -60,10 +60,15 @@ function __initEventBindings(){
       }
     });
   });
-  bind('showHolidaysBtn','click', ()=> window.showHolidaysPopup && window.showHolidaysPopup());
+  bind('showHolidaysBtn','click', ()=> {
+    console.error('[eventBindings] Show holidays clicked');
+    window.__toast && window.__toast('Show holidays clicked');
+    window.showHolidaysPopup && window.showHolidaysPopup();
+  });
   // Schedule tab
   bind('generateScheduleBtn','click', (e)=> {
-    console.log('[eventBindings] Generate button clicked');
+    console.error('[eventBindings] Generate button clicked');
+    window.__toast && window.__toast('Generate button clicked');
     e?.preventDefault?.();
     if (window.handlers?.generateNewSchedule) {
       window.handlers.generateNewSchedule();
@@ -73,7 +78,8 @@ function __initEventBindings(){
   });
 
   bind('clearScheduleBtn','click', (e)=> {
-    console.log('[eventBindings] Clear button clicked');
+    console.error('[eventBindings] Clear button clicked');
+    window.__toast && window.__toast('Clear button clicked');
     e?.preventDefault?.();
     if (window.handlers?.clearSchedule) {
       window.handlers.clearSchedule();
@@ -83,7 +89,8 @@ function __initEventBindings(){
   });
 
   bind('exportScheduleBtn','click', ()=> {
-    console.log('[eventBindings] Export CSV clicked');
+    console.error('[eventBindings] Export CSV clicked');
+    window.__toast && window.__toast('Export CSV clicked');
     if (window.handlers?.exportSchedule) {
       window.handlers.exportSchedule();
     } else {
@@ -92,7 +99,8 @@ function __initEventBindings(){
   });
 
   bind('exportPdfBtn','click', ()=> {
-    console.log('[eventBindings] Export PDF clicked');
+    console.error('[eventBindings] Export PDF clicked');
+    window.__toast && window.__toast('Export PDF clicked');
     if (window.handlers?.exportPdf) {
       window.handlers.exportPdf();
     } else {
