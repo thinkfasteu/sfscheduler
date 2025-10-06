@@ -11,67 +11,94 @@
             <!--<script src="./config.local.js" data-optional="true"></script>// -->
             <!-- Hashed bundle loader moved to external file for CSP compliance -->
 
-            <script src="/sfscheduler/dist/runtime-config.js" data-generated="true"></script>
+            <!-- Build script will inject runtime-config.js here -->
 
 
             <script type="module" src="./boot.js"></script>
             <!-- NUCLEAR BUTTON DEBUG INLINE -->
             <script>
-            // Nuclear button test - multiple binding strategies
+            // Nuclear button test - enhanced debugging
             document.addEventListener('DOMContentLoaded', function() {
                 console.log('🚀 NUCLEAR BUTTON SYSTEM LOADING...');
+                
+                let clickCount = 0;
                 
                 const generateBtn = document.getElementById('generateScheduleBtn');
                 const clearBtn = document.getElementById('clearScheduleBtn');
                 
+                // Enhanced debugging function
+                function debugButtonState(btn, name) {
+                    console.log(`🔍 ${name} button state:`, {
+                        exists: !!btn,
+                        disabled: btn?.disabled,
+                        style_pointerEvents: btn?.style.pointerEvents,
+                        onclick: !!btn?.onclick,
+                        classList: btn?.classList.toString()
+                    });
+                }
+                
                 if (generateBtn) {
-                    // Strategy 1: onclick (should work)
+                    // Single strategy: onclick only
                     generateBtn.onclick = function(e) {
-                        console.log('🔥 ONCLICK GENERATE FIRED!');
-                        alert('🔥 NUCLEAR GENERATE BUTTON WORKS! 🔥');
-                        e.stopPropagation();
+                        clickCount++;
+                        console.log(`🔥 GENERATE CLICK #${clickCount}!`);
+                        debugButtonState(generateBtn, 'GENERATE');
+                        alert(`🔥 GENERATE CLICK #${clickCount}! 🔥`);
+                        
+                        // Check if button state changed after alert
+                        setTimeout(() => {
+                            console.log('🕐 After alert timeout:');
+                            debugButtonState(generateBtn, 'GENERATE-POST');
+                        }, 100);
+                        
                         return false;
                     };
                     
-                    // Strategy 2: addEventListener with capture (higher priority)
-                    generateBtn.addEventListener('click', function(e) {
-                        console.log('🔥 CAPTURE GENERATE FIRED!');
-                        alert('🔥 CAPTURE GENERATE BUTTON WORKS! 🔥');
-                        e.stopImmediatePropagation();
-                        e.preventDefault();
-                    }, true);
-                    
-                    console.log('✅ Nuclear generate button bound (both strategies)');
+                    console.log('✅ Nuclear generate button bound');
                 } else {
                     console.log('❌ Generate button not found');
                 }
                 
                 if (clearBtn) {
-                    // Strategy 1: onclick
+                    // Single strategy: onclick only
                     clearBtn.onclick = function(e) {
-                        console.log('🚨 ONCLICK CLEAR FIRED!');
-                        alert('🚨 NUCLEAR CLEAR BUTTON WORKS! 🚨');
-                        e.stopPropagation();
+                        clickCount++;
+                        console.log(`🚨 CLEAR CLICK #${clickCount}!`);
+                        debugButtonState(clearBtn, 'CLEAR');
+                        alert(`🚨 CLEAR CLICK #${clickCount}! 🚨`);
+                        
+                        // Check if button state changed after alert
+                        setTimeout(() => {
+                            console.log('� After alert timeout:');
+                            debugButtonState(clearBtn, 'CLEAR-POST');
+                        }, 100);
+                        
                         return false;
                     };
                     
-                    // Strategy 2: addEventListener with capture
-                    clearBtn.addEventListener('click', function(e) {
-                        console.log('🚨 CAPTURE CLEAR FIRED!');
-                        alert('🚨 CAPTURE CLEAR BUTTON WORKS! 🚨');
-                        e.stopImmediatePropagation();
-                        e.preventDefault();
-                    }, true);
-                    
-                    console.log('✅ Nuclear clear button bound (both strategies)');
+                    console.log('✅ Nuclear clear button bound');
                 } else {
                     console.log('❌ Clear button not found');
                 }
                 
-                // Test if any click events work at all
+                // Enhanced body click detection
                 document.body.addEventListener('click', function(e) {
-                    console.log('🎯 BODY CLICK DETECTED:', e.target.id || e.target.tagName);
+                    console.log('🎯 BODY CLICK DETECTED:', {
+                        id: e.target.id || 'NO_ID',
+                        tag: e.target.tagName,
+                        disabled: e.target.disabled,
+                        pointerEvents: e.target.style.pointerEvents
+                    });
                 }, true);
+                
+                // Periodic button state monitoring
+                setInterval(() => {
+                    if (clickCount > 0) {
+                        console.log('📊 Periodic check:');
+                        debugButtonState(generateBtn, 'GENERATE-MONITOR');
+                        debugButtonState(clearBtn, 'CLEAR-MONITOR');
+                    }
+                }, 5000);
             });
             </script>
 
