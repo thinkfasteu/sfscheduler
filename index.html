@@ -111,7 +111,15 @@
         <div class="tabs">
             <button class="tab active" data-tab="staff">Personalverwaltung</button>
             <button class="tab" data-tab="availability">Verfügbarkeiten</button>
-            <button class="tab" data-tab="schedule">Dienstplan</button>
+            <!-- REMOVED: Schedule tab - needs complete rebuild
+                 Desired functionality:
+                 - Generate monthly schedules with automatic staff assignment
+                 - Drag & drop shift assignment interface  
+                 - Export to CSV/PDF formats
+                 - Manual override capabilities for generated schedules
+                 - Weekend overtime request handling for permanent staff
+                 - Integration with availability and vacation data
+            -->
             <button class="tab" data-tab="vacation">Urlaub</button>
             <button class="tab" data-tab="reports">Berichte</button>
             <button class="tab" data-tab="monitoring">Monitoring</button>
@@ -204,33 +212,44 @@
                 <div id="availabilityForm"><p>Bitte Mitarbeiter und Monat auswählen.</p></div>
             </div>
 
-            <div id="schedule-tab" class="section">
-                <h2>Dienstplan</h2>
-                <div class="controls form-row grid-cols-2fr-auto gap-8 align-center">
-                    <select id="scheduleMonth"></select>
-                    <label class="inline align-center gap-6">
-                        <input type="checkbox" id="studentExceptionCheckbox" />
-                        <span>Kurzfristige Ausnahme zulassen (Werkstudent)</span>
-                    </label>
-                    <label class="inline align-center gap-6">
-                        <input type="checkbox" id="studentFairnessCheckbox" />
-                        <span>Fairness-Modus (Werkstudenten)</span>
-                    </label>
-                    <button id="generateScheduleBtn" class="btn btn-primary">Plan erstellen</button>
-                    <button id="clearScheduleBtn" class="btn btn-danger">Plan löschen</button>
-                    <button id="exportScheduleBtn" class="btn">Export CSV</button>
-                    <button id="exportPdfBtn" class="btn">PDF Export</button>
-                    <button id="printScheduleBtn" class="btn">Drucken</button>
-                </div>
-                <p class="text-muted fs-90 mt-6" id="manualGenNote">Klicken Sie "Plan erstellen" um einen neuen Dienstplan zu generieren. Einzelne Schichten können anschließend durch Klick angepasst werden.</p>
-                <div id="scheduleContent" class="overflow-x-auto"></div>
-                <div id="weekendReport" class="mt-16"></div>
-                <div class="staff-card mt-16">
-                    <h3>Wochenend-Überstunden Anfragen</h3>
-                    <p class="text-muted">Anfragen für Wochenendschichten von Festangestellten (nur bei unbesetzbaren Schichten)</p>
-                    <div id="overtimeRequestsList"></div>
-                </div>
-            </div>
+            <!-- SCHEDULE TAB REMOVED - TO BE REBUILT
+                 
+                 DESIRED FUNCTIONALITY NOTES FOR REBUILD:
+                 ========================================
+                 
+                 Core Features Needed:
+                 1. Monthly schedule generation with smart staff assignment
+                 2. Visual calendar interface showing all shifts (3 shifts per day)
+                 3. Drag & drop for manual schedule adjustments
+                 4. Export capabilities (CSV, PDF, Print)
+                 5. Weekend overtime requests for permanent staff
+                 6. Student fairness mode and exception handling
+                 
+                 Key Elements that were working:
+                 - Month selector dropdown
+                 - Generate/Clear/Export buttons with proper event binding
+                 - Schedule content area with calendar grid
+                 - Weekend report section
+                 - Overtime requests list
+                 
+                 Integration Points:
+                 - Must read from staff data (staff-tab)  
+                 - Must respect availability settings (availability-tab)
+                 - Must check vacation periods (vacation-tab)
+                 - Should update reports data (reports-tab)
+                 
+                 Technical Notes:
+                 - Events were bound via src/ui/eventBindings.js
+                 - Schedule logic was in scheduler.js and ui/scheduleUI.js  
+                 - Buttons worked on Netlify but failed on GitHub Pages
+                 - Issue likely related to module loading timing or CSP
+                 
+                 Files to examine for rebuild:
+                 - scheduler.js (core algorithm)
+                 - ui/scheduleUI.js (UI rendering)
+                 - src/ui/eventBindings.js (event handling)
+                 - ui/appUI.js (tab management)
+            -->
 
             <div id="vacation-tab" class="section">
                 <h2>Urlaub</h2>
