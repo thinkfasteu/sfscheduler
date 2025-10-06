@@ -37,7 +37,7 @@
                     generateBtn.addEventListener('click', function(e) {
                         console.log('🔥 CAPTURE GENERATE FIRED!');
                         alert('🔥 CAPTURE GENERATE BUTTON WORKS! 🔥');
-                        e.stopImmediatePropagation();
+                        // Don't stop propagation - let onclick also run
                         e.preventDefault();
                     }, true);
                     
@@ -59,7 +59,7 @@
                     clearBtn.addEventListener('click', function(e) {
                         console.log('🚨 CAPTURE CLEAR FIRED!');
                         alert('🚨 CAPTURE CLEAR BUTTON WORKS! 🚨');
-                        e.stopImmediatePropagation();
+                        // Don't stop propagation - let onclick also run
                         e.preventDefault();
                     }, true);
                     
