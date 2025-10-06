@@ -1,3 +1,21 @@
+/* SCHEDULE UI - READY FOR INTEGRATION WITH NEW SCHEDULE TAB
+ * 
+ * This file contains the complete UI rendering logic for the schedule system.
+ * It was working properly but the schedule tab has been removed for rebuild.
+ * 
+ * Key functionality this class provides:
+ * - Monthly calendar rendering with 3 shifts per day
+ * - Drag & drop assignment interface  
+ * - Staff assignment validation and conflict detection
+ * - Weekend/holiday shift handling
+ * - Export functionality (CSV/PDF)
+ * - Integration with SchedulingEngine for automatic generation
+ * 
+ * To use: new ScheduleUI('#scheduleContent') when schedule tab is rebuilt
+ * Entry point: constructor takes containerId selector
+ * Key methods: renderCalendar(), handleAssignments(), exportSchedule()
+ */
+
 import { APP_CONFIG, SHIFTS } from '../modules/config.js';
 import { appState } from '@state';
 import { SchedulingEngine } from '../scheduler.js';

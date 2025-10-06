@@ -61,47 +61,26 @@ function __initEventBindings(){
     });
   });
   bind('showHolidaysBtn','click', ()=> window.showHolidaysPopup && window.showHolidaysPopup());
-  // Schedule - direct bindings to window.handlers methods
-  bind('generateScheduleBtn','click', (e)=> {
-    alert('🔥 GENERATE BUTTON WORKS! 🔥');
-    console.log('[eventBindings] 🔥 GENERATE BUTTON CLICKED! 🔥');
-    console.log('[eventBindings] Event:', e);
-    console.log('[eventBindings] Target:', e.target);
-    console.log('[eventBindings] window.handlers=', window.handlers);
-    e.stopPropagation();
-    e.preventDefault();
-    if (window.handlers?.generateNewSchedule) {
-      console.log('[eventBindings] Calling generateNewSchedule...');
-      window.handlers.generateNewSchedule();
-    } else {
-      console.error('[eventBindings] No generateNewSchedule handler found!');
-    }
-  });
-  bind('clearScheduleBtn','click', (e)=> {
-    alert('🧹 CLEAR BUTTON WORKS! 🧹');
-    console.log('[eventBindings] 🧹 CLEAR BUTTON CLICKED! 🧹');
-    console.log('[eventBindings] Event:', e);
-    e.stopPropagation();
-    e.preventDefault();
-    if (window.handlers?.clearSchedule) {
-      console.log('[eventBindings] Calling clearSchedule...');
-      window.handlers.clearSchedule();
-    } else {
-      console.error('[eventBindings] No clearSchedule handler found!');
-    }
-  });
-  bind('exportScheduleBtn','click', ()=> {
-    console.log('[eventBindings] Export CSV button clicked! window.handlers=', window.handlers);
-    window.handlers?.exportSchedule?.();
-  });
-  bind('exportPdfBtn','click', ()=> {
-    console.log('[eventBindings] Export PDF button clicked! window.handlers=', window.handlers);
-    window.handlers?.exportPdf?.();
-  });
-  bind('printScheduleBtn','click', ()=> {
-    console.log('[eventBindings] Print button clicked! window.print=', typeof window.print);
-    window.print?.();
-  });
+  /* SCHEDULE EVENT BINDINGS REMOVED - TO BE REBUILT
+   * 
+   * The following buttons need event handlers when schedule tab is rebuilt:
+   * - generateScheduleBtn: Main schedule generation trigger  
+   * - clearScheduleBtn: Clears current schedule data
+   * - exportScheduleBtn: CSV export functionality
+   * - exportPdfBtn: PDF export functionality  
+   * - printScheduleBtn: Browser print dialog
+   * 
+   * Events were working with debugging alerts on button clicks
+   * Integration points: window.handlers.generateNewSchedule(), etc.
+   * 
+   * Previous working event binding pattern:
+   * bind('buttonId', 'click', (e) => {
+   *   // Add debugging alerts to verify events fire
+   *   if (window.handlers?.methodName) {
+   *     window.handlers.methodName();
+   *   }
+   * });
+   */
   // Vacation
   bind('addVacationPeriodBtn','click', ()=> window.addVacationPeriod && window.addVacationPeriod());
   bind('addOtherStaffBtn','click', ()=> window.addOtherStaff && window.addOtherStaff());
