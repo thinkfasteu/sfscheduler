@@ -28,8 +28,6 @@ function bind(id, type, handler) {
 }
 
 function __initEventBindings(){
-  console.log('[eventBindings] TEMPORARILY DISABLED FOR NUCLEAR TEST');
-  return; // NUCLEAR TEST: Skip all event bindings
   console.log('[eventBindings] Starting event binding initialization...');
   // Debug instrumentation: log tab clicks until confirmed working
   if (!window.__TAB_DEBUG_INSTALLED__){
