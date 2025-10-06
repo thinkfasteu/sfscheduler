@@ -2,6 +2,9 @@
 
 ## Mission: Rebuild the Schedule Tab with Full Functionality
 
+**Branch**: `schedule-tab-rebuild` (ready for development)  
+**Status**: Clean slate - schedule tab completely removed, all core logic preserved
+
 You are tasked with rebuilding a complete schedule management tab for a German shift scheduling application. The previous schedule tab was removed due to button functionality issues on GitHub Pages, but **all core logic is preserved and ready for integration**.
 
 ---
