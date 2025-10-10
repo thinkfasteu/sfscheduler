@@ -157,7 +157,15 @@ function __initEventBindings(){
   // Debug: log all clicks to see if button clicks are detected
   document.addEventListener('click', (e) => {
     console.log('[DEBUG] Click detected on target:', e.target.id || e.target.tagName, e.target);
-  });
+  }, true); // Use capture phase to catch all clicks
+  
+  // Additional debug for schedule controls
+  const scheduleControls = document.getElementById('scheduleControls');
+  if (scheduleControls) {
+    scheduleControls.addEventListener('click', (e) => {
+      console.log('[DEBUG] Click in scheduleControls on:', e.target.id || e.target.tagName, e.target);
+    });
+  }
   
   console.log('[eventBindings] ✅ Event binding initialization COMPLETE!');
 }
