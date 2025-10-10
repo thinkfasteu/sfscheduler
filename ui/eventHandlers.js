@@ -104,7 +104,19 @@ export class EventHandler {
         try { window.modalManager ? window.modalManager.close('swapModal') : window.closeModal?.('swapModal'); } catch(e){ console.warn('[EventHandler] close swapModal failed', e); }
     }
 
-    async generateSchedule() { return window.ui?.generateScheduleForCurrentMonth?.(); }
+    async generateSchedule() {
+        const monthEl = document.getElementById('scheduleMonth');
+        const month = monthEl?.value;
+        if (!month) {
+            alert('Bitte wählen Sie einen Monat aus.');
+            return;
+        }
+        const engine = new SchedulingEngine(month);
+        const schedule = engine.generateSchedule();
+        appState.scheduleData[month] = schedule.data;
+        appState.save();
+        this.ui.refreshDisplay();
+    }
 
     clearSchedule() {
         console.log('[clearSchedule] called');
