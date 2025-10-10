@@ -61,13 +61,11 @@ function __initEventBindings(){
     });
   });
   bind('showHolidaysBtn','click', ()=> {
-    console.error('[eventBindings] Show holidays clicked');
     window.__toast && window.__toast('Show holidays clicked');
     window.showHolidaysPopup && window.showHolidaysPopup();
   });
   // Schedule tab
   bind('generateScheduleBtn','click', (e)=> {
-    console.error('[eventBindings] Generate button clicked');
     window.__toast && window.__toast('Generate button clicked');
     e?.preventDefault?.();
     if (window.handlers?.generateNewSchedule) {
@@ -78,7 +76,6 @@ function __initEventBindings(){
   });
 
   bind('clearScheduleBtn','click', (e)=> {
-    console.error('[eventBindings] Clear button clicked');
     window.__toast && window.__toast('Clear button clicked');
     e?.preventDefault?.();
     if (window.handlers?.clearSchedule) {
@@ -89,7 +86,6 @@ function __initEventBindings(){
   });
 
   bind('exportScheduleBtn','click', ()=> {
-    console.error('[eventBindings] Export CSV clicked');
     window.__toast && window.__toast('Export CSV clicked');
     if (window.handlers?.exportSchedule) {
       window.handlers.exportSchedule();
@@ -99,7 +95,6 @@ function __initEventBindings(){
   });
 
   bind('exportPdfBtn','click', ()=> {
-    console.error('[eventBindings] Export PDF clicked');
     window.__toast && window.__toast('Export PDF clicked');
     if (window.handlers?.exportPdf) {
       window.handlers.exportPdf();
@@ -153,19 +148,6 @@ function __initEventBindings(){
   bind('importBackupBtn','click', ()=> { const inp=document.getElementById('backupFileInput'); if (inp) inp.click(); });
   const fileInput = document.getElementById('backupFileInput');
   if (fileInput){ fileInput.addEventListener('change', e=>{ const f=e.target.files && e.target.files[0]; if (f && window.__backup){ window.__backup.importFile(f); e.target.value=''; } }); }
-  
-  // Debug: log all clicks to see if button clicks are detected
-  document.addEventListener('click', (e) => {
-    console.log('[DEBUG] Click detected on target:', e.target.id || e.target.tagName, e.target);
-  }, true); // Use capture phase to catch all clicks
-  
-  // Additional debug for schedule controls
-  const scheduleControls = document.getElementById('scheduleControls');
-  if (scheduleControls) {
-    scheduleControls.addEventListener('click', (e) => {
-      console.log('[DEBUG] Click in scheduleControls on:', e.target.id || e.target.tagName, e.target);
-    });
-  }
   
   console.log('[eventBindings] ✅ Event binding initialization COMPLETE!');
 }
