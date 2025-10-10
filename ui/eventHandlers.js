@@ -105,17 +105,30 @@ export class EventHandler {
     }
 
     async generateSchedule() {
+        console.log('[generateSchedule] Starting schedule generation...');
         const monthEl = document.getElementById('scheduleMonth');
         const month = monthEl?.value;
+        console.log('[generateSchedule] Selected month:', month);
         if (!month) {
             alert('Bitte wählen Sie einen Monat aus.');
             return;
         }
-        const engine = new SchedulingEngine(month);
-        const schedule = engine.generateSchedule();
-        appState.scheduleData[month] = schedule.data;
-        appState.save();
-        this.ui.refreshDisplay();
+        try {
+            console.log('[generateSchedule] Creating SchedulingEngine...');
+            const engine = new SchedulingEngine(month);
+            console.log('[generateSchedule] Engine created, calling generateSchedule()...');
+            const schedule = engine.generateSchedule();
+            console.log('[generateSchedule] Schedule generated:', schedule);
+            console.log('[generateSchedule] Saving to appState...');
+            appState.scheduleData[month] = schedule.data;
+            appState.save();
+            console.log('[generateSchedule] Refreshing UI...');
+            this.ui.refreshDisplay();
+            console.log('[generateSchedule] Done!');
+        } catch (error) {
+            console.error('[generateSchedule] Error:', error);
+            alert('Fehler bei der Planerstellung: ' + error.message);
+        }
     }
 
     clearSchedule() {
