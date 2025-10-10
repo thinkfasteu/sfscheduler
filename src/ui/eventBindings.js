@@ -66,12 +66,13 @@ function __initEventBindings(){
   });
   // Schedule tab
   bind('generateScheduleBtn','click', (e)=> {
+    console.log('[eventBindings] Generate button clicked - calling handler');
     window.__toast && window.__toast('Generate button clicked');
     e?.preventDefault?.();
-    if (window.handlers?.generateNewSchedule) {
-      window.handlers.generateNewSchedule();
+    if (window.handlers?.generateSchedule) {
+      window.handlers.generateSchedule();
     } else {
-      console.error('[eventBindings] No generateNewSchedule handler found!');
+      console.error('[eventBindings] No generateSchedule handler found!');
     }
   });
 
