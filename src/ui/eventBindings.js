@@ -150,6 +150,11 @@ function __initEventBindings(){
   const fileInput = document.getElementById('backupFileInput');
   if (fileInput){ fileInput.addEventListener('change', e=>{ const f=e.target.files && e.target.files[0]; if (f && window.__backup){ window.__backup.importFile(f); e.target.value=''; } }); }
   
+  // Debug: log all clicks to see if button clicks are detected
+  document.addEventListener('click', (e) => {
+    console.log('[DEBUG] Click detected on target:', e.target.id || e.target.tagName, e.target);
+  });
+  
   console.log('[eventBindings] ✅ Event binding initialization COMPLETE!');
 }
 
