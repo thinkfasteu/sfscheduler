@@ -204,9 +204,9 @@
                 <div id="availabilityForm"><p>Bitte Mitarbeiter und Monat auswählen.</p></div>
             </div>
 
-            <div id="schedule-tab" class="section" style="pointer-events: auto">
+            <div id="schedule-tab" class="section" style="pointer-events: auto !important">
                 <h2>Dienstplan</h2>
-                <div class="controls" id="scheduleControls" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; position: relative; z-index: 1000; pointer-events: auto;">
+                <div class="controls" id="scheduleControls" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; position: relative; z-index: 9999; pointer-events: auto !important;">
                     <select id="scheduleMonth" aria-label="Monat auswählen"></select>
                     <label class="inline align-center gap-6">
                         <input type="checkbox" id="studentExceptionCheckbox" />
@@ -216,11 +216,11 @@
                         <input type="checkbox" id="studentFairnessCheckbox" />
                         <span>Fairness-Modus (Werkstudenten)</span>
                     </label>
-                    <button id="generateScheduleBtn" class="btn btn-primary" style="pointer-events: auto">Plan erstellen</button>
-                    <button id="clearScheduleBtn" class="btn btn-danger" style="pointer-events: auto">Plan löschen</button>
-                    <button id="exportScheduleBtn" class="btn" style="pointer-events: auto">Export CSV</button>
-                    <button id="exportPdfBtn" class="btn" style="pointer-events: auto">PDF Export</button>
-                    <button id="printScheduleBtn" class="btn" style="pointer-events: auto">Drucken</button>
+                    <button id="generateScheduleBtn" class="btn btn-primary" style="pointer-events: auto !important">Plan erstellen</button>
+                    <button id="clearScheduleBtn" class="btn btn-danger" style="pointer-events: auto !important">Plan löschen</button>
+                    <button id="exportScheduleBtn" class="btn" style="pointer-events: auto !important">Export CSV</button>
+                    <button id="exportPdfBtn" class="btn" style="pointer-events: auto !important">PDF Export</button>
+                    <button id="printScheduleBtn" class="btn" style="pointer-events: auto !important">Drucken</button>
                 </div>
                 <p class="text-muted fs-90 mt-6" id="manualGenNote">Klicken Sie "Plan erstellen" um einen neuen Dienstplan zu generieren. Einzelne Schichten können anschließend durch Klick angepasst werden.</p>
                 <div id="scheduleContent" class="overflow-x-auto mt-8" role="region" aria-live="polite"></div>
