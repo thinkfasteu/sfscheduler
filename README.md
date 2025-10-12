@@ -1,5 +1,7 @@
 ## Scheduler App Build & Development
 
+**Recent Updates:** Fixed holiday scheduling issues - permanent employees can no longer work holidays, and invalid shifts are cleared during generation.
+
 ### Install
 ```powershell
 pnpm install # or: npm install / yarn install
