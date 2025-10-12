@@ -68,7 +68,7 @@ function __initEventBindings(){
   bind('generateScheduleBtn','click', (e)=> {
     console.log('[eventBindings] Generate button clicked - calling handler');
     const btn = document.getElementById('generateScheduleBtn');
-    console.log('[eventBindings] Button element:', btn, 'handlers exists:', !!window.handlers, 'generateSchedule exists:', !!window.handlers?.generateSchedule);
+    console.log('[eventBindings] Button element:', btn, 'handlers exists:', !!window.handlers, 'generateSchedule exists:', !!window.handlers?.generateSchedule, 'disabled:', btn?.disabled);
     window.__toast && window.__toast('Generate button clicked');
     e?.preventDefault?.();
     if (window.handlers?.generateSchedule) {
