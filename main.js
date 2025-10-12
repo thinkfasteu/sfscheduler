@@ -240,13 +240,6 @@ function initApp(){
             if (window.scheduleUI?.refreshDisplay) {
                 window.scheduleUI.refreshDisplay();
             }
-            // TEMP: Auto-generate schedule on tab switch to test if functionality works
-            console.log('[showTab] Auto-generating schedule to test functionality...');
-            if (window.handlers?.generateSchedule) {
-                window.handlers.generateSchedule();
-            } else {
-                console.warn('[showTab] No generateSchedule handler available for auto-gen');
-            }
         }
     };
     

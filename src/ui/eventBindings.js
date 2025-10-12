@@ -157,6 +157,14 @@ function __initEventBindings(){
     console.log('[DEBUG] Click detected on target:', e.target.id || e.target.tagName, e.target);
   });
   
+  // TEMP: Debug clicks on scheduleControls specifically
+  const scheduleControls = document.getElementById('scheduleControls');
+  if (scheduleControls) {
+    scheduleControls.addEventListener('click', (e) => {
+      console.log('[DEBUG] Click on scheduleControls:', e.target.id || e.target.tagName, e.target);
+    }, true); // capture phase
+  }
+  
   console.log('[eventBindings] ✅ Event binding initialization COMPLETE!');
 }
 
