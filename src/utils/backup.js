@@ -1,5 +1,5 @@
 // Backup & restore utilities (Sprint 4)
-import { appState } from '@state';
+import { appState } from '../../modules/state.js';
 
 const DURABLE_KEYS = ()=> Object.keys(appState).filter(k=> appState.isDurableKey && appState.isDurableKey(k));
 

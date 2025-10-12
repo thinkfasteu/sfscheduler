@@ -1,4 +1,4 @@
-import { appState as defaultAppState } from '@state';
+import { appState } from '../../modules/state.js';
 import { SHIFTS, APP_CONFIG } from '../../modules/config.js';
 import { parseYMD } from '../../utils/dateUtils.js';
 

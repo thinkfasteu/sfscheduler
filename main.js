@@ -222,21 +222,6 @@ function initApp(){
         if (key === 'schedule') {
             console.log('[showTab] Switched to schedule tab - look for the buttons at the top: Plan erstellen, etc.');
             console.log('[showTab] Checking if generateScheduleBtn exists:', !!document.getElementById('generateScheduleBtn'));
-            console.log('[showTab] Clearing schedule data for clean slate...');
-            // Clear local schedule data (from ui/eventHandlers.js clearSchedule logic)
-            const month = document.getElementById('scheduleMonth')?.value || '2025-10'; // Default or current
-            if (appState.scheduleData?.[month]) {
-                delete appState.scheduleData[month];
-                appState.save();
-            }
-            // Optional: Clear backend if services available
-            try {
-                if (window.__services?.schedule?.clearMonth) {
-                    window.__services.schedule.clearMonth(month);
-                }
-            } catch (e) {
-                console.warn('[showTab] Could not clear backend data:', e);
-            }
             // Refresh UI if ScheduleUI is available
             if (window.scheduleUI?.refreshDisplay) {
                 window.scheduleUI.refreshDisplay();

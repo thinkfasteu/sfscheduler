@@ -1,4 +1,4 @@
-import { appState } from '@state';
+import { appState } from './state.js';
 import { APP_CONFIG } from './config.js';
 import { toLocalISODate } from '../utils/dateUtils.js';
 

@@ -3,6 +3,7 @@ export function createScheduleService(store){
   return {
     getMonth(monthKey){ return store.getMonthSchedule(monthKey); },
     assign(dateStr, shiftKey, staffId){ return store.assign(dateStr, shiftKey, staffId); },
-    unassign(dateStr, shiftKey){ return store.unassign(dateStr, shiftKey); }
+    unassign(dateStr, shiftKey){ return store.unassign(dateStr, shiftKey); },
+    clearMonth(monthKey){ return store.clearMonthSchedule(monthKey); }
   };
 }

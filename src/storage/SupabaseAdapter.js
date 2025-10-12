@@ -172,6 +172,11 @@ export class SupabaseAdapter {
     const recs = await this._rpc(`schedule_days?date=eq.${dateStr}&version=eq.${existing.version}`, { method:'PATCH', body: JSON.stringify({ assignments, version: nextVer }) });
     return !!recs[0];
   }
+  async clearMonthSchedule(month){
+    if (this.disabled) return false;
+    await this._rpc(`schedule_days?month=eq.${month}`, { method:'DELETE' });
+    return true;
+  }
 
   // ---- Availability (row-per-shift schema) columns: id, staff_id, date, shift_key, status('no'|'prefer'|'yes'), note, version
   // Sentinel rows: shift_key='__day_off__' indicates full day off; shift_key='vol:evening' / 'vol:closing' for voluntary flags.

@@ -1,5 +1,5 @@
 import { APP_CONFIG, SHIFTS } from './modules/config.js';
-import { appState } from '@state';
+import { appState } from './modules/state.js';
 // Safe window proxy for non-browser test runs
 const WIN = (typeof window !== 'undefined') ? window : { holidayService: null };
 import { parseYMD } from './utils/dateUtils.js';

@@ -1,4 +1,4 @@
-import { appState } from '@state';
+import { appState } from '../../modules/state.js';
 
 // Local adapter proxies to in-memory appState while coordinating persistence via appState.save().
 export class LocalStorageAdapter {
@@ -17,6 +17,14 @@ export class LocalStorageAdapter {
 
   // ---- Schedule ----
   getMonthSchedule(month){ return appState.scheduleData[month]; }
+  clearMonthSchedule(month){ 
+    if (appState.scheduleData[month]) {
+      delete appState.scheduleData[month]; 
+      appState.save(); 
+      return true;
+    }
+    return false;
+  }
   assign(dateStr, shiftKey, staffId){
     const month = dateStr.substring(0,7);
     const sched = appState.scheduleData[month] || (appState.scheduleData[month] = {});
