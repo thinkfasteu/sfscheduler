@@ -99,12 +99,17 @@ export class HydratingStore {
         appState.staffData = staff.slice();
         this.nextStaffId = (staff.reduce((m,s)=> Math.max(m, Number(s.id)||0),0) || 0) + 1;
       }
-      // Current month schedule hydration
-      const now = new Date();
-      const monthKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-      const sched = await this.remote.getMonthSchedule(monthKey);
-      if (!appState.scheduleData) appState.scheduleData = {};
-      if (sched && typeof sched === 'object') appState.scheduleData[monthKey] = sched;
+      // Schedule hydration - load all months that have data
+      try {
+        const scheduleMonths = await this.remote.listScheduleMonths();
+        if (!appState.scheduleData) appState.scheduleData = {};
+        for (const month of scheduleMonths) {
+          const sched = await this.remote.getMonthSchedule(month);
+          if (sched && typeof sched === 'object') {
+            appState.scheduleData[month] = sched;
+          }
+        }
+      } catch(e){ console.warn('[HydratingStore] schedule hydration failed', e); }
       // Overtime hydration
       try {
         const ot = await this.remote.listOvertimeRequests();

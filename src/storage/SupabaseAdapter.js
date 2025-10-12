@@ -148,6 +148,18 @@ export class SupabaseAdapter {
     rows.forEach(r=>{ out[r.date] = { assignments: r.assignments||{} }; });
     return out;
   }
+  async listScheduleMonths(){
+    if (this.disabled) return [];
+    const rows = await this._rpc(`schedule_days?select=month&order=month`);
+    const months = [...new Set(rows.map(r => r.month))];
+    return months;
+  }
+  async listScheduleMonths(){
+    if (this.disabled) return [];
+    const rows = await this._rpc(`schedule_days?select=month&order=month`);
+    const months = [...new Set(rows.map(r => r.month))];
+    return months;
+  }
   async setMonthSchedule(month, data){
     if (this.disabled) return false;
     // First clear existing data for this month

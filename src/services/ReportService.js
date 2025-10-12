@@ -21,6 +21,16 @@ export function createReportService(store, injectedState){
     if (origAssign){ store.assign = (dateStr, shiftKey, staffId)=>{ markDirty(dateStr); return origAssign(dateStr, shiftKey, staffId); }; }
     const origUnassign = store.unassign?.bind(store);
     if (origUnassign){ store.unassign = (dateStr, shiftKey)=>{ markDirty(dateStr); return origUnassign(dateStr, shiftKey); }; }
+    const origSetMonth = store.setMonthSchedule?.bind(store);
+    if (origSetMonth){ store.setMonthSchedule = (month, data)=>{ 
+      cache.dirtyMonths.add(month); 
+      return origSetMonth(month, data); 
+    }; }
+    const origClearMonth = store.clearMonthSchedule?.bind(store);
+    if (origClearMonth){ store.clearMonthSchedule = (month)=>{ 
+      cache.dirtyMonths.add(month); 
+      return origClearMonth(month); 
+    }; }
   } catch{}
 
   function sumMonthlyHours(month){

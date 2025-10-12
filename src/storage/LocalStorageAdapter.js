@@ -30,6 +30,12 @@ export class LocalStorageAdapter {
     }
     return false;
   }
+  listScheduleMonths(){
+    if (!appState.scheduleData) return [];
+    return Object.keys(appState.scheduleData).filter(month => 
+      appState.scheduleData[month] && Object.keys(appState.scheduleData[month]).length > 0
+    );
+  }
   assign(dateStr, shiftKey, staffId){
     const month = dateStr.substring(0,7);
     const sched = appState.scheduleData[month] || (appState.scheduleData[month] = {});
