@@ -68,7 +68,7 @@ function __initEventBindings(){
   bind('generateScheduleBtn','click', (e)=> {
     console.log('[eventBindings] Generate button clicked - calling handler');
     const btn = document.getElementById('generateScheduleBtn');
-    console.log('[eventBindings] Button element:', btn, 'handlers exists:', !!window.handlers, 'generateSchedule exists:', !!window.handlers?.generateSchedule, 'disabled:', btn?.disabled);
+    console.log('[eventBindings] Button element:', btn, 'handlers exists:', !!window.handlers, 'generateSchedule exists:', !!window.handlers?.generateSchedule);
     window.__toast && window.__toast('Generate button clicked');
     e?.preventDefault?.();
     if (window.handlers?.generateSchedule) {
@@ -156,14 +156,6 @@ function __initEventBindings(){
   document.addEventListener('click', (e) => {
     console.log('[DEBUG] Click detected on target:', e.target.id || e.target.tagName, e.target);
   });
-  
-  // TEMP: Debug clicks on scheduleControls specifically
-  const scheduleControls = document.getElementById('scheduleControls');
-  if (scheduleControls) {
-    scheduleControls.addEventListener('click', (e) => {
-      console.log('[DEBUG] Click on scheduleControls:', e.target.id || e.target.tagName, e.target);
-    }, true); // capture phase
-  }
   
   console.log('[eventBindings] ✅ Event binding initialization COMPLETE!');
 }

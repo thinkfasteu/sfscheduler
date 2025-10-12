@@ -738,7 +738,7 @@ export class ScheduleUI {
         // Narrow set: only mutation-heavy controls are disabled during hydration
     const ids = ['generateScheduleBtn','clearScheduleBtn','exportScheduleBtn','exportPdfBtn','printScheduleBtn'];
         if (!snapshot){ snapshot = {}; }
-        ids.forEach(id=>{ const el = document.getElementById(id); if (!el) return; if (disabled){ snapshot[id] = el.disabled; el.disabled = true; console.log(`[disableScheduleControls] Disabled ${id}`); } else { el.disabled = false; console.log(`[disableScheduleControls] Enabled ${id}`); } });
+        ids.forEach(id=>{ const el = document.getElementById(id); if (!el) return; if (disabled){ snapshot[id] = el.disabled; el.disabled = true; } else { el.disabled = false; } });
         return snapshot;
     }
     
