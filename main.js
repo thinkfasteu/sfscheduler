@@ -180,6 +180,7 @@ function initApp(){
         appState.save = function(immediate){
             _origSave(immediate);
             try{ overtimeUI.render(); }catch{}
+            try{ appUI.renderReports && appUI.renderReports(); }catch{}
             // Previously broadcast via announce(); locking removed so this is a no-op placeholder.
         };
     // Instantiate legacy EventHandler for compatibility (swap/assign modal flows, etc.)

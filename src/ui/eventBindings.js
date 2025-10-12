@@ -28,7 +28,6 @@ function bind(id, type, handler) {
 }
 
 function __initEventBindings(){
-  console.log('[eventBindings] Starting event binding initialization...');
   // Debug instrumentation: log tab clicks until confirmed working
   if (!window.__TAB_DEBUG_INSTALLED__){
     window.__TAB_DEBUG_INSTALLED__=true;
@@ -151,11 +150,6 @@ function __initEventBindings(){
   bind('importBackupBtn','click', ()=> { const inp=document.getElementById('backupFileInput'); if (inp) inp.click(); });
   const fileInput = document.getElementById('backupFileInput');
   if (fileInput){ fileInput.addEventListener('change', e=>{ const f=e.target.files && e.target.files[0]; if (f && window.__backup){ window.__backup.importFile(f); e.target.value=''; } }); }
-  
-  // Debug: log all clicks to see if button clicks are detected
-  document.addEventListener('click', (e) => {
-    console.log('[DEBUG] Click detected on target:', e.target.id || e.target.tagName, e.target);
-  });
   
   console.log('[eventBindings] ✅ Event binding initialization COMPLETE!');
 }
