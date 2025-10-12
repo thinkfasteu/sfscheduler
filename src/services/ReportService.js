@@ -82,7 +82,12 @@ export function createReportService(store, injectedState){
         }
       });
     });
-    if (!appState.overtimeCredits) appState.overtimeCredits = {}; appState.overtimeCredits[month] = creditsByStaffWeek; appState.save?.();
+    // Only save if data actually changed to prevent recursive loops
+    const currentCredits = appState.overtimeCredits?.[month];
+    const creditsChanged = JSON.stringify(currentCredits) !== JSON.stringify(creditsByStaffWeek);
+    if (!appState.overtimeCredits) appState.overtimeCredits = {}; 
+    appState.overtimeCredits[month] = creditsByStaffWeek; 
+    if (creditsChanged) appState.save?.();
   cache.overtimeCredits.set(month, creditsByStaffWeek);
   return creditsByStaffWeek;
   }

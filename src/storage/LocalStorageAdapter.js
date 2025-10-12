@@ -17,6 +17,11 @@ export class LocalStorageAdapter {
 
   // ---- Schedule ----
   getMonthSchedule(month){ return appState.scheduleData[month]; }
+  setMonthSchedule(month, data){ 
+    appState.scheduleData[month] = data; 
+    appState.save(); 
+    return true; 
+  }
   clearMonthSchedule(month){ 
     if (appState.scheduleData[month]) {
       delete appState.scheduleData[month]; 

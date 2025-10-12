@@ -148,6 +148,28 @@ export class SupabaseAdapter {
     rows.forEach(r=>{ out[r.date] = { assignments: r.assignments||{} }; });
     return out;
   }
+  async setMonthSchedule(month, data){
+    if (this.disabled) return false;
+    // First clear existing data for this month
+    await this._rpc(`schedule_days?month=eq.${month}`, { method:'DELETE' });
+    // Then insert new data
+    if (!data || typeof data !== 'object') return true;
+    const inserts = [];
+    Object.entries(data).forEach(([dateStr, dayData]) => {
+      if (dayData && dayData.assignments && Object.keys(dayData.assignments).length > 0) {
+        inserts.push({
+          date: dateStr,
+          month,
+          assignments: dayData.assignments,
+          version: 1
+        });
+      }
+    });
+    if (inserts.length > 0) {
+      await this._rpc('schedule_days', { method:'POST', body: JSON.stringify(inserts) });
+    }
+    return true;
+  }
   async assign(dateStr, shiftKey, staffId){
     if (this.disabled) return false;
     // Upsert pattern: fetch row, modify assignments, optimistic update

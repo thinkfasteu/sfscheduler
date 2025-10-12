@@ -122,6 +122,18 @@ export class EventHandler {
             console.log('[generateSchedule] Saving to appState...');
             appState.scheduleData[month] = schedule.data;
             appState.save();
+            
+            // Also save to backend if available
+            try {
+                if (window.__services?.schedule?.setMonth) {
+                    console.log('[generateSchedule] Saving to backend...');
+                    await window.__services.schedule.setMonth(month, schedule.data);
+                    console.log('[generateSchedule] Backend save completed');
+                }
+            } catch (e) {
+                console.warn('[generateSchedule] Could not save to backend:', e);
+            }
+            
             console.log('[generateSchedule] Refreshing UI...');
             this.ui.refreshDisplay();
             console.log('[generateSchedule] Done!');
