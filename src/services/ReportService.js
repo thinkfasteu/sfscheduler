@@ -3,7 +3,7 @@ import { SHIFTS, APP_CONFIG } from '../../modules/config.js';
 import { parseYMD } from '../../utils/dateUtils.js';
 
 export function createReportService(store, injectedState){
-  const appState = injectedState || (typeof global!=='undefined' && global.appState) || defaultAppState;
+  const state = injectedState || appState;
   // Performance caches (Sprint 5)
   const cache = {
     monthlyHours: new Map(),       // key: month -> { staffId: hours }
@@ -25,7 +25,7 @@ export function createReportService(store, injectedState){
 
   function sumMonthlyHours(month){
     if (!cache.dirtyMonths.has(month) && cache.monthlyHours.has(month)) return cache.monthlyHours.get(month);
-    const data = appState.scheduleData?.[month] || {};
+    const data = state.scheduleData?.[month] || {};
     const perStaff = {};
     Object.values(data).forEach(day => {
       const assigns = day?.assignments || {};
@@ -47,7 +47,7 @@ export function createReportService(store, injectedState){
     const wages = Number(APP_CONFIG?.MINIJOB_HOURLY_WAGE ?? 13.5);
     const hours = sumMonthlyHours(month);
     const out = {};
-    (appState.staffData||[]).forEach(s => {
+    (state.staffData||[]).forEach(s => {
       const h = hours[s.id]||0;
       const earn = s.role==='permanent' ? h * wages * (35/20) : h * wages; // placeholder logic
       out[s.id] = { hours: h, earnings: earn };
