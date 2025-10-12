@@ -130,6 +130,19 @@ const BUSINESS_RULES = {
             return true;
         }
     },
+    PERMANENT_HOLIDAY_RESTRICTION: {
+        id: 'PERMANENT_HOLIDAY_RESTRICTION', description: 'Permanent employees do not work holiday shifts',
+        validate: (dateStr, _shiftKey, staff, _hours, engine) => {
+            if (staff.role !== 'permanent') return true;
+            // Check if this date is a holiday
+            const d = parseYMD(dateStr);
+            const isWeekend = [0,6].includes(d.getDay());
+            const isHoliday = WIN.holidayService
+                ? WIN.holidayService.isHoliday(dateStr)
+                : !!(appState.holidays?.[String(d.getFullYear())]?.[dateStr]);
+            return !(isHoliday && !isWeekend); // Allow if weekend, block if holiday
+        }
+    },
     NON_PERMANENT_WEEKEND_MAX: {
         id: 'NON_PERMANENT_WEEKEND_MAX', description: 'Non-permanent weekend max without preference',
         validate: (dateStr, _shiftKey, staff, _hours, engine) => {
@@ -692,6 +705,12 @@ class SchedulingEngine {
             this.seedTrackersFromExistingSchedule(dateStr);
             
             if (weekNum !== currentWeek){ currentWeek = weekNum; (appState.staffData||[]).forEach(s=>{ this.daysWorkedThisWeek[s.id]=0; }); }
+            
+            // Clear existing assignments for this date to ensure only valid shifts for the current day type are assigned
+            if (schedule.data[dateStr]?.assignments) {
+                schedule.data[dateStr].assignments = {};
+            }
+            
             // Order shifts: dynamic critical (all except Tue/Thu evening) first
             const allShifts = schedule.getShiftsForDate(dateStr);
             const shifts = allShifts.slice().sort((a,b)=>{
