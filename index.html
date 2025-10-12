@@ -103,6 +103,12 @@
                 <button id="themeToggle" class="btn btn-secondary" title="Dark Mode umschalten">🌙 Dark Mode</button>
                 <button id="exportBackupBtn" class="btn btn-secondary" title="Daten sichern">⬇️ Backup</button>
                 <button id="importBackupBtn" class="btn btn-secondary" title="Backup importieren">⬆️ Import</button>
+                <!-- TEMP: Moved schedule buttons here to test if they work in a different container -->
+                <button id="generateScheduleBtn" class="btn btn-primary">Plan erstellen</button>
+                <button id="clearScheduleBtn" class="btn btn-danger">Plan löschen</button>
+                <button id="exportScheduleBtn" class="btn">Export CSV</button>
+                <button id="exportPdfBtn" class="btn">PDF Export</button>
+                <button id="printScheduleBtn" class="btn">Drucken</button>
                 <input type="file" id="backupFileInput" accept="application/json" class="hidden" />
             </div>
         </div>
@@ -216,11 +222,7 @@
                         <input type="checkbox" id="studentFairnessCheckbox" />
                         <span>Fairness-Modus (Werkstudenten)</span>
                     </label>
-                    <button id="generateScheduleBtn" class="btn btn-primary" style="pointer-events: auto !important">Plan erstellen</button>
-                    <button id="clearScheduleBtn" class="btn btn-danger" style="pointer-events: auto !important">Plan löschen</button>
-                    <button id="exportScheduleBtn" class="btn" style="pointer-events: auto !important">Export CSV</button>
-                    <button id="exportPdfBtn" class="btn" style="pointer-events: auto !important">PDF Export</button>
-                    <button id="printScheduleBtn" class="btn" style="pointer-events: auto !important">Drucken</button>
+                    <!-- Schedule buttons moved to header-actions for testing -->
                 </div>
                 <p class="text-muted fs-90 mt-6" id="manualGenNote">Klicken Sie "Plan erstellen" um einen neuen Dienstplan zu generieren. Einzelne Schichten können anschließend durch Klick angepasst werden.</p>
                 <div id="scheduleContent" class="overflow-x-auto mt-8" role="region" aria-live="polite"></div>
