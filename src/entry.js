@@ -13,6 +13,13 @@ if (typeof window !== 'undefined') {
     // Expose TS holiday service as window.holidayService
     window.holidayService = holidayService;
 }
+// Initialize holiday data for current year
+if (typeof window !== 'undefined') {
+    const currentYear = new Date().getFullYear();
+    holidayService.ensureCurrentAndNextYearLoaded().catch(error => {
+        console.warn('[entry] Failed to load holiday data:', error);
+    });
+}
 // Self-check: compare manifest version if available
 if (typeof window !== 'undefined'){
 	const baseUrl = (window.CONFIG?.BASE_URL || './dist').replace(/\/$/, '') || './dist';
