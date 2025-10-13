@@ -1,4 +1,4 @@
-import { appState } from '@state';
+import { appState } from '../modules/state.js';
 import { ModalManager } from './modalManager.js';
 import { ScheduleValidator } from '../validation.js';
 import { SchedulingEngine } from '../scheduler.js';

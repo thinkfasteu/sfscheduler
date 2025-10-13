@@ -1,4 +1,4 @@
-import { appState } from '@state';
+import { appState } from '../../modules/state.js';
 
 export function createVacationService(store){
   return {

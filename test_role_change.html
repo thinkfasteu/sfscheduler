@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Role Change</title>
+</head>
+<body>
+    <select id="staffType">
+        <option value="minijob">Minijob</option>
+        <option value="student">Werkstudent</option>
+        <option value="permanent">Festangestellt</option>
+    </select>
+    <div id="permanentPreferredRow" style="display: none;">Permanent row</div>
+    <div id="practicalLimitsRow" style="display: none;">Practical row</div>
+
+    <script>
+        function initRoleChangeHandler() {
+            const roleEl = document.getElementById('staffType');
+            const permRow = document.getElementById('permanentPreferredRow');
+            const practicalRow = document.getElementById('practicalLimitsRow');
+            if (roleEl && permRow && practicalRow){
+                const sync = () => { 
+                    const isPermanent = roleEl.value === 'permanent';
+                    permRow.style.display = isPermanent ? '' : 'none';
+                    practicalRow.style.display = (roleEl.value === 'minijob' || roleEl.value === 'student') ? '' : 'none';
+                    console.log('Role changed to:', roleEl.value, 'perm visible:', permRow.style.display === '');
+                };
+                roleEl.addEventListener('change', sync);
+                sync(); // Run initially
+            }
+        }
+        initRoleChangeHandler();
+    </script>
+</body>
+</html>

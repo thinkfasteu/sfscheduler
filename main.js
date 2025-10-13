@@ -1,4 +1,4 @@
-import { appState } from '@state';
+import { appState } from './modules/state.js';
 import { ScheduleUI } from './ui/scheduleUI.js';  // Updated path
 import { EventHandler } from './ui/eventHandlers.js';  // Updated path
 import { APP_CONFIG, SHIFTS } from './modules/config.js';

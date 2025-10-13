@@ -1,4 +1,4 @@
-import { appState } from '@state';
+import { appState } from '../modules/state.js';
 import { SHIFTS } from '../modules/config.js';
 import { parseYMD } from '../utils/dateUtils.js';
 import { ScheduleValidator } from '../validation.js';

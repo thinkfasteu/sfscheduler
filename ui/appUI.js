@@ -1,4 +1,4 @@
-import { appState } from '@state'; // TODO remove direct non-staff usage later
+import { appState } from '../modules/state.js'; // TODO remove direct non-staff usage later
 import { APP_CONFIG, SHIFTS } from '../modules/config.js';
 import { toLocalISOMonth, toLocalISODate, pad2, parseYMD } from '../utils/dateUtils.js';
 // Add audit message helper
@@ -75,6 +75,8 @@ export class AppUI {
    if (backendMode==='supabase' && __services?.ready){
      let tries=0; const poll=()=>{ if (this._servicesHydrated) return; tries++; if ((__services?.staff?.list?.()||[]).length){ this._servicesHydrated=true; try{ this.renderStaffList(); }catch{} return; } if (tries<20) setTimeout(poll, 300); }; poll();
    }
+   // Initialize role change handler for staff form
+   initRoleChangeHandler();
   }
 
   _attachServiceEventListeners(){
@@ -314,8 +316,8 @@ export class AppUI {
     ['staffName','contractHours','typicalWorkdays','weeklyHoursMinPractical','weeklyHoursMaxPractical','notesPracticalCaps'].forEach(id=>{ const el=document.getElementById(id); if (el) el.value=''; });
     const roleEl = document.getElementById('staffType'); if (roleEl) roleEl.value='minijob';
     const prefEl = document.getElementById('weekendPreference'); if (prefEl) prefEl.checked = false;
-  const permPrefRow = document.getElementById('permanentPreferredRow'); if (permPrefRow) permPrefRow.hidden = true;
-  const practicalRow = document.getElementById('practicalLimitsRow'); if (practicalRow) practicalRow.hidden = true;
+  const permPrefRow = document.getElementById('permanentPreferredRow'); if (permPrefRow) permPrefRow.style.display = 'none';
+  const practicalRow = document.getElementById('practicalLimitsRow'); if (practicalRow) practicalRow.style.display = 'none';
     const permPrefSel = document.getElementById('permanentPreferredShift'); if (permPrefSel) permPrefSel.value = 'none';
     const editIdEl = document.getElementById('staffIdToEdit'); if (editIdEl) editIdEl.value = '';
     const saveBtn = document.getElementById('saveStaffBtn'); if (saveBtn) saveBtn.textContent = 'Arbeitskraft speichern';
@@ -403,8 +405,8 @@ export class AppUI {
         document.getElementById('contractHours').value = s.contractHours || '';
         document.getElementById('typicalWorkdays').value = s.typicalWorkdays || '';
         const prefEl = document.getElementById('weekendPreference'); if (prefEl) prefEl.checked = !!s.weekendPreference;
-  const permPrefRow = document.getElementById('permanentPreferredRow'); if (permPrefRow) permPrefRow.hidden = !(s.role==='permanent');
-  const practicalRow = document.getElementById('practicalLimitsRow'); if (practicalRow) practicalRow.hidden = !((s.role==='minijob' || s.role==='student'));
+  const permPrefRow = document.getElementById('permanentPreferredRow'); if (permPrefRow) permPrefRow.style.display = (s.role==='permanent') ? '' : 'none';
+  const practicalRow = document.getElementById('practicalLimitsRow'); if (practicalRow) practicalRow.style.display = ((s.role==='minijob' || s.role==='student')) ? '' : 'none';
         const permPrefSel = document.getElementById('permanentPreferredShift'); if (permPrefSel) permPrefSel.value = s.permanentPreferredShift || 'none';
         // Populate practical limits fields
         const minPracticalEl = document.getElementById('weeklyHoursMinPractical'); if (minPracticalEl) minPracticalEl.value = s.weeklyHoursMinPractical || '';
@@ -1096,11 +1098,7 @@ export class AppUI {
 }
 
 // Attach role change handler to toggle permanent preferred row and practical limits
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initRoleChangeHandler, { once: true });
-} else {
-  initRoleChangeHandler();
-}
+// Moved to _postServicesInit to ensure DOM is ready
 
 function initRoleChangeHandler() {
   const roleEl = document.getElementById('staffType');
@@ -1108,8 +1106,9 @@ function initRoleChangeHandler() {
   const practicalRow = document.getElementById('practicalLimitsRow');
   if (roleEl && permRow && practicalRow){
     const sync = () => { 
-      permRow.hidden = !(roleEl.value === 'permanent');
-      practicalRow.hidden = !((roleEl.value === 'minijob' || roleEl.value === 'student'));
+      const isPermanent = roleEl.value === 'permanent';
+      permRow.style.display = isPermanent ? '' : 'none';
+      practicalRow.style.display = (roleEl.value === 'minijob' || roleEl.value === 'student') ? '' : 'none';
     };
     roleEl.addEventListener('change', sync);
     sync(); // Run initially

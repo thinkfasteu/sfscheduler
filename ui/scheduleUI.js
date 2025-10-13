@@ -17,7 +17,7 @@
  */
 
 import { APP_CONFIG, SHIFTS } from '../modules/config.js';
-import { appState } from '@state';
+import { appState } from '../modules/state.js';
 import { SchedulingEngine } from '../scheduler.js';
 import { ScheduleValidator } from '../validation.js';
 import { parseYMD } from '../utils/dateUtils.js';
