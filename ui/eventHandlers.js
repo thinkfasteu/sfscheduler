@@ -5,12 +5,9 @@ import { SchedulingEngine } from '../scheduler.js';
 
 export class EventHandler {
     constructor(ui) {
-        console.log('[EventHandler] Constructor called with ui:', ui);
         this.ui = ui;
         this.modalManager = new ModalManager();
-        console.log('[EventHandler] About to call setupHandlers');
         this.setupHandlers();
-        console.log('[EventHandler] setupHandlers completed');
     }
 
     setupHandlers() {        
@@ -105,29 +102,19 @@ export class EventHandler {
     }
 
     async generateSchedule() {
-        console.log('[generateSchedule] Starting schedule generation...');
         const monthEl = document.getElementById('scheduleMonth');
         const month = monthEl?.value;
-        console.log('[generateSchedule] Selected month:', month);
         if (!month) {
             alert('Bitte wählen Sie einen Monat aus.');
             return;
         }
         try {
-            console.log('[generateSchedule] Creating SchedulingEngine...');
             const engine = new SchedulingEngine(month);
-            console.log('[generateSchedule] Engine created, calling generateSchedule()...');
             const schedule = engine.generateSchedule();
-            console.log('[generateSchedule] Schedule generated:', schedule);
-            console.log('[generateSchedule] Saving to appState (local only)...');
             appState.scheduleData[month] = schedule.data;
             appState.save();
             
-            console.log('[generateSchedule] Schedule generated locally. Use "Finalize Schedule" to save to backend.');
-            
-            console.log('[generateSchedule] Refreshing UI...');
             this.ui.refreshDisplay();
-            console.log('[generateSchedule] Done!');
             
             // Show notification about finalization
             if (window.__toast) {
@@ -140,14 +127,10 @@ export class EventHandler {
     }
 
     clearSchedule() {
-        console.log('[clearSchedule] called');
         const monthEl = document.getElementById('scheduleMonth');
         const month = monthEl?.value || this.ui?.currentCalendarMonth;
-        console.log('[clearSchedule] monthEl=', monthEl, 'month=', month, 'currentCalendarMonth=', this.ui?.currentCalendarMonth);
-        console.log('[clearSchedule] scheduleData for month=', appState.scheduleData?.[month]);
         
         if (!month) {
-            console.log('[clearSchedule] no month selected');
             alert('Bitte wählen Sie einen Monat aus.');
             return;
         }
@@ -155,13 +138,11 @@ export class EventHandler {
         const hasScheduleData = appState.scheduleData?.[month] && Object.keys(appState.scheduleData[month]).length > 0;
         
         if (!hasScheduleData) {
-            console.log('[clearSchedule] no schedule data found');
             alert('Kein Dienstplan zum Löschen verfügbar');
             return;
         }
         
         if (confirm(`Soll der Dienstplan für ${month} wirklich gelöscht werden?`)) {
-            console.log('[clearSchedule] confirmed, deleting schedule');
             
             // Clear local schedule data
             delete appState.scheduleData[month];
@@ -170,9 +151,7 @@ export class EventHandler {
             (async () => {
                 try {
                     if (window.__services?.schedule?.clearMonth) {
-                        console.log('[clearSchedule] clearing backend schedule data');
                         await window.__services.schedule.clearMonth(month);
-                        console.log('[clearSchedule] backend clear completed');
                     }
                 } catch (e) {
                     console.warn('[clearSchedule] could not clear backend data:', e);
@@ -188,8 +167,6 @@ export class EventHandler {
             } else {
                 this.ui.refreshDisplay();
             }
-            
-            console.log('[clearSchedule] schedule cleared and UI refreshed');
         }
     }
 
@@ -249,10 +226,8 @@ export class EventHandler {
     }
 
     async finalizeSchedule() {
-        console.log('[finalizeSchedule] Starting schedule finalization...');
         const monthEl = document.getElementById('scheduleMonth');
         const month = monthEl?.value;
-        console.log('[finalizeSchedule] Selected month:', month);
         
         if (!month) {
             alert('Bitte wählen Sie einen Monat aus.');
@@ -270,11 +245,9 @@ export class EventHandler {
         }
         
         try {
-            console.log('[finalizeSchedule] Saving to backend...');
             
             if (window.__services?.schedule?.setMonth) {
                 await window.__services.schedule.setMonth(month, scheduleData);
-                console.log('[finalizeSchedule] Backend save completed successfully');
                 
                 if (window.__toast) {
                     window.__toast('Plan erfolgreich finalisiert und gespeichert!', { variant: 'success' });
@@ -354,12 +327,10 @@ export class EventHandler {
                                Object.keys(appState.availabilityData[month]).length > 0;
         
         if (!hasAvailability) {
-            console.log('[generateNewSchedule] no availability data found');
             alert(`Keine Verfügbarkeitsdaten für ${month} gefunden. Bitte zuerst Verfügbarkeiten eintragen.`);
             return;
         }
 
-        console.log('[generateNewSchedule] availability data found, starting generation');
         
         // Generate fresh schedule - manual generation only
         if (this.ui && typeof this.ui.generateScheduleForCurrentMonth === 'function') {
@@ -367,7 +338,6 @@ export class EventHandler {
                 // Reset generation lock if stuck
                 this.ui._generating = false; 
                 this.ui.generateScheduleForCurrentMonth();
-                console.log('[generateNewSchedule] manual schedule generation initiated');
             } catch (e) {
                 console.error('[generateNewSchedule] generation failed:', e);
                 alert('Fehler beim Erstellen des Plans: ' + e.message);

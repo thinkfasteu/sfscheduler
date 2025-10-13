@@ -479,13 +479,11 @@ export class ScheduleUI {
     }
 
     updateCalendarFromSelect() {
-        console.log('[scheduleUI][phase] start updateCalendarFromSelect');
         const el = document.getElementById('scheduleMonth');
         const month = el?.value;
         if (!month) return;
         // If calendar already rendered for this month, skip full rebuild – just refresh assignments + weekend report
         if (this.currentCalendarMonth === month && document.getElementById('scheduleGrid')) {
-            console.log('[scheduleUI][phase] fast-refresh existing month');
             this.renderAssignments(month);
             this.renderWeekendReport(month);
             return;
@@ -539,7 +537,6 @@ export class ScheduleUI {
     grid.innerHTML = html;
     // Set current month BEFORE attempting holiday badge update so filter works
     this.currentCalendarMonth = month;
-    console.log('[scheduleUI][phase] holidays-initial');
     try { this.ensureHolidaysLoaded(y); } catch(e){ console.warn('[phase] ensureHolidaysLoaded failed', e); }
     try { this.updateHolidayBadgesExt(y, { retype:true }); } catch(e){ console.warn('[phase] updateHolidayBadges initial failed', e); }
     // Toolbar buttons now handled via direct binding in eventBindings.js
@@ -580,7 +577,6 @@ export class ScheduleUI {
                 }
             } catch(ae){ console.warn('[a11y] audit invocation failed', ae); }
         }
-        console.log('[scheduleUI][phase] done updateCalendarFromSelect');
     }
 
     bindDelegatesOnce(){

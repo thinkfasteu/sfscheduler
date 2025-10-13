@@ -220,8 +220,6 @@ function initApp(){
         if (sec) sec.classList.add('active');
 
         if (key === 'schedule') {
-            console.log('[showTab] Switched to schedule tab - look for the buttons at the top: Plan erstellen, etc.');
-            console.log('[showTab] Checking if generateScheduleBtn exists:', !!document.getElementById('generateScheduleBtn'));
             // Refresh UI if ScheduleUI is available
             if (window.scheduleUI?.refreshDisplay) {
                 window.scheduleUI.refreshDisplay();

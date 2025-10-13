@@ -29,27 +29,10 @@ class Schedule {
             : !!(appState.holidays?.[String(this.year)]?.[dateStr]);
         const type = isHoliday ? 'holiday' : isWeekend ? 'weekend' : 'weekday';
         
-        // DEBUG: Log holiday detection for October 3rd
-        if (dateStr === '2025-10-03') {
-            console.log('[DEBUG] getShiftsForDate for 2025-10-03:', {
-                dateStr,
-                isWeekend,
-                isHoliday,
-                type,
-                holidayService: !!WIN.holidayService,
-                appStateHoliday: appState.holidays?.[String(this.year)]?.[dateStr]
-            });
-        }
-        
         const shifts = Object.entries(SHIFTS)
             .filter(([,s]) => s.type === type)
             .map(([k]) => k);
             
-        // DEBUG: Log shifts for October 3rd
-        if (dateStr === '2025-10-03') {
-            console.log('[DEBUG] Shifts for 2025-10-03:', shifts);
-        }
-        
         return shifts;
     }
     setAssignment(dateStr, shiftKey, staffId){
@@ -162,20 +145,6 @@ const BUSINESS_RULES = {
                 : !!(appState.holidays?.[String(d.getFullYear())]?.[dateStr]);
             
             const shouldBlock = isHoliday && !isWeekend;
-            
-            // DEBUG: Log validation for October 3rd
-            if (dateStr === '2025-10-03') {
-                console.log('[DEBUG] PERMANENT_HOLIDAY_RESTRICTION for 2025-10-03:', {
-                    dateStr,
-                    shiftKey,
-                    staffRole: staff.role,
-                    staffName: staff.name,
-                    isWeekend,
-                    isHoliday,
-                    shouldBlock,
-                    result: !shouldBlock
-                });
-            }
             
             return !shouldBlock; // Allow if weekend, block if holiday
         }
@@ -745,10 +714,6 @@ class SchedulingEngine {
             
             // Clear existing assignments for this date to ensure only valid shifts for the current day type are assigned
             if (schedule.data[dateStr]?.assignments) {
-                // DEBUG: Log clearing for October 3rd
-                if (dateStr === '2025-10-03') {
-                    console.log('[DEBUG] Clearing existing assignments for 2025-10-03:', schedule.data[dateStr].assignments);
-                }
                 schedule.data[dateStr].assignments = {};
             }
             
@@ -760,10 +725,6 @@ class SchedulingEngine {
                 return ac - bc;
             });
             
-            // DEBUG: Log shifts being processed for October 3rd
-            if (dateStr === '2025-10-03') {
-                console.log('[DEBUG] Processing shifts for 2025-10-03:', shifts);
-            }
             const scheduledToday = new Set();
             for (const sh of shifts){
                 const cands = this.findCandidatesForShift(dateStr, sh, scheduledToday, weekNum);

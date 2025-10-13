@@ -28,7 +28,6 @@ export function createHolidayService(){
         }
 
         const url = `${baseUrl}/${year}/DE`;
-        console.log(`Fetching holidays for ${year} from: ${url}`);
 
         const response = await fetch(url);
         if (!response.ok) {
@@ -36,18 +35,8 @@ export function createHolidayService(){
         }
 
         const allGermanHolidays = await response.json();
-        console.log(`[HolidayService] API returned ${allGermanHolidays.length} holidays total`);
-        
-        // Check for October 3rd specifically in raw API data
-        const oct3Raw = allGermanHolidays.find(h => h.date === '2025-10-03');
-        if (oct3Raw) {
-          console.log(`[HolidayService] October 3rd in raw API:`, oct3Raw);
-        } else {
-          console.log(`[HolidayService] ❌ October 3rd NOT in raw API response`);
-        }
         
         // Filter holidays for our state (Hessen = DE-HE)
-        console.log(`[HolidayService] Filtering for state: ${stateCode}`);
         const stateHolidays = allGermanHolidays.filter(holiday => {
           // Include holidays that either:
           // 1. Don't have county restrictions (national holidays)
@@ -56,49 +45,26 @@ export function createHolidayService(){
           const includesOurState = Array.isArray(holiday.counties) && holiday.counties.includes(`DE-${stateCode}`);
           const included = hasNoCounties || includesOurState;
           
-          if (holiday.date === '2025-10-03') {
-            console.log(`[HolidayService] October 3rd filter check:`, {
-              counties: holiday.counties,
-              hasNoCounties,
-              includesOurState,
-              stateCode: `DE-${stateCode}`,
-              included
-            });
-          }
-          
           return included;
         });
-
-        console.log(`[HolidayService] Filtered to ${stateHolidays.length} holidays for state ${stateCode}`);
         
         // Convert to the format expected by the scheduler: { "YYYY-MM-DD": "Holiday Name" }
         appState.holidays[yearStr] = {};
         stateHolidays.forEach(holiday => {
           appState.holidays[yearStr][holiday.date] = holiday.localName;
-          if (holiday.date === '2025-10-03') {
-            console.log(`[HolidayService] ✅ Added October 3rd: ${holiday.date} = ${holiday.localName}`);
-          }
         });
 
         // Persist to storage
         if (appState.save) {
-          console.log(`[HolidayService] Saving appState with ${Object.keys(appState.holidays[yearStr]).length} holidays...`);
           appState.save();
-          console.log(`[HolidayService] AppState saved successfully`);
-        } else {
-          console.log(`[HolidayService] ⚠️ No appState.save() function available`);
         }
 
-        console.log(`Loaded ${stateHolidays.length} holidays for ${year}:`, appState.holidays[yearStr]);
-        
         // Mark log for split-brain detection
-        console.log('[holidays][writer] mark=', window.__STATE_MARK__, appState.holidays[String(year)]);
         
         // Double-check the data is still there after save
         setTimeout(() => {
           const recheck = appState.holidays?.[yearStr];
           const recheckCount = recheck ? Object.keys(recheck).length : 0;
-          console.log(`[HolidayService] Recheck after save - ${recheckCount} holidays still in appState for ${yearStr}`);
           if (recheckCount === 0) {
             console.error(`[HolidayService] ❌ HOLIDAYS LOST AFTER SAVE! This is the bug!`);
           }

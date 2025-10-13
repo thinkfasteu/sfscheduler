@@ -7,7 +7,6 @@ function onDomReady(fn) {
 }
 
 function bind(id, type, handler) {
-  console.log(`[bind] Attempting to bind ${type} on #${id}`);
   const attach = () => {
     const el = document.getElementById(id);
     if (!el) {
@@ -15,7 +14,6 @@ function bind(id, type, handler) {
       return;
     }
     el.addEventListener(type, handler);
-    console.log(`[bind] ✅ SUCCESS: attached ${type} on #${id}`);
   };
   
   // Try immediate attachment first
@@ -48,7 +46,6 @@ function __initEventBindings(){
   // Availability
   ['availabilityStaffSelect','availabilityMonth'].forEach(id=> {
     bind(id,'change', ()=> {
-      console.log('[eventBindings] Availability selector changed:', id);
       if (window.appUI && window.appUI.handleAvailabilityDisplay) {
         window.appUI.handleAvailabilityDisplay();
       } else if (window.handleAvailabilityDisplay) {
@@ -65,9 +62,6 @@ function __initEventBindings(){
   });
   // Schedule tab
   bind('generateScheduleBtn','click', (e)=> {
-    console.log('[eventBindings] Generate button clicked - calling handler');
-    const btn = document.getElementById('generateScheduleBtn');
-    console.log('[eventBindings] Button element:', btn, 'handlers exists:', !!window.handlers, 'generateSchedule exists:', !!window.handlers?.generateSchedule);
     window.__toast && window.__toast('Generate button clicked');
     e?.preventDefault?.();
     if (window.handlers?.generateSchedule) {
@@ -78,7 +72,6 @@ function __initEventBindings(){
   });
 
   bind('finalizeScheduleBtn','click', (e)=> {
-    console.log('[eventBindings] Finalize button clicked - calling handler');
     window.__toast && window.__toast('Finalize button clicked');
     e?.preventDefault?.();
     if (window.handlers?.finalizeSchedule) {
@@ -117,8 +110,6 @@ function __initEventBindings(){
   });
 
   bind('printScheduleBtn','click', ()=> {
-    console.error('[eventBindings] Print button clicked');
-    console.log('[eventBindings] Print clicked');
     if (typeof window.print === 'function') {
       window.print();
     } else {
@@ -161,8 +152,6 @@ function __initEventBindings(){
   bind('importBackupBtn','click', ()=> { const inp=document.getElementById('backupFileInput'); if (inp) inp.click(); });
   const fileInput = document.getElementById('backupFileInput');
   if (fileInput){ fileInput.addEventListener('change', e=>{ const f=e.target.files && e.target.files[0]; if (f && window.__backup){ window.__backup.importFile(f); e.target.value=''; } }); }
-  
-  console.log('[eventBindings] ✅ Event binding initialization COMPLETE!');
 }
 
 if (document.readyState === 'loading'){

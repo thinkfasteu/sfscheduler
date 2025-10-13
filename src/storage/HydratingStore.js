@@ -277,15 +277,12 @@ export class HydratingStore {
   // ---- Schedule (sync facade) ----
   getMonthSchedule(month){ return appState.scheduleData?.[month] || {}; }
   setMonthSchedule(month, data){
-    console.log('[HydratingStore] setMonthSchedule called for month:', month, 'data keys:', Object.keys(data || {}));
     appState.scheduleData[month] = data;
     appState.save?.();
     if (!this.remote.disabled) {
       this._enqueue('setMonthSchedule', async () => {
         try {
-          console.log('[HydratingStore] Enqueuing backend save for month:', month);
           await this.remote.setMonthSchedule(month, data);
-          console.log('[HydratingStore] Backend save completed for month:', month);
         } catch (error) {
           console.error('[HydratingStore] Backend save failed for month:', month, error);
           // Re-throw to be caught by the caller
@@ -296,7 +293,6 @@ export class HydratingStore {
     return true;
   }
   clearMonthSchedule(month){
-    console.log('[HydratingStore] clearMonthSchedule called for month:', month);
     if (appState.scheduleData[month]) {
       delete appState.scheduleData[month];
       appState.save?.();
@@ -304,9 +300,7 @@ export class HydratingStore {
     if (!this.remote.disabled) {
       this._enqueue('clearMonthSchedule', async () => {
         try {
-          console.log('[HydratingStore] Enqueuing backend clear for month:', month);
           await this.remote.clearMonthSchedule(month);
-          console.log('[HydratingStore] Backend clear completed for month:', month);
         } catch (error) {
           console.error('[HydratingStore] Backend clear failed for month:', month, error);
         }
