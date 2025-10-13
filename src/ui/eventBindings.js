@@ -60,8 +60,6 @@ function __initEventBindings(){
     window.__toast && window.__toast('Show holidays clicked');
     window.showHolidaysPopup && window.showHolidaysPopup();
   });
-    // Schedule tab - bind with deferred setup
-  __bindScheduleHandlers();
   // Vacation
   bind('addVacationPeriodBtn','click', ()=> window.addVacationPeriod && window.addVacationPeriod());
   bind('addOtherStaffBtn','click', ()=> window.addOtherStaff && window.addOtherStaff());
@@ -93,6 +91,7 @@ if (document.readyState === 'loading'){
 // Deferred binding for schedule handlers that may not be available immediately
 function __bindScheduleHandlers() {
   const scheduleButtons = [
+    { id: 'showHolidaysBtn', handler: null, action: () => { window.__toast && window.__toast('Show holidays clicked'); window.showHolidaysPopup && window.showHolidaysPopup(); } },
     { id: 'generateScheduleBtn', handler: 'generateSchedule', toast: 'Generate button clicked' },
     { id: 'finalizeScheduleBtn', handler: 'finalizeSchedule', toast: 'Finalize button clicked' },
     { id: 'clearScheduleBtn', handler: 'clearSchedule', toast: 'Clear button clicked' },
@@ -102,14 +101,18 @@ function __bindScheduleHandlers() {
 
   // Try to bind immediately, or defer until handlers are available
   function tryBind() {
-    scheduleButtons.forEach(({ id, handler, toast }) => {
+    scheduleButtons.forEach(({ id, handler, action, toast }) => {
       const element = document.getElementById(id);
       if (element && !element.__eventBound) {
-        if (window.handlers?.[handler]) {
+        if (handler ? window.handlers?.[handler] : action) {
           element.addEventListener('click', (e) => {
             if (toast) window.__toast && window.__toast(toast);
             e?.preventDefault?.();
-            window.handlers[handler]();
+            if (handler) {
+              window.handlers[handler]();
+            } else if (action) {
+              action();
+            }
           });
           element.__eventBound = true;
           console.log(`[eventBindings] Bound ${id} successfully`);
@@ -140,7 +143,7 @@ function __bindScheduleHandlers() {
   const requiredHandlers = ['generateSchedule', 'finalizeSchedule', 'clearSchedule', 'exportSchedule', 'exportPdf'];
   const hasAllHandlers = requiredHandlers.every(h => window.handlers?.[h]);
   
-  if (!hasAllHandlers) {
+  if (!hasAllHandlers || !window.showHolidaysPopup) {
     let attempts = 0;
     const poll = () => {
       attempts++;
@@ -155,3 +158,60 @@ function __bindScheduleHandlers() {
     poll();
   }
 }
+
+window.__bindScheduleHandlers = __bindScheduleHandlers;
+
+// Deferred binding for modal action handlers that may be created dynamically
+function __bindModalActionHandlers() {
+  const modalButtons = [
+    { id: 'executeSwapBtn', handler: 'executeSwap', toast: 'Swap executed' },
+    { id: 'executeAssignBtn', handler: 'executeAssign', toast: 'Assignment executed' }
+  ];
+
+  function tryBind() {
+    modalButtons.forEach(({ id, handler, toast }) => {
+      const element = document.getElementById(id);
+      if (element && !element.__eventBound) {
+        if (window.handlers?.[handler] || window[handler]) {
+          element.addEventListener('click', (e) => {
+            if (toast) window.__toast && window.__toast(toast);
+            e?.preventDefault?.();
+            if (window.handlers?.[handler]) {
+              window.handlers[handler]();
+            } else if (window[handler]) {
+              window[handler]();
+            }
+          });
+          element.__eventBound = true;
+          console.log(`[eventBindings] Bound ${id} successfully`);
+        } else {
+          console.log(`[eventBindings] ${id} handler not ready yet, deferring`);
+        }
+      }
+    });
+  }
+
+  // Try binding immediately
+  tryBind();
+
+  // If handlers not available yet, poll until they are
+  const requiredHandlers = ['executeSwap', 'executeAssign'];
+  const hasAllHandlers = requiredHandlers.every(h => window.handlers?.[h] || window[h]);
+  
+  if (!hasAllHandlers) {
+    let attempts = 0;
+    const poll = () => {
+      attempts++;
+      tryBind();
+      const stillMissing = requiredHandlers.filter(h => !window.handlers?.[h] && !window[h]);
+      if (stillMissing.length > 0 && attempts < 50) {
+        setTimeout(poll, 100);
+      } else if (stillMissing.length === 0) {
+        console.log('[eventBindings] All modal action handlers bound successfully');
+      }
+    };
+    poll();
+  }
+}
+
+window.__bindModalActionHandlers = __bindModalActionHandlers;

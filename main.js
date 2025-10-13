@@ -152,6 +152,10 @@ function initApp(){
     window.scheduleUI = scheduleUI;
     // Render UI first so buttons/inputs exist
     scheduleUI.refreshDisplay();
+    // Bind schedule handlers after UI is rendered
+    if (window.__bindScheduleHandlers) {
+        window.__bindScheduleHandlers();
+    }
 
     // Periodic status refresh (kept for banner visibility)
     setInterval(()=>{ showLockStatus(); }, 15000);
@@ -202,6 +206,24 @@ function initApp(){
         console.error('[main] addHoliday: appUI not available'); 
     };
     
+    // Staff functions (missing window mappings)
+    window.addStaff = function() { 
+        if (window.appUI?.addStaff) return window.appUI.addStaff(); 
+        console.error('[main] addStaff: appUI not available'); 
+    };
+    window.addStaffVacationPeriod = function() { 
+        if (window.appUI?.addStaffVacationPeriod) return window.appUI.addStaffVacationPeriod(); 
+        console.error('[main] addStaffVacationPeriod: appUI not available'); 
+    };
+    window.addStaffIllnessPeriod = function() { 
+        if (window.appUI?.addStaffIllnessPeriod) return window.appUI.addStaffIllnessPeriod(); 
+        console.error('[main] addStaffIllnessPeriod: appUI not available'); 
+    };
+    window.resetStaffForm = function() { 
+        if (window.appUI?.resetStaffForm) return window.appUI.resetStaffForm(); 
+        console.error('[main] resetStaffForm: appUI not available'); 
+    };
+    
     // Tab switching function (replaces the one that was in prototypeCompat.js)
     window.showTab = function(evt, key) {
         if (!key && evt?.currentTarget) {
@@ -223,6 +245,10 @@ function initApp(){
             // Refresh UI if ScheduleUI is available
             if (window.scheduleUI?.refreshDisplay) {
                 window.scheduleUI.refreshDisplay();
+                // Re-bind schedule handlers after refresh
+                if (window.__bindScheduleHandlers) {
+                    window.__bindScheduleHandlers();
+                }
             }
         }
     };
