@@ -119,24 +119,20 @@ export class EventHandler {
             console.log('[generateSchedule] Engine created, calling generateSchedule()...');
             const schedule = engine.generateSchedule();
             console.log('[generateSchedule] Schedule generated:', schedule);
-            console.log('[generateSchedule] Saving to appState...');
+            console.log('[generateSchedule] Saving to appState (local only)...');
             appState.scheduleData[month] = schedule.data;
             appState.save();
             
-            // Also save to backend if available
-            try {
-                if (window.__services?.schedule?.setMonth) {
-                    console.log('[generateSchedule] Saving to backend...');
-                    await window.__services.schedule.setMonth(month, schedule.data);
-                    console.log('[generateSchedule] Backend save completed');
-                }
-            } catch (e) {
-                console.warn('[generateSchedule] Could not save to backend:', e);
-            }
+            console.log('[generateSchedule] Schedule generated locally. Use "Finalize Schedule" to save to backend.');
             
             console.log('[generateSchedule] Refreshing UI...');
             this.ui.refreshDisplay();
             console.log('[generateSchedule] Done!');
+            
+            // Show notification about finalization
+            if (window.__toast) {
+                window.__toast('Plan erstellt! Verwenden Sie "Plan finalisieren" um ihn zu speichern.', { variant: 'info' });
+            }
         } catch (error) {
             console.error('[generateSchedule] Error:', error);
             alert('Fehler bei der Planerstellung: ' + error.message);
@@ -171,14 +167,17 @@ export class EventHandler {
             delete appState.scheduleData[month];
             
             // Clear backend/service data if available
-            try {
-                if (window.__services?.schedule?.clearMonth) {
-                    console.log('[clearSchedule] clearing backend schedule data');
-                    window.__services.schedule.clearMonth(month);
+            (async () => {
+                try {
+                    if (window.__services?.schedule?.clearMonth) {
+                        console.log('[clearSchedule] clearing backend schedule data');
+                        await window.__services.schedule.clearMonth(month);
+                        console.log('[clearSchedule] backend clear completed');
+                    }
+                } catch (e) {
+                    console.warn('[clearSchedule] could not clear backend data:', e);
                 }
-            } catch (e) {
-                console.warn('[clearSchedule] could not clear backend data:', e);
-            }
+            })();
             
             // Save the cleared state
             appState.save();
@@ -249,8 +248,47 @@ export class EventHandler {
     try { this.modalManager.closeModal('swapModal'); } catch {}
     }
 
-    closeModal(id) {
-        this.modalManager.closeModal(id);
+    async finalizeSchedule() {
+        console.log('[finalizeSchedule] Starting schedule finalization...');
+        const monthEl = document.getElementById('scheduleMonth');
+        const month = monthEl?.value;
+        console.log('[finalizeSchedule] Selected month:', month);
+        
+        if (!month) {
+            alert('Bitte wählen Sie einen Monat aus.');
+            return;
+        }
+        
+        const scheduleData = appState.scheduleData?.[month];
+        if (!scheduleData || Object.keys(scheduleData).length === 0) {
+            alert('Kein Dienstplan zum Finalisieren verfügbar. Erstellen Sie zuerst einen Plan.');
+            return;
+        }
+        
+        if (!confirm(`Soll der Dienstplan für ${month} finalisiert werden?\n\nDies speichert den Plan dauerhaft in der Datenbank und ersetzt alle vorhandenen Daten für diesen Monat.`)) {
+            return;
+        }
+        
+        try {
+            console.log('[finalizeSchedule] Saving to backend...');
+            
+            if (window.__services?.schedule?.setMonth) {
+                await window.__services.schedule.setMonth(month, scheduleData);
+                console.log('[finalizeSchedule] Backend save completed successfully');
+                
+                if (window.__toast) {
+                    window.__toast('Plan erfolgreich finalisiert und gespeichert!', { variant: 'success' });
+                }
+                
+                alert('Plan erfolgreich finalisiert! Der Dienstplan wurde dauerhaft gespeichert.');
+            } else {
+                throw new Error('Backend services not available');
+            }
+            
+        } catch (error) {
+            console.error('[finalizeSchedule] Backend save failed:', error);
+            alert('Fehler beim Finalisieren: ' + error.message + '\n\nDer Plan wurde lokal gespeichert, aber nicht in der Datenbank.');
+        }
     }
 
     exportSchedule() {
@@ -295,14 +333,17 @@ export class EventHandler {
         }
         
         // Clear any backend/service data if available
-        try {
-            if (window.__services?.schedule?.clearMonth) {
-                console.log('[generateNewSchedule] clearing backend schedule data');
-                window.__services.schedule.clearMonth(month);
+        (async () => {
+            try {
+                if (window.__services?.schedule?.clearMonth) {
+                    console.log('[generateNewSchedule] clearing backend schedule data');
+                    await window.__services.schedule.clearMonth(month);
+                    console.log('[generateNewSchedule] backend clear completed');
+                }
+            } catch (e) {
+                console.warn('[generateNewSchedule] could not clear backend data:', e);
             }
-        } catch (e) {
-            console.warn('[generateNewSchedule] could not clear backend data:', e);
-        }
+        })();
 
         // Save the cleared state
         appState.save();

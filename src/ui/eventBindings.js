@@ -77,6 +77,17 @@ function __initEventBindings(){
     }
   });
 
+  bind('finalizeScheduleBtn','click', (e)=> {
+    console.log('[eventBindings] Finalize button clicked - calling handler');
+    window.__toast && window.__toast('Finalize button clicked');
+    e?.preventDefault?.();
+    if (window.handlers?.finalizeSchedule) {
+      window.handlers.finalizeSchedule();
+    } else {
+      console.error('[eventBindings] No finalizeSchedule handler found!');
+    }
+  });
+
   bind('clearScheduleBtn','click', (e)=> {
     window.__toast && window.__toast('Clear button clicked');
     e?.preventDefault?.();
