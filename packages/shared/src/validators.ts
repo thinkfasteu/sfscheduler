@@ -26,6 +26,7 @@ export const staffSchema = z.object({
   contractHours: z.number().positive().optional(),
   typicalWorkdays: z.number().min(1).max(7).optional(),
   weekendPreference: z.boolean().optional(),
+  permanentPreferredShift: z.enum(['none', 'early', 'midday']).optional(),
   version: z.number().positive(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),

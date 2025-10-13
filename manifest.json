@@ -1,0 +1,24 @@
+{
+  "app": "app.f010a5d0d9.js",
+  "chunks": [
+    "chunks/academicTerms-564554JC.js",
+    "chunks/scheduler-JHTKJYGC.js",
+    "chunks/chunk-PYRY7CKB.js",
+    "chunks/chunk-ODFHEMCT.js",
+    "chunks/services-HV2OXNUL.js",
+    "chunks/chunk-AOZWLDYD.js",
+    "chunks/chunk-4N7SLQGZ.js"
+  ],
+  "built": "2025-10-12T18:40:11.389Z",
+  "version": "0.1.0",
+  "integrities": {
+    "app.f010a5d0d9.js": "sha256-8BCl0Nmj4tsAkRsNSgcDwd7eASwPYBmV0d2JwRS3apA=",
+    "chunks/academicTerms-564554JC.js": "sha256-QBwxXhr/nXRCewZOkQ9KyGRm+xmrKVycqSr4reKH+hA=",
+    "chunks/scheduler-JHTKJYGC.js": "sha256-C7ZQoHacmzIIBbYAD8fNhoWH2chKNx3PEkJKNBe8P5E=",
+    "chunks/chunk-PYRY7CKB.js": "sha256-9GRnXpSXflSG39fqLMK9wqgDsUGPV7Cekjl5VooA4m0=",
+    "chunks/chunk-ODFHEMCT.js": "sha256-yRcr2fIAwwKMqh8QgOHs2k6mdjVGpYRZ/YOBjkCgUDo=",
+    "chunks/services-HV2OXNUL.js": "sha256-f/CWHlUmHfgVVYKEMtLb/v02z4cD18unP4XANBOdbho=",
+    "chunks/chunk-AOZWLDYD.js": "sha256-OuI9hV2Q8H8XFnXMakJzyTpiJZNQ7h41ZXzS5KU0XnI=",
+    "chunks/chunk-4N7SLQGZ.js": "sha256-PHRmy7hGKzBRirWhXNhTCHcn9y0rCBgrebzePZT0MFM="
+  }
+}

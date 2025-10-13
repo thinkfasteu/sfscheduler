@@ -16,7 +16,7 @@ export class SupabaseAdapter {
       }
     }
   // Track staff columns (camelCase) we attempt to persist (id excluded on create; server assigns identity)
-  this._staffColumns = new Set(['name','role','contractHours','typicalWorkdays','weekendPreference']);
+  this._staffColumns = new Set(['name','role','contractHours','typicalWorkdays','weekendPreference','permanentPreferredShift']);
   }
 
   async _rpc(path, options={}){
@@ -81,8 +81,9 @@ export class SupabaseAdapter {
       if ('contract_hours' in r && !('contractHours' in r)) r.contractHours = r.contract_hours;
       if ('typical_workdays' in r && !('typicalWorkdays' in r)) r.typicalWorkdays = r.typical_workdays;
       if ('weekend_preference' in r && !('weekendPreference' in r)) r.weekendPreference = r.weekend_preference;
+      if ('permanent_preferred_shift' in r && !('permanentPreferredShift' in r)) r.permanentPreferredShift = r.permanent_preferred_shift;
       // Feed discovered camelCase columns back into whitelist so future writes include them (if we didn't previously prune)
-      ['contractHours','typicalWorkdays','weekendPreference'].forEach(k=>{ if (r[k] !== undefined) this._staffColumns.add(k); });
+      ['contractHours','typicalWorkdays','weekendPreference','permanentPreferredShift'].forEach(k=>{ if (r[k] !== undefined) this._staffColumns.add(k); });
       return {
         id: r.id,
         name: r.name,
@@ -90,6 +91,7 @@ export class SupabaseAdapter {
         contractHours: r.contractHours,
         typicalWorkdays: r.typicalWorkdays,
         weekendPreference: r.weekendPreference,
+        permanentPreferredShift: r.permanentPreferredShift,
         version: r.version
       };
     });
@@ -103,10 +105,11 @@ export class SupabaseAdapter {
     if (data.contractHours != null) shaped.contract_hours = data.contractHours;
     if (data.typicalWorkdays != null) shaped.typical_workdays = data.typicalWorkdays;
     if (data.weekendPreference != null) shaped.weekend_preference = data.weekendPreference;
+    if (data.permanentPreferredShift != null) shaped.permanent_preferred_shift = data.permanentPreferredShift;
     try {
       const recs = await this._rpc('staff', { method:'POST', body: JSON.stringify([{ ...shaped, version:1 }]) });
       const r = recs[0];
-      return { id:r.id, name:r.name, role:r.role, contractHours:r.contract_hours, typicalWorkdays:r.typical_workdays, weekendPreference:r.weekend_preference, version:r.version };
+      return { id:r.id, name:r.name, role:r.role, contractHours:r.contract_hours, typicalWorkdays:r.typical_workdays, weekendPreference:r.weekend_preference, permanentPreferredShift:r.permanent_preferred_shift, version:r.version };
     } catch(e){
       const msg = String(e.message||'');
       const isConflict = /409|duplicate key/i.test(msg);
@@ -114,7 +117,7 @@ export class SupabaseAdapter {
         try {
           const existing = await this._rpc(`staff?name=eq.${encodeURIComponent(data.name)}&select=*`);
           const r = existing[0]; if (r){
-            return { id:r.id, name:r.name, role:r.role, contractHours:r.contract_hours, typicalWorkdays:r.typical_workdays, weekendPreference:r.weekend_preference, version:r.version };
+            return { id:r.id, name:r.name, role:r.role, contractHours:r.contract_hours, typicalWorkdays:r.typical_workdays, weekendPreference:r.weekend_preference, permanentPreferredShift:r.permanent_preferred_shift, version:r.version };
           }
         } catch {}
       }
@@ -134,9 +137,10 @@ export class SupabaseAdapter {
     if (patch.contractHours !== undefined) body.contract_hours = patch.contractHours;
     if (patch.typicalWorkdays !== undefined) body.typical_workdays = patch.typicalWorkdays;
     if (patch.weekendPreference !== undefined) body.weekend_preference = patch.weekendPreference;
+    if (patch.permanentPreferredShift !== undefined) body.permanent_preferred_shift = patch.permanentPreferredShift;
     const recs = await this._rpc(`staff?id=eq.${id}&version=eq.${cur.version}`, { method:'PATCH', body: JSON.stringify(body) });
     const r = recs[0];
-    return { id:r.id, name:r.name, role:r.role, contractHours:r.contract_hours, typicalWorkdays:r.typical_workdays, weekendPreference:r.weekend_preference, version:r.version };
+    return { id:r.id, name:r.name, role:r.role, contractHours:r.contract_hours, typicalWorkdays:r.typical_workdays, weekendPreference:r.weekend_preference, permanentPreferredShift:r.permanent_preferred_shift, version:r.version };
   }
   async deleteStaff(id){ if (this.disabled) return false; await this._rpc(`staff?id=eq.${id}`, { method:'DELETE' }); return true; }
 

@@ -10,6 +10,7 @@ create table if not exists public.staff (
   contract_hours int,
   typical_workdays int,
   weekend_preference boolean,
+  permanent_preferred_shift text,
   version bigint not null default 1,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
