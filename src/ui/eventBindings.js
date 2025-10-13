@@ -92,6 +92,7 @@ if (document.readyState === 'loading'){
 function __bindScheduleHandlers() {
   const scheduleButtons = [
     { id: 'showHolidaysBtn', handler: null, action: () => { window.__toast && window.__toast('Show holidays clicked'); window.showHolidaysPopup && window.showHolidaysPopup(); } },
+    { id: 'openSearchAssignBtn', handler: null, action: () => { window.__toast && window.__toast('Search & assign clicked'); window.showSearchModal && window.showSearchModal(); } },
     { id: 'generateScheduleBtn', handler: 'generateSchedule', toast: 'Generate button clicked' },
     { id: 'finalizeScheduleBtn', handler: 'finalizeSchedule', toast: 'Finalize button clicked' },
     { id: 'clearScheduleBtn', handler: 'clearSchedule', toast: 'Clear button clicked' },
@@ -143,15 +144,18 @@ function __bindScheduleHandlers() {
   const requiredHandlers = ['generateSchedule', 'finalizeSchedule', 'clearSchedule', 'exportSchedule', 'exportPdf'];
   const hasAllHandlers = requiredHandlers.every(h => window.handlers?.[h]);
   
-  if (!hasAllHandlers || !window.showHolidaysPopup) {
+  if (!hasAllHandlers || !window.showHolidaysPopup || !window.showSearchModal) {
     let attempts = 0;
     const poll = () => {
       attempts++;
       tryBind();
       const stillMissing = requiredHandlers.filter(h => !window.handlers?.[h]);
-      if (stillMissing.length > 0 && attempts < 50) {
+      const missingModals = [];
+      if (!window.showHolidaysPopup) missingModals.push('showHolidaysPopup');
+      if (!window.showSearchModal) missingModals.push('showSearchModal');
+      if ((stillMissing.length > 0 || missingModals.length > 0) && attempts < 50) {
         setTimeout(poll, 100);
-      } else if (stillMissing.length === 0) {
+      } else if (stillMissing.length === 0 && missingModals.length === 0) {
         console.log('[eventBindings] All schedule handlers bound successfully');
       }
     };

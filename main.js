@@ -206,6 +206,19 @@ function initApp(){
         console.error('[main] addHoliday: appUI not available'); 
     };
     
+    // Schedule modal functions
+    window.showSwapModal = function() {
+        (window.modalManager||window).open ? window.modalManager.open('swapModal') : window.showModal?.('swapModal');
+    };
+    window.showSearchModal = function() {
+        (window.modalManager||window).open ? window.modalManager.open('searchModal') : window.showModal?.('searchModal');
+    };
+    
+    // Re-bind schedule handlers now that modal functions are available
+    if (window.__bindScheduleHandlers) {
+        window.__bindScheduleHandlers();
+    }
+    
     // Staff functions (missing window mappings)
     window.addStaff = function() { 
         if (window.appUI?.addStaff) return window.appUI.addStaff(); 
