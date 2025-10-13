@@ -1096,7 +1096,13 @@ export class AppUI {
 }
 
 // Attach role change handler to toggle permanent preferred row and practical limits
-document.addEventListener('DOMContentLoaded', () => {
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initRoleChangeHandler, { once: true });
+} else {
+  initRoleChangeHandler();
+}
+
+function initRoleChangeHandler() {
   const roleEl = document.getElementById('staffType');
   const permRow = document.getElementById('permanentPreferredRow');
   const practicalRow = document.getElementById('practicalLimitsRow');
@@ -1106,6 +1112,6 @@ document.addEventListener('DOMContentLoaded', () => {
       practicalRow.hidden = !((roleEl.value === 'minijob' || roleEl.value === 'student'));
     };
     roleEl.addEventListener('change', sync);
-    sync();
+    sync(); // Run initially
   }
-});
+}
