@@ -102,14 +102,23 @@ export class SupabaseAdapter {
     const shaped = {};
     if (data.name != null) shaped.name = data.name;
     if (data.role != null) shaped.role = data.role;
-    if (data.contractHours != null) shaped.contract_hours = data.contractHours;
-    if (data.typicalWorkdays != null) shaped.typical_workdays = data.typicalWorkdays;
-    if (data.weekendPreference != null) shaped.weekend_preference = data.weekendPreference;
-    if (data.permanentPreferredShift != null) shaped.permanent_preferred_shift = data.permanentPreferredShift;
+    if (data.contractHours != null && this._staffColumns.has('contractHours')) shaped.contract_hours = data.contractHours;
+    if (data.typicalWorkdays != null && this._staffColumns.has('typicalWorkdays')) shaped.typical_workdays = data.typicalWorkdays;
+    if (data.weekendPreference != null && this._staffColumns.has('weekendPreference')) shaped.weekend_preference = data.weekendPreference;
+    if (data.permanentPreferredShift != null && this._staffColumns.has('permanentPreferredShift')) shaped.permanent_preferred_shift = data.permanentPreferredShift;
     try {
       const recs = await this._rpc('staff', { method:'POST', body: JSON.stringify([{ ...shaped, version:1 }]) });
       const r = recs[0];
-      return { id:r.id, name:r.name, role:r.role, contractHours:r.contract_hours, typicalWorkdays:r.typical_workdays, weekendPreference:r.weekend_preference, permanentPreferredShift:r.permanent_preferred_shift, version:r.version };
+      return { 
+        id:r.id, 
+        name:r.name, 
+        role:r.role, 
+        contractHours: this._staffColumns.has('contractHours') ? r.contract_hours : undefined,
+        typicalWorkdays: this._staffColumns.has('typicalWorkdays') ? r.typical_workdays : undefined,
+        weekendPreference: this._staffColumns.has('weekendPreference') ? r.weekend_preference : undefined,
+        permanentPreferredShift: this._staffColumns.has('permanentPreferredShift') ? r.permanent_preferred_shift : undefined,
+        version:r.version 
+      };
     } catch(e){
       const msg = String(e.message||'');
       const isConflict = /409|duplicate key/i.test(msg);
@@ -117,7 +126,16 @@ export class SupabaseAdapter {
         try {
           const existing = await this._rpc(`staff?name=eq.${encodeURIComponent(data.name)}&select=*`);
           const r = existing[0]; if (r){
-            return { id:r.id, name:r.name, role:r.role, contractHours:r.contract_hours, typicalWorkdays:r.typical_workdays, weekendPreference:r.weekend_preference, permanentPreferredShift:r.permanent_preferred_shift, version:r.version };
+            return { 
+              id:r.id, 
+              name:r.name, 
+              role:r.role, 
+              contractHours: this._staffColumns.has('contractHours') ? r.contract_hours : undefined,
+              typicalWorkdays: this._staffColumns.has('typicalWorkdays') ? r.typical_workdays : undefined,
+              weekendPreference: this._staffColumns.has('weekendPreference') ? r.weekend_preference : undefined,
+              permanentPreferredShift: this._staffColumns.has('permanentPreferredShift') ? r.permanent_preferred_shift : undefined,
+              version:r.version 
+            };
           }
         } catch {}
       }
@@ -130,17 +148,26 @@ export class SupabaseAdapter {
     const cur = (await this._rpc(`staff?id=eq.${id}&select=id,version`))[0];
     if (!cur) return null;
     const nextVer = (cur.version||0)+1;
-    // Map camelCase patch keys to snake_case
+    // Map camelCase patch keys to snake_case, but only for columns that exist
     const body = { version: nextVer };
     if (patch.name !== undefined) body.name = patch.name;
     if (patch.role !== undefined) body.role = patch.role;
-    if (patch.contractHours !== undefined) body.contract_hours = patch.contractHours;
-    if (patch.typicalWorkdays !== undefined) body.typical_workdays = patch.typicalWorkdays;
-    if (patch.weekendPreference !== undefined) body.weekend_preference = patch.weekendPreference;
-    if (patch.permanentPreferredShift !== undefined) body.permanent_preferred_shift = patch.permanentPreferredShift;
+    if (patch.contractHours !== undefined && this._staffColumns.has('contractHours')) body.contract_hours = patch.contractHours;
+    if (patch.typicalWorkdays !== undefined && this._staffColumns.has('typicalWorkdays')) body.typical_workdays = patch.typicalWorkdays;
+    if (patch.weekendPreference !== undefined && this._staffColumns.has('weekendPreference')) body.weekend_preference = patch.weekendPreference;
+    if (patch.permanentPreferredShift !== undefined && this._staffColumns.has('permanentPreferredShift')) body.permanent_preferred_shift = patch.permanentPreferredShift;
     const recs = await this._rpc(`staff?id=eq.${id}&version=eq.${cur.version}`, { method:'PATCH', body: JSON.stringify(body) });
     const r = recs[0];
-    return { id:r.id, name:r.name, role:r.role, contractHours:r.contract_hours, typicalWorkdays:r.typical_workdays, weekendPreference:r.weekend_preference, permanentPreferredShift:r.permanent_preferred_shift, version:r.version };
+    return { 
+      id:r.id, 
+      name:r.name, 
+      role:r.role, 
+      contractHours: this._staffColumns.has('contractHours') ? r.contract_hours : undefined,
+      typicalWorkdays: this._staffColumns.has('typicalWorkdays') ? r.typical_workdays : undefined,
+      weekendPreference: this._staffColumns.has('weekendPreference') ? r.weekend_preference : undefined,
+      permanentPreferredShift: this._staffColumns.has('permanentPreferredShift') ? r.permanent_preferred_shift : undefined,
+      version:r.version 
+    };
   }
   async deleteStaff(id){ if (this.disabled) return false; await this._rpc(`staff?id=eq.${id}`, { method:'DELETE' }); return true; }
 
