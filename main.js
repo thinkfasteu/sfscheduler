@@ -207,11 +207,19 @@ function initApp(){
     };
     
     // Schedule modal functions
-    window.showSwapModal = function() {
-        (window.modalManager||window).open ? window.modalManager.open('swapModal') : window.showModal?.('swapModal');
+    window.showSwapModal = function(dateStr, shift) {
+        if (window.scheduleUI?.openAssignModal) {
+            window.scheduleUI.openAssignModal(dateStr, shift);
+        } else {
+            (window.modalManager||window).open ? window.modalManager.open('swapModal') : window.showModal?.('swapModal');
+        }
     };
-    window.showSearchModal = function() {
-        (window.modalManager||window).open ? window.modalManager.open('searchModal') : window.showModal?.('searchModal');
+    window.showSearchModal = function(dateStr) {
+        if (window.scheduleUI?.openSearchAssignModal) {
+            window.scheduleUI.openSearchAssignModal(dateStr);
+        } else {
+            (window.modalManager||window).open ? window.modalManager.open('searchModal') : window.showModal?.('searchModal');
+        }
     };
     
     // Re-bind schedule handlers now that modal functions are available

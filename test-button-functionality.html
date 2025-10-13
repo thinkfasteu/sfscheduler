@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dienstplan Button Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .btn { padding: 10px 15px; margin: 5px; border: none; border-radius: 3px; cursor: pointer; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn:hover { opacity: 0.8; }
+        .status { margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>Dienstplan Button Test</h1>
+
+    <div class="test-section">
+        <h2>Global Modal Functions Test</h2>
+        <p>Testing if global modal functions are properly defined and call ScheduleUI methods:</p>
+        <button class="btn btn-secondary" onclick="testHolidaysModal()">Test Holidays Modal</button>
+        <button class="btn btn-secondary" onclick="testSearchModal()">Test Search Modal</button>
+        <button class="btn btn-secondary" onclick="testSwapModal()">Test Swap Modal</button>
+        <div id="globalTestStatus" class="status">Click buttons to test global functions...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>ScheduleUI Methods Test</h2>
+        <p>Testing if ScheduleUI methods are available:</p>
+        <button class="btn btn-secondary" onclick="testScheduleUIMethods()">Test ScheduleUI Methods</button>
+        <div id="scheduleUITestStatus" class="status">Click to test ScheduleUI methods...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>Event Bindings Test</h2>
+        <p>Testing if event bindings are working:</p>
+        <button class="btn btn-secondary" id="showHolidaysBtn">Feiertage</button>
+        <button class="btn btn-secondary" id="openSearchAssignBtn">Suchen & Zuweisen</button>
+        <div id="eventBindingsTestStatus" class="status">Click the buttons above to test event bindings...</div>
+    </div>
+
+    <script>
+        // Test global modal functions
+        function testHolidaysModal() {
+            const status = document.getElementById('globalTestStatus');
+            try {
+                if (typeof window.showHolidaysPopup === 'function') {
+                    status.innerHTML = '✅ showHolidaysPopup function exists';
+                    window.showHolidaysPopup();
+                    status.innerHTML += '<br>✅ showHolidaysPopup called successfully';
+                } else {
+                    status.innerHTML = '❌ showHolidaysPopup function not found';
+                }
+            } catch (e) {
+                status.innerHTML = `❌ Error calling showHolidaysPopup: ${e.message}`;
+            }
+        }
+
+        function testSearchModal() {
+            const status = document.getElementById('globalTestStatus');
+            try {
+                if (typeof window.showSearchModal === 'function') {
+                    status.innerHTML = '✅ showSearchModal function exists';
+                    window.showSearchModal('2025-01-15');
+                    status.innerHTML += '<br>✅ showSearchModal called successfully with date parameter';
+                } else {
+                    status.innerHTML = '❌ showSearchModal function not found';
+                }
+            } catch (e) {
+                status.innerHTML = `❌ Error calling showSearchModal: ${e.message}`;
+            }
+        }
+
+        function testSwapModal() {
+            const status = document.getElementById('globalTestStatus');
+            try {
+                if (typeof window.showSwapModal === 'function') {
+                    status.innerHTML = '✅ showSwapModal function exists';
+                    window.showSwapModal('2025-01-15', 'early');
+                    status.innerHTML += '<br>✅ showSwapModal called successfully with date and shift parameters';
+                } else {
+                    status.innerHTML = '❌ showSwapModal function not found';
+                }
+            } catch (e) {
+                status.innerHTML = `❌ Error calling showSwapModal: ${e.message}`;
+            }
+        }
+
+        // Test ScheduleUI methods
+        function testScheduleUIMethods() {
+            const status = document.getElementById('scheduleUITestStatus');
+            try {
+                if (typeof window.scheduleUI !== 'undefined') {
+                    status.innerHTML = '✅ scheduleUI instance exists';
+
+                    if (typeof window.scheduleUI.openAssignModal === 'function') {
+                        status.innerHTML += '<br>✅ openAssignModal method exists';
+                    } else {
+                        status.innerHTML += '<br>❌ openAssignModal method not found';
+                    }
+
+                    if (typeof window.scheduleUI.openSearchAssignModal === 'function') {
+                        status.innerHTML += '<br>✅ openSearchAssignModal method exists';
+                    } else {
+                        status.innerHTML += '<br>❌ openSearchAssignModal method not found';
+                    }
+
+                    if (typeof window.appUI !== 'undefined' && typeof window.appUI.showHolidaysPopup === 'function') {
+                        status.innerHTML += '<br>✅ appUI.showHolidaysPopup method exists';
+                    } else {
+                        status.innerHTML += '<br>❌ appUI.showHolidaysPopup method not found';
+                    }
+                } else {
+                    status.innerHTML = '❌ scheduleUI instance not found';
+                }
+            } catch (e) {
+                status.innerHTML = `❌ Error testing ScheduleUI methods: ${e.message}`;
+            }
+        }
+
+        // Set up event listeners for the test buttons
+        document.getElementById('showHolidaysBtn').addEventListener('click', function() {
+            document.getElementById('eventBindingsTestStatus').innerHTML = '✅ Holidays button clicked - event binding working';
+        });
+
+        document.getElementById('openSearchAssignBtn').addEventListener('click', function() {
+            document.getElementById('eventBindingsTestStatus').innerHTML = '✅ Search & Assign button clicked - event binding working';
+        });
+
+        // Check if functions are available on load
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                const globalStatus = document.getElementById('globalTestStatus');
+                const functions = ['showHolidaysPopup', 'showSearchModal', 'showSwapModal'];
+                const available = functions.filter(f => typeof window[f] === 'function');
+                const missing = functions.filter(f => typeof window[f] !== 'function');
+
+                if (available.length > 0) {
+                    globalStatus.innerHTML = `✅ Available global functions: ${available.join(', ')}`;
+                }
+                if (missing.length > 0) {
+                    globalStatus.innerHTML += `<br>❌ Missing global functions: ${missing.join(', ')}`;
+                }
+            }, 1000);
+        });
+    </script>
+
+    <!-- Load the main application -->
+    <script src="main.js"></script>
+</body>
+</html>

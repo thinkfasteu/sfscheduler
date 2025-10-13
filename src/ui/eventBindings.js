@@ -92,7 +92,12 @@ if (document.readyState === 'loading'){
 function __bindScheduleHandlers() {
   const scheduleButtons = [
     { id: 'showHolidaysBtn', handler: null, action: () => { window.__toast && window.__toast('Show holidays clicked'); window.showHolidaysPopup && window.showHolidaysPopup(); } },
-    { id: 'openSearchAssignBtn', handler: null, action: () => { window.__toast && window.__toast('Search & assign clicked'); window.showSearchModal && window.showSearchModal(); } },
+    { id: 'openSearchAssignBtn', handler: null, action: () => { 
+      window.__toast && window.__toast('Search & assign clicked'); 
+      // Use current month or today's date for search modal
+      const today = new Date().toISOString().split('T')[0];
+      window.showSearchModal && window.showSearchModal(today); 
+    }},
     { id: 'generateScheduleBtn', handler: 'generateSchedule', toast: 'Generate button clicked' },
     { id: 'finalizeScheduleBtn', handler: 'finalizeSchedule', toast: 'Finalize button clicked' },
     { id: 'clearScheduleBtn', handler: 'clearSchedule', toast: 'Clear button clicked' },
