@@ -60,62 +60,8 @@ function __initEventBindings(){
     window.__toast && window.__toast('Show holidays clicked');
     window.showHolidaysPopup && window.showHolidaysPopup();
   });
-  // Schedule tab
-  bind('generateScheduleBtn','click', (e)=> {
-    window.__toast && window.__toast('Generate button clicked');
-    e?.preventDefault?.();
-    if (window.handlers?.generateSchedule) {
-      window.handlers.generateSchedule();
-    } else {
-      console.error('[eventBindings] No generateSchedule handler found!');
-    }
-  });
-
-  bind('finalizeScheduleBtn','click', (e)=> {
-    window.__toast && window.__toast('Finalize button clicked');
-    e?.preventDefault?.();
-    if (window.handlers?.finalizeSchedule) {
-      window.handlers.finalizeSchedule();
-    } else {
-      console.error('[eventBindings] No finalizeSchedule handler found!');
-    }
-  });
-
-  bind('clearScheduleBtn','click', (e)=> {
-    window.__toast && window.__toast('Clear button clicked');
-    e?.preventDefault?.();
-    if (window.handlers?.clearSchedule) {
-      window.handlers.clearSchedule();
-    } else {
-      console.error('[eventBindings] No clearSchedule handler found!');
-    }
-  });
-
-  bind('exportScheduleBtn','click', ()=> {
-    window.__toast && window.__toast('Export CSV clicked');
-    if (window.handlers?.exportSchedule) {
-      window.handlers.exportSchedule();
-    } else {
-      console.error('[eventBindings] No exportSchedule handler found!');
-    }
-  });
-
-  bind('exportPdfBtn','click', ()=> {
-    window.__toast && window.__toast('Export PDF clicked');
-    if (window.handlers?.exportPdf) {
-      window.handlers.exportPdf();
-    } else {
-      console.error('[eventBindings] No exportPdf handler found!');
-    }
-  });
-
-  bind('printScheduleBtn','click', ()=> {
-    if (typeof window.print === 'function') {
-      window.print();
-    } else {
-      console.warn('[eventBindings] window.print not available');
-    }
-  });
+    // Schedule tab - bind with deferred setup
+  __bindScheduleHandlers();
   // Vacation
   bind('addVacationPeriodBtn','click', ()=> window.addVacationPeriod && window.addVacationPeriod());
   bind('addOtherStaffBtn','click', ()=> window.addOtherStaff && window.addOtherStaff());
@@ -127,24 +73,8 @@ function __initEventBindings(){
   bind('refreshAcademicTermsBtn','click', ()=> window.refreshAcademicTerms && window.refreshAcademicTerms());
   // Swap modal
   bind('swapModalCloseBtn','click', ()=> { try { window.modalManager ? window.modalManager.close('swapModal') : window.closeModal?.('swapModal'); } catch(e){ console.warn('[eventBindings] close swapModal failed', e); } });
-  bind('executeSwapBtn','click', ()=> {
-    if (window.handlers?.executeSwap) {
-      window.handlers.executeSwap();
-    } else if (window.executeSwap) {
-      window.executeSwap(); // legacy global fallback
-    } else {
-      console.error('[eventBindings] No executeSwap handler found');
-    }
-  });
-  bind('executeAssignBtn','click', ()=> {
-    if (window.handlers?.executeAssign) {
-      window.handlers.executeAssign();
-    } else if (window.executeAssign) {
-      window.executeAssign();
-    } else {
-      console.error('[eventBindings] No executeAssign handler found');
-    }
-  });
+  // Modal action buttons - bind with deferred setup
+  __bindModalActionHandlers();
   // Search modal
   bind('searchModalCloseBtn','click', ()=> { try { window.modalManager ? window.modalManager.close('searchModal') : window.closeModal?.('searchModal'); } catch(e){ console.warn('[eventBindings] close searchModal failed', e); } });
   // Backup / Restore
@@ -158,4 +88,70 @@ if (document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', __initEventBindings, { once:true });
 } else {
   __initEventBindings();
+}
+
+// Deferred binding for schedule handlers that may not be available immediately
+function __bindScheduleHandlers() {
+  const scheduleButtons = [
+    { id: 'generateScheduleBtn', handler: 'generateSchedule', toast: 'Generate button clicked' },
+    { id: 'finalizeScheduleBtn', handler: 'finalizeSchedule', toast: 'Finalize button clicked' },
+    { id: 'clearScheduleBtn', handler: 'clearSchedule', toast: 'Clear button clicked' },
+    { id: 'exportScheduleBtn', handler: 'exportSchedule', toast: 'Export CSV clicked' },
+    { id: 'exportPdfBtn', handler: 'exportPdf', toast: 'Export PDF clicked' }
+  ];
+
+  // Try to bind immediately, or defer until handlers are available
+  function tryBind() {
+    scheduleButtons.forEach(({ id, handler, toast }) => {
+      const element = document.getElementById(id);
+      if (element && !element.__eventBound) {
+        if (window.handlers?.[handler]) {
+          element.addEventListener('click', (e) => {
+            if (toast) window.__toast && window.__toast(toast);
+            e?.preventDefault?.();
+            window.handlers[handler]();
+          });
+          element.__eventBound = true;
+          console.log(`[eventBindings] Bound ${id} successfully`);
+        } else {
+          console.log(`[eventBindings] ${id} handler not ready yet, deferring`);
+        }
+      }
+    });
+
+    // Special case for print button
+    const printBtn = document.getElementById('printScheduleBtn');
+    if (printBtn && !printBtn.__eventBound) {
+      printBtn.addEventListener('click', () => {
+        if (typeof window.print === 'function') {
+          window.print();
+        } else {
+          console.warn('[eventBindings] window.print not available');
+        }
+      });
+      printBtn.__eventBound = true;
+    }
+  }
+
+  // Try binding immediately
+  tryBind();
+
+  // If handlers not available yet, poll until they are
+  const requiredHandlers = ['generateSchedule', 'finalizeSchedule', 'clearSchedule', 'exportSchedule', 'exportPdf'];
+  const hasAllHandlers = requiredHandlers.every(h => window.handlers?.[h]);
+  
+  if (!hasAllHandlers) {
+    let attempts = 0;
+    const poll = () => {
+      attempts++;
+      tryBind();
+      const stillMissing = requiredHandlers.filter(h => !window.handlers?.[h]);
+      if (stillMissing.length > 0 && attempts < 50) {
+        setTimeout(poll, 100);
+      } else if (stillMissing.length === 0) {
+        console.log('[eventBindings] All schedule handlers bound successfully');
+      }
+    };
+    poll();
+  }
 }
