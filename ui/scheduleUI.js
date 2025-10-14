@@ -889,6 +889,17 @@ export class ScheduleUI {
     openAssignModal(dateStr, presetShift){
         const modal = document.getElementById('swapModal');
         if (!modal) return;
+
+        // Ensure execute swap button exists
+        let executeBtn = document.getElementById('executeSwapBtn');
+        if (!executeBtn) {
+            executeBtn = document.createElement('button');
+            executeBtn.id = 'executeSwapBtn';
+            executeBtn.className = 'btn btn-primary';
+            executeBtn.textContent = 'Tausch ausführen';
+            executeBtn.style.display = 'none'; // hidden by default
+            modal.appendChild(executeBtn);
+        }
         // Build shift list for that date based on SHIFTS and holiday/weekend detection
         const [y,m,d] = dateStr.split('-').map(Number);
     const date = new Date(y, m-1, d);
@@ -901,6 +912,7 @@ export class ScheduleUI {
         // Default to preset, otherwise pick first unassigned if possible
         const month = dateStr.substring(0,7);
         const cur = window.appState?.scheduleData?.[month]?.[dateStr]?.assignments || {};
+        const isSwapMode = presetShift && cur[presetShift];
         if (presetShift && allShifts.includes(presetShift)) {
             shiftSel.value = presetShift;
         } else {
@@ -910,7 +922,7 @@ export class ScheduleUI {
 
         const title = document.getElementById('swapTitle');
         const detail = document.getElementById('swapDetail');
-        title.textContent = `Zuweisung ${dateStr}`;
+        title.textContent = isSwapMode ? `Tausch ${dateStr}` : `Zuweisung ${dateStr}`;
         detail.textContent = holName ? `Feiertag: ${holName}` : isWeekend ? 'Wochenende' : 'Wochentag';
 
         // Show current assignment for first shift
@@ -931,10 +943,15 @@ export class ScheduleUI {
         const getCandidates = (includePermanents=false) => {
             const sh = shiftSel.value;
             const scheduledToday = new Set(Object.values(cur||{}));
+            if (isSwapMode) {
+                // For swap mode, exclude the current assignee from scheduledToday for this shift
+                scheduledToday.delete(cur[sh]);
+            }
             const base = engine.findCandidatesForShift(dateStr, sh, scheduledToday, weekNum);
             const mapById = new Map(base.map(c => [c.staff.id, c]));
-            // Always include currently assigned today to enable switching
+            // Always include currently assigned today to enable switching, except for the current shift in swap mode
             const assignedIds = new Set(Object.values(cur||{}));
+            if (isSwapMode) assignedIds.delete(cur[sh]);
             assignedIds.forEach(id => {
                 if (!mapById.has(Number(id))){
                     const st = (window.appState?.staffData||[]).find(s=>s.id==id);
@@ -1077,6 +1094,10 @@ export class ScheduleUI {
             } else {
                 consentCb.checked = false;
             }
+
+            // Show/hide execute swap button
+            const executeBtn = document.getElementById('executeSwapBtn');
+            if (executeBtn) executeBtn.style.display = isSwapMode ? 'block' : 'none';
         };
     // Include-permanents toggle only shown for weekend days
     const includeRow = document.getElementById('includePermanentsRow');
@@ -1149,6 +1170,24 @@ export class ScheduleUI {
             // Re-render to refresh blockers and scores
             renderCandidates();
         });
+
+        // Set up execute swap handler
+        if (!window.handlers) window.handlers = {};
+        window.handlers.executeSwap = () => {
+            if (!isSwapMode) return;
+            const sh = shiftSel.value;
+            const currentStaffId = cur[sh];
+            const newStaffId = parseInt(staffSel.value);
+            if (!currentStaffId || !newStaffId || currentStaffId === newStaffId) return;
+            const month = dateStr.substring(0,7);
+            if (!window.appState.scheduleData[month]) window.appState.scheduleData[month] = {};
+            const schedule = window.appState.scheduleData[month];
+            if (!schedule[dateStr]) schedule[dateStr] = { assignments: {} };
+            schedule[dateStr].assignments[sh] = newStaffId;
+            appState.save?.();
+            this.updateDay(dateStr);
+            if (window.modalManager) window.modalManager.close('swapModal'); else window.closeModal?.('swapModal');
+        };
 
     // Show modal
     (window.modalManager||window).open ? window.modalManager.open('swapModal') : window.showModal?.('swapModal');
