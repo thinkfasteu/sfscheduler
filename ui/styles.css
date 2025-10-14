@@ -559,3 +559,9 @@ body.no-scroll #scheduleControls { display: none !important; }
         margin-top: 4px;
     }
 }
+
+/* Schedule validation styles */
+.staff-assignment.invalid-assignment {
+    border: 2px solid var(--danger);
+    background-color: rgba(220, 53, 69, 0.1);
+}

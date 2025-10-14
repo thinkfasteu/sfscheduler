@@ -36,6 +36,21 @@ export class ScheduleUI {
     window.__perf.calendarDiffUpdates = window.__perf.calendarDiffUpdates || 0;
         this._delegatesBound = false; // ensure we bind global delegation once
         this.setupTabs();
+        // Set up handlers
+        if (!window.handlers) window.handlers = {};
+        window.handlers.finalizeSchedule = () => {
+            const result = this.validateCurrentSchedule();
+            if (!result.valid) {
+                this.highlightViolations(result.violations);
+                const msg = result.violations.map(v => `${v.dateStr} ${v.shift}: ${v.blocker}`).join('\n');
+                alert(`Schedule has violations and cannot be finalized:\n\n${msg}\n\nPlease fix the issues before finalizing.`);
+                return;
+            }
+            this.clearViolations();
+            // Proceed with finalization
+            alert('Schedule finalized successfully!');
+            // TODO: Implement actual finalization logic (e.g., mark as final, lock edits)
+        };
         // Expose modal helpers if not already present (scoped to this file's lifecycle)
         if (!window.__uiModalHelpersInstalled) {
             window.__uiModalHelpersInstalled = true;
@@ -1404,6 +1419,44 @@ export class ScheduleUI {
             if (dow===0 || dow===6){ this.renderWeekendReport(month); }
             if (window.modalManager) window.modalManager.close('searchModal'); else window.closeModal?.('searchModal');
         };
+    }
+
+    // Validate current schedule for violations
+    validateCurrentSchedule() {
+        const month = this.currentCalendarMonth;
+        if (!month) return { valid: true, violations: [] };
+        const validator = new ScheduleValidator(month);
+        const schedule = window.appState?.scheduleData?.[month] || {};
+        const violations = [];
+        for (const dateStr in schedule) {
+            const dayData = schedule[dateStr];
+            if (!dayData.assignments) continue;
+            const validated = validator.validateSchedule({ [dateStr]: dayData });
+            const blockers = validated[dateStr]?.blockers || {};
+            for (const shift in blockers) {
+                const blocker = blockers[shift];
+                if (blocker) {
+                    const staffId = dayData.assignments[shift];
+                    violations.push({ dateStr, shift, staffId, blocker });
+                }
+            }
+        }
+        return { valid: violations.length === 0, violations };
+    }
+
+    // Highlight violations in the calendar
+    highlightViolations(violations) {
+        // Clear previous highlights
+        document.querySelectorAll('.staff-assignment.invalid-assignment').forEach(el => el.classList.remove('invalid-assignment'));
+        violations.forEach(v => {
+            const pill = document.querySelector(`.staff-assignment[data-date="${v.dateStr}"][data-shift="${v.shift}"]`);
+            if (pill) pill.classList.add('invalid-assignment');
+        });
+    }
+
+    // Clear all violation highlights
+    clearViolations() {
+        document.querySelectorAll('.staff-assignment.invalid-assignment').forEach(el => el.classList.remove('invalid-assignment'));
     }
 }
 
