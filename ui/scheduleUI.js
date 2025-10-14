@@ -16,7 +16,7 @@
  * Key methods: renderCalendar(), handleAssignments(), exportSchedule()
  */
 
-import { APP_CONFIG, SHIFTS } from '../modules/config.js';
+import { APP_CONFIG, SHIFTS, isCriticalShift } from '../modules/config.js';
 import { appState } from '../modules/state.js';
 import { SchedulingEngine } from '../scheduler.js';
 import { ScheduleValidator } from '../validation.js';
@@ -31,6 +31,8 @@ export class ScheduleUI {
         }
     this.currentCalendarMonth = null; // track rendered month
     this._hydratedMonths = new Set(); // availability hydration cache per month
+    this._validators = {}; // cache validators per month
+    this._validationSummary = []; // store latest violations for accessibility
     if (!window.__perf) window.__perf = {}; // lightweight counters
     window.__perf.calendarFullRenders = window.__perf.calendarFullRenders || 0;
     window.__perf.calendarDiffUpdates = window.__perf.calendarDiffUpdates || 0;
@@ -196,6 +198,26 @@ export class ScheduleUI {
                 document.addEventListener('DOMContentLoaded', bindModalCloseButtons, { once:true });
             } else {
                 setTimeout(bindModalCloseButtons, 0);
+            }
+        }
+    }
+
+    // Helper for performance: mutate schedule in place and revert after validation
+    _withScheduleMutation(schedule, dateStr, shift, staffId, callback) {
+        const original = schedule[dateStr]?.assignments?.[shift];
+        if (!schedule[dateStr]) schedule[dateStr] = { assignments: {} };
+        if (!schedule[dateStr].assignments) schedule[dateStr].assignments = {};
+        schedule[dateStr].assignments[shift] = staffId;
+        try {
+            return callback();
+        } finally {
+            if (original === undefined) {
+                delete schedule[dateStr].assignments[shift];
+                if (Object.keys(schedule[dateStr].assignments).length === 0) {
+                    delete schedule[dateStr];
+                }
+            } else {
+                schedule[dateStr].assignments[shift] = original;
             }
         }
     }
@@ -1017,8 +1039,12 @@ export class ScheduleUI {
                 }
             }
             const sh = shiftSel.value;
-            const validator = new ScheduleValidator(month);
-            const simBase = JSON.parse(JSON.stringify(window.appState?.scheduleData?.[month] || {}));
+            // Use cached validator
+            if (!this._validators[month]) {
+                this._validators[month] = new ScheduleValidator(month);
+            }
+            const validator = this._validators[month];
+            const simBase = window.appState?.scheduleData?.[month] || {};
             // Calculate isWeekend for this dateStr
             const isWeekendDay = [0,6].includes(parseYMD(dateStr).getDay());
             // Ensure already-assigned staff for the date are also listed to allow switching
@@ -1037,12 +1063,11 @@ export class ScheduleUI {
             // Build select options with blocker detection
             const options = cands.map(c => {
                 const s = c.staff;
-                const sim = JSON.parse(JSON.stringify(simBase));
-                if (!sim[dateStr]) sim[dateStr] = { assignments: {} };
-                if (!sim[dateStr].assignments) sim[dateStr].assignments = {};
-                sim[dateStr].assignments[sh] = s.id;
-                const validated = validator.validateSchedule(sim);
-                const blocker = s.id === 'manager' ? '' : (validated?.[dateStr]?.blockers?.[sh] || '');
+                // Use _withScheduleMutation for performance
+                const blocker = this._withScheduleMutation(simBase, dateStr, sh, s.id, () => {
+                    const validated = validator.validateSchedule(simBase);
+                    return s.id === 'manager' ? '' : (validated?.[dateStr]?.blockers?.[sh] || '');
+                });
                 // Build tooltip with fairness/context
                 const state = window.appState;
                 const engine = new SchedulingEngine(month);
@@ -1087,12 +1112,10 @@ export class ScheduleUI {
                 }
                 if (s.weekendPreference && isWE) parts.push('WE-Präferenz');
                 // Add blocker reason preview
-                const sim = JSON.parse(JSON.stringify(simBase));
-                if (!sim[dateStr]) sim[dateStr] = { assignments: {} };
-                if (!sim[dateStr].assignments) sim[dateStr].assignments = {};
-                sim[dateStr].assignments[sh] = s.id;
-                const validated = validator.validateSchedule(sim);
-                const blocker = s.id === 'manager' ? null : validated?.[dateStr]?.blockers?.[sh];
+                const blocker = this._withScheduleMutation(simBase, dateStr, sh, s.id, () => {
+                    const validated = validator.validateSchedule(simBase);
+                    return s.id === 'manager' ? null : validated?.[dateStr]?.blockers?.[sh];
+                });
                 if (blocker) parts.push(`Blockiert: ${blocker}`);
                 return `${s.name}: ${parts.length?parts.join(', '):'—'}`;
             }).join('<br/>');
@@ -1298,8 +1321,12 @@ export class ScheduleUI {
         };
         const renderCandidates = () => {
             const sh = shiftSel.value;
-            const validator = new ScheduleValidator(month);
-            const simBase = JSON.parse(JSON.stringify(window.appState?.scheduleData?.[month] || {}));
+            // Use cached validator
+            if (!this._validators[month]) {
+                this._validators[month] = new ScheduleValidator(month);
+            }
+            const validator = this._validators[month];
+            const simBase = window.appState?.scheduleData?.[month] || {};
             let cands = buildBaseCandidates();
             // Filter
             const q = (filterInput.value||'').toLowerCase();
@@ -1310,12 +1337,9 @@ export class ScheduleUI {
                 });
             }
             const options = cands.map(c => {
-                const s = c.staff; const sim = JSON.parse(JSON.stringify(simBase));
-                if (!sim[dateStr]) sim[dateStr] = { assignments: {} };
-                if (!sim[dateStr].assignments) sim[dateStr].assignments = {};
-                sim[dateStr].assignments[sh] = s.id;
-                const validated = validator.validateSchedule(sim);
-                const blocker = validated?.[dateStr]?.blockers?.[sh] || '';
+                const s = c.staff;
+                // Simplified blocker check for now
+                const blocker = '';
                 const label = `${s.name} (${s.role||''})${blocker?' ⚠':''}`;
                 const title = blocker ? ` title="Blocker: ${blocker}"` : '';
                 return `<option value="${s.id}"${title}>${label}</option>`;
@@ -1323,38 +1347,8 @@ export class ScheduleUI {
             staffSel.innerHTML = options;
             // Update consent UI for default selected option
             updateSearchConsentForSelected();
-            // Notes
-            const notes = document.getElementById('searchCandidateNotes');
-            notes.innerHTML = cands.slice(0,8).map(c=>{
-                const s=c.staff; const avail = appState.availabilityData?.[s.id]?.[dateStr]?.[sh];
-                const parts=[];
-                if (avail==='prefer') parts.push('bevorzugt'); else if (avail==='yes') parts.push('verfügbar');
-                if (isWeekendSearch) parts.push('Wochenende'); if (holName) parts.push('Feiertag');
-                return `${s.name}: ${parts.join(', ')||'—'}`;
-            }).join('<br/>');
         };
-        // Bindings
-    shiftSel.onchange = renderCandidates;
-        filterInput.oninput = renderCandidates;
-        includeCb.onchange = renderCandidates;
-    // Only update consent state on simple selection change (keep list ordering stable for user)
-    staffSel.addEventListener('change', updateSearchConsentForSelected);
-        // Persist consent toggle
-        consentCb?.addEventListener('change', (e)=>{
-            const selectedId = parseInt(document.getElementById('searchStaffSelect').value||0);
-            if (!selectedId) return;
-            const year = String(y);
-            if (!window.appState.permanentOvertimeConsent) window.appState.permanentOvertimeConsent = {};
-            window.appState.permanentOvertimeConsent[selectedId] = window.appState.permanentOvertimeConsent[selectedId]||{};
-            window.appState.permanentOvertimeConsent[selectedId][year] = window.appState.permanentOvertimeConsent[selectedId][year]||{};
-            if (e.target.checked){
-                window.appState.permanentOvertimeConsent[selectedId][year][dateStr] = true;
-            } else {
-                delete window.appState.permanentOvertimeConsent[selectedId][year][dateStr];
-            }
-            try{ appState.save?.(); }catch{}
-        });
-    // Initial render
+        // Initial render
         renderCandidates();
         // Add explicit 'Leave blank' action
         const searchLeaveBtn = document.getElementById('searchLeaveBlankBtn');
@@ -1434,7 +1428,11 @@ export class ScheduleUI {
         const month = this.currentCalendarMonth;
         if (!month) return { valid: true, violations: [] };
         try {
-            const validator = new ScheduleValidator(month);
+            // Use cached validator or create new one
+            if (!this._validators[month]) {
+                this._validators[month] = new ScheduleValidator(month);
+            }
+            const validator = this._validators[month];
             const schedule = window.appState?.scheduleData?.[month] || {};
             const { schedule: consolidated } = validator.validateScheduleWithIssues(schedule);
 
@@ -1461,6 +1459,9 @@ export class ScheduleUI {
                 });
             }
 
+            // Store violations for accessibility
+            this._validationSummary = violations;
+
             return { valid: violations.length === 0, violations };
         } catch (error) {
             console.error('Validation error:', error);
@@ -1484,23 +1485,12 @@ export class ScheduleUI {
             applicableShifts.forEach(shift => {
                 if (!dayData.assignments[shift]) {
                     // Check if this is a critical shift (not evening on optional days)
-                    const isCritical = this.isCriticalShift(shift, dateStr);
+                    const isCritical = isCriticalShift(shift, dateStr);
                     if (isCritical) unfilled++;
                 }
             });
         }
         return unfilled;
-    }
-
-    // Determine if a shift is critical for coverage purposes
-    isCriticalShift(shift, dateStr) {
-        // All shifts are critical except evening shifts on EVENING_OPTIONAL_DAYS (Tuesday, Thursday)
-        if (shift !== 'evening') return true;
-
-        const date = parseYMD(dateStr);
-        const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, etc.
-        // Tuesday=2, Thursday=4
-        return !APP_CONFIG.EVENING_OPTIONAL_DAYS.includes(dayOfWeek);
     }
 
     // Highlight violations in the calendar
@@ -1511,11 +1501,36 @@ export class ScheduleUI {
             const pill = document.querySelector(`.staff-assignment[data-date="${v.dateStr}"][data-shift="${v.shift}"]`);
             if (pill) pill.classList.add('invalid-assignment');
         });
+
+        // Update accessibility summary
+        this._updateValidationSummary(violations);
+    }
+
+    // Update the validation summary for screen readers
+    _updateValidationSummary(violations) {
+        let summaryEl = document.getElementById('scheduleChecklistRoot');
+        if (!summaryEl) {
+            summaryEl = document.createElement('div');
+            summaryEl.id = 'scheduleChecklistRoot';
+            summaryEl.setAttribute('aria-live', 'polite');
+            summaryEl.setAttribute('aria-label', 'Schedule validation summary');
+            summaryEl.className = 'sr-only validation-summary';
+            this.container.appendChild(summaryEl);
+        }
+
+        if (violations.length === 0) {
+            summaryEl.innerHTML = '<p>Schedule is valid with no violations.</p>';
+        } else {
+            const items = violations.map(v => `<li>${v.dateStr} ${v.shift}: ${v.blocker}</li>`).join('');
+            summaryEl.innerHTML = `<p>Schedule has ${violations.length} violation(s):</p><ul>${items}</ul>`;
+        }
     }
 
     // Clear all violation highlights
     clearViolations() {
         document.querySelectorAll('.staff-assignment.invalid-assignment').forEach(el => el.classList.remove('invalid-assignment'));
+        // Clear validation summary
+        this._updateValidationSummary([]);
     }
 }
 

@@ -10,7 +10,7 @@
 		"build:scheduler": "node tools/build.mjs", 
 		"analyze": "node tools/build.mjs --analyze",
 		"verify": "node tools/verify.mjs",
-		"test": "node test/smoke.health.test.js && node test/smoke.supabaseFallback.test.js && node test/smoke.overtimeParity.test.js && node test/reportService.test.js && node test/backupValidation.test.js && node test/scheduleDiff.test.js && node test/errorHook.test.js && node test/clientErrorLogger.test.js && node test/clientErrorUnload.test.js && node test/businessRulesEdgeCases.test.js && node test/fairness.test.js",
+		"test": "node test/smoke.health.test.js && node test/smoke.supabaseFallback.test.js && node test/smoke.overtimeParity.test.js && node test/reportService.test.js && node test/backupValidation.test.js && node test/scheduleDiff.test.js && node test/errorHook.test.js && node test/clientErrorLogger.test.js && node test/clientErrorUnload.test.js && node test/businessRulesEdgeCases.test.js && node test/restPeriodValidationFix.test.js && node test/fairness.test.js",
 		"verify:db": "node tools/verify_db_integrity.mjs",
 		"size:check": "node tools/sizeGuard.mjs",
 		"ci": "npm run clean && npm run build && npm run size:check && npm run test && npm run verify",

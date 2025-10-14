@@ -111,3 +111,14 @@ export const SHIFTS = {
     'holiday-early': { name: 'Feiertag Früh', time: '08:45-13:15', type: 'holiday', hours: 4.5 },
     'holiday-late': { name: 'Feiertag Spät', time: '13:05-17:15', type: 'holiday', hours: 4.17 }
 };
+
+// Helper function to determine if a shift is critical for coverage purposes
+export function isCriticalShift(shift, dateStr) {
+    // All shifts are critical except evening shifts on EVENING_OPTIONAL_DAYS (Tuesday, Thursday)
+    if (shift !== 'evening') return true;
+
+    const date = new Date(dateStr + 'T00:00:00');
+    const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, etc.
+    // Tuesday=2, Thursday=4
+    return !APP_CONFIG.EVENING_OPTIONAL_DAYS.includes(dayOfWeek);
+}

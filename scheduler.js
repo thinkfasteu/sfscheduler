@@ -62,12 +62,20 @@ const BUSINESS_RULES = {
     REST_PERIOD: {
         id: 'REST_PERIOD', description: '11h rest between shifts',
         // Compare the actual shift start time with the last recorded end time
+        // Only check cross-day violations (same-day handled by overlap rules)
         validate: (dateStr, shiftKey, staff, hours, engine) => {
+            // Skip manager wildcard for rest period checks
+            if (staff.id === 'manager') return true;
+
             const last = engine.lastShiftEndTimes[staff.id];
-            if (!last) return true;
+            if (!last || !last.endTime) return true;
+
+            // Skip rest period check for same-day assignments
+            if (last.dateStr === dateStr) return true;
+
             const [startTime] = SHIFTS[shiftKey].time.split('-');
             const start = engine.parseShiftTime(dateStr, startTime);
-            const diffH = (start - last) / (3600 * 1000);
+            const diffH = (start - last.endTime) / (3600 * 1000);
             // If the "last" end time lies in the future relative to this start (can happen when
             // seeding from later-in-month assignments), ignore it for rest-period checks.
             if (diffH < 0) return true;
@@ -599,7 +607,10 @@ class SchedulingEngine {
             this.staffNWHoursByWeek[staff.id][weekNum] = (this.staffNWHoursByWeek[staff.id][weekNum]||0) + hours;
         }
         const [_s,e] = SHIFTS[shiftKey].time.split('-');
-        this.lastShiftEndTimes[staff.id] = this.parseShiftTime(dateStr, e);
+        this.lastShiftEndTimes[staff.id] = {
+            endTime: this.parseShiftTime(dateStr, e),
+            dateStr: dateStr
+        };
         // Update fairness trackers
         if (this.isWeekend(dateStr)) {
             this.weekendAssignmentsCount[staff.id] = (this.weekendAssignmentsCount[staff.id] || 0) + 1;
@@ -662,7 +673,12 @@ class SchedulingEngine {
                 if (end){
                     const endDt = this.parseShiftTime(dateStr, end);
                     const prev = this.lastShiftEndTimes[staffId];
-                    if (!prev || prev < endDt) this.lastShiftEndTimes[staffId] = endDt;
+                    if (!prev || prev.endTime < endDt) {
+                        this.lastShiftEndTimes[staffId] = {
+                            endTime: endDt,
+                            dateStr: dateStr
+                        };
+                    }
                 }
                 if (!workedToday[dateStr]) workedToday[dateStr] = new Set();
                 workedToday[dateStr].add(staffId);

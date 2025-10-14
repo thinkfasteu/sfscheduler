@@ -252,32 +252,44 @@ export class ScheduleValidator {
 
     validateRestPeriods(schedule) {
         const issues = [];
-        const lastEndTime = {};
+        const lastShiftInfo = {}; // Track both end time and date per staff
 
         Object.entries(schedule)
             .sort(([a], [b]) => a.localeCompare(b))
             .forEach(([dateStr, day]) => {
                 Object.entries(day.assignments || {}).forEach(([shiftKey, staffId]) => {
+                    // Skip manager wildcard for rest period checks
+                    if (staffId === 'manager') return;
+
                     const shift = SHIFTS[shiftKey];
                     const [startTime] = shift.time.split('-');
                     const start = parseShiftTime(dateStr, startTime);
 
-                    if (lastEndTime[staffId]) {
-                        const rest = (start - lastEndTime[staffId]) / (1000 * 60 * 60);
-                        if (rest < APP_CONFIG.MIN_REST_HOURS) {
-                            issues.push({
-                                type: 'rest',
-                                severity: 'error',
-                                staffId,
-                                dateStr,
-                                shiftKey,
-                                message: `Insufficient rest period (${rest.toFixed(1)}h)`
-                            });
+                    // Check rest period only if there's a previous shift AND it's from a different day
+                    if (lastShiftInfo[staffId]) {
+                        const { endTime: lastEnd, dateStr: lastDate } = lastShiftInfo[staffId];
+                        // Skip rest period check for same-day assignments (handled by overlap rules)
+                        if (lastDate !== dateStr) {
+                            const rest = (start - lastEnd) / (1000 * 60 * 60);
+                            if (rest < APP_CONFIG.MIN_REST_HOURS) {
+                                issues.push({
+                                    type: 'rest',
+                                    severity: 'error',
+                                    staffId,
+                                    dateStr,
+                                    shiftKey,
+                                    message: `Insufficient rest period (${rest.toFixed(1)}h)`
+                                });
+                            }
                         }
                     }
 
+                    // Update last shift info for this staff
                     const [_, endTime] = shift.time.split('-');
-                    lastEndTime[staffId] = parseShiftTime(dateStr, endTime);
+                    lastShiftInfo[staffId] = {
+                        endTime: parseShiftTime(dateStr, endTime),
+                        dateStr: dateStr
+                    };
                 });
             });
 

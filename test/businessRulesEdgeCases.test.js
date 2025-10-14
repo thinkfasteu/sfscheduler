@@ -16,13 +16,13 @@ import { SHIFTS, APP_CONFIG } from '../modules/config.js';
     appState.reset();
     appState.staffData=[{id:1, role:'student', typicalWorkdays:5, contractHours:20}];
     const eng=new SchedulingEngine(month);
-    eng.lastShiftEndTimes[1]=eng.parseShiftTime('2025-09-01','22:15');
+    eng.lastShiftEndTimes[1]={ endTime: eng.parseShiftTime('2025-09-01','22:15'), dateStr: '2025-09-01' };
     return BUSINESS_RULES.REST_PERIOD.validate('2025-09-02','early', appState.staffData[0], SHIFTS.early.hours, eng) === false;
   });
   runIsolated('REST_PERIOD positive', () => {
     appState.reset();
     appState.staffData=[{id:2, role:'student', typicalWorkdays:5, contractHours:20}];
-    const eng=new SchedulingEngine(month); eng.lastShiftEndTimes[2]=eng.parseShiftTime('2025-09-01','22:15');
+    const eng=new SchedulingEngine(month); eng.lastShiftEndTimes[2]={ endTime: eng.parseShiftTime('2025-09-01','22:15'), dateStr: '2025-09-01' };
     return BUSINESS_RULES.REST_PERIOD.validate('2025-09-02','midday', appState.staffData[0], SHIFTS.midday.hours, eng) === true;
   });
   runIsolated('REST_PERIOD ignores future lastShiftEndTimes', () => {
@@ -30,9 +30,25 @@ import { SHIFTS, APP_CONFIG } from '../modules/config.js';
     appState.staffData=[{id:21, role:'student', typicalWorkdays:5, contractHours:20}];
     const eng=new SchedulingEngine(month);
     // Seed last end time to a future date relative to the evaluated shift start
-    eng.lastShiftEndTimes[21]=eng.parseShiftTime('2025-09-20','22:15');
+    eng.lastShiftEndTimes[21]={ endTime: eng.parseShiftTime('2025-09-20','22:15'), dateStr: '2025-09-20' };
     // Validating on an earlier date should not be blocked by REST_PERIOD
     return BUSINESS_RULES.REST_PERIOD.validate('2025-09-05','early', appState.staffData[0], SHIFTS.early.hours, eng) === true;
+  });
+  runIsolated('REST_PERIOD allows same-day assignments', () => {
+    appState.reset();
+    appState.staffData=[{id:22, role:'student', typicalWorkdays:5, contractHours:20}];
+    const eng=new SchedulingEngine(month);
+    // Same day: early shift ending at 14:15, then midday shift starting at 14:30
+    eng.lastShiftEndTimes[22]={ endTime: eng.parseShiftTime('2025-09-01','14:15'), dateStr: '2025-09-01' };
+    return BUSINESS_RULES.REST_PERIOD.validate('2025-09-01','midday', appState.staffData[0], SHIFTS.midday.hours, eng) === true;
+  });
+  runIsolated('REST_PERIOD blocks cross-day violations', () => {
+    appState.reset();
+    appState.staffData=[{id:23, role:'student', typicalWorkdays:5, contractHours:20}];
+    const eng=new SchedulingEngine(month);
+    // Cross-day: closing shift ending at 22:15, then next day early shift starting at 06:00
+    eng.lastShiftEndTimes[23]={ endTime: eng.parseShiftTime('2025-09-01','22:15'), dateStr: '2025-09-01' };
+    return BUSINESS_RULES.REST_PERIOD.validate('2025-09-02','early', appState.staffData[0], SHIFTS.early.hours, eng) === false;
   });
 
   // MAX_CONSECUTIVE_DAYS
