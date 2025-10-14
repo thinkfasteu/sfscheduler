@@ -239,6 +239,47 @@ export class EventHandler {
             alert('Kein Dienstplan zum Finalisieren verfügbar. Erstellen Sie zuerst einen Plan.');
             return;
         }
+
+        // Validate the schedule before finalization
+        const validator = new ScheduleValidator(month);
+        const { schedule: consolidated } = validator.validateScheduleWithIssues(scheduleData);
+        
+        // Check for blockers
+        const violations = [];
+        Object.entries(consolidated).forEach(([dateStr, day]) => {
+            if (day.blockers) {
+                Object.entries(day.blockers).forEach(([shiftKey, blocker]) => {
+                    if (blocker && blocker !== 'manager') { // Skip manager wildcard
+                        violations.push({ dateStr, shift: shiftKey, blocker });
+                    }
+                });
+            }
+        });
+
+        // Check critical shift coverage (>4 unfilled critical shifts blocks finalization)
+        const criticalUnfilled = this.countUnfilledCriticalShifts(month, scheduleData);
+        if (criticalUnfilled > 4) {
+            violations.push({ 
+                dateStr: 'MONTH', 
+                shift: 'CRITICAL_COVERAGE', 
+                blocker: `UNFILLED_CRITICAL_SHIFTS: ${criticalUnfilled} critical shifts unfilled (max 4 allowed)` 
+            });
+        }
+
+        if (violations.length > 0) {
+            // Highlight violations in UI
+            if (window.ui?.highlightViolations) {
+                window.ui.highlightViolations(violations);
+            }
+            const msg = violations.map(v => `${v.dateStr} ${v.shift}: ${v.blocker}`).join('\n');
+            alert(`Schedule has violations and cannot be finalized:\n\n${msg}\n\nPlease fix the issues before finalizing.`);
+            return;
+        }
+
+        // Clear any previous violation highlights
+        if (window.ui?.clearViolations) {
+            window.ui.clearViolations();
+        }
         
         if (!confirm(`Soll der Dienstplan für ${month} finalisiert werden?\n\nDies speichert den Plan dauerhaft in der Datenbank und ersetzt alle vorhandenen Daten für diesen Monat.`)) {
             return;
@@ -262,6 +303,54 @@ export class EventHandler {
             console.error('[finalizeSchedule] Backend save failed:', error);
             alert('Fehler beim Finalisieren: ' + error.message + '\n\nDer Plan wurde lokal gespeichert, aber nicht in der Datenbank.');
         }
+    }
+
+    countUnfilledCriticalShifts(month, scheduleData) {
+        const [year, monthNum] = month.split('-').map(Number);
+        const daysInMonth = new Date(year, monthNum, 0).getDate();
+        let unfilledCount = 0;
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = `${year}-${String(monthNum).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+            const dayData = scheduleData[dateStr];
+            if (!dayData?.assignments) continue;
+
+            // Get applicable shifts for this date
+            const applicableShifts = this.getApplicableShiftsForDate(dateStr);
+            
+            applicableShifts.forEach(shiftKey => {
+                // Check if this shift is critical
+                if (this.isCriticalShift(shiftKey, dateStr) && !dayData.assignments[shiftKey]) {
+                    unfilledCount++;
+                }
+            });
+        }
+
+        return unfilledCount;
+    }
+
+    getApplicableShiftsForDate(dateStr) {
+        // Import SHIFTS logic - simplified version
+        const { SHIFTS } = window; // Assume SHIFTS is available globally
+        if (!SHIFTS) return [];
+
+        const date = new Date(dateStr);
+        const isWeekend = [0,6].includes(date.getDay());
+        const holName = window.appState?.holidays?.[dateStr.split('-')[0]]?.[dateStr];
+        const type = holName ? 'holiday' : (isWeekend ? 'weekend' : 'weekday');
+        
+        return Object.entries(SHIFTS).filter(([_, v]) => v.type === type).map(([k]) => k);
+    }
+
+    isCriticalShift(shiftKey, dateStr) {
+        // All shifts are critical except 'evening' on optional days (Tuesday, Thursday)
+        if (shiftKey !== 'evening') return true;
+        
+        const date = new Date(dateStr);
+        const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+        const optionalDays = [2, 4]; // Tuesday=2, Thursday=4 (0-based)
+        
+        return !optionalDays.includes(dayOfWeek);
     }
 
     exportSchedule() {

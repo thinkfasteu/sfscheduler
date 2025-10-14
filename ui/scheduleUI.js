@@ -38,19 +38,7 @@ export class ScheduleUI {
         this.setupTabs();
         // Set up handlers
         if (!window.handlers) window.handlers = {};
-        window.handlers.finalizeSchedule = () => {
-            const result = this.validateCurrentSchedule();
-            if (!result.valid) {
-                this.highlightViolations(result.violations);
-                const msg = result.violations.map(v => `${v.dateStr} ${v.shift}: ${v.blocker}`).join('\n');
-                alert(`Schedule has violations and cannot be finalized:\n\n${msg}\n\nPlease fix the issues before finalizing.`);
-                return;
-            }
-            this.clearViolations();
-            // Proceed with finalization
-            alert('Schedule finalized successfully!');
-            // TODO: Implement actual finalization logic (e.g., mark as final, lock edits)
-        };
+        // Note: finalizeSchedule handler is now in EventHandler.finalizeSchedule()
         // Expose modal helpers if not already present (scoped to this file's lifecycle)
         if (!window.__uiModalHelpersInstalled) {
             window.__uiModalHelpersInstalled = true;
@@ -1448,26 +1436,71 @@ export class ScheduleUI {
         try {
             const validator = new ScheduleValidator(month);
             const schedule = window.appState?.scheduleData?.[month] || {};
+            const { schedule: consolidated } = validator.validateScheduleWithIssues(schedule);
+
+            // Check for critical shift coverage
             const violations = [];
-            for (const dateStr in schedule) {
-                const dayData = schedule[dateStr];
-                if (!dayData.assignments) continue;
-                const validated = validator.validateSchedule({ [dateStr]: dayData });
-                const blockers = validated[dateStr]?.blockers || {};
-                for (const shift in blockers) {
-                    const blocker = blockers[shift];
-                    if (blocker) {
-                        const staffId = dayData.assignments[shift];
-                        violations.push({ dateStr, shift, staffId, blocker });
+
+            // Collect blockers from consolidated schedule
+            Object.entries(consolidated).forEach(([dateStr, dayData]) => {
+                const blockers = dayData?.blockers || {};
+                Object.entries(blockers).forEach(([shift, blocker]) => {
+                    if (blocker && blocker !== 'manager') { // Skip manager wildcard
+                        violations.push({ dateStr, shift, blocker });
                     }
-                }
+                });
+            });
+
+            // Add critical shift coverage issue if needed
+            const unfilledCriticalShifts = this.countUnfilledCriticalShifts(schedule, month);
+            if (unfilledCriticalShifts > 4) {
+                violations.push({
+                    dateStr: 'month',
+                    shift: 'coverage',
+                    blocker: `UNFILLED_CRITICAL_SHIFTS: ${unfilledCriticalShifts} critical shifts unfilled (max 4 allowed)`
+                });
             }
+
             return { valid: violations.length === 0, violations };
         } catch (error) {
             console.error('Validation error:', error);
             // In case of validation failure, allow finalization but log the error
             return { valid: true, violations: [] };
         }
+    }
+
+    // Count unfilled critical shifts across the month
+    countUnfilledCriticalShifts(schedule, month) {
+        let unfilled = 0;
+        const [year, monthNum] = month.split('-').map(Number);
+        const daysInMonth = new Date(year, monthNum, 0).getDate();
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = `${year}-${String(monthNum).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+            const dayData = schedule[dateStr];
+            if (!dayData?.assignments) continue;
+
+            const applicableShifts = this.getApplicableShifts(dateStr);
+            applicableShifts.forEach(shift => {
+                if (!dayData.assignments[shift]) {
+                    // Check if this is a critical shift (not evening on optional days)
+                    const isCritical = this.isCriticalShift(shift, dateStr);
+                    if (isCritical) unfilled++;
+                }
+            });
+        }
+        return unfilled;
+    }
+
+    // Determine if a shift is critical for coverage purposes
+    isCriticalShift(shift, dateStr) {
+        // All shifts are critical except evening shifts on EVENING_OPTIONAL_DAYS (Tuesday, Thursday)
+        if (shift !== 'evening') return true;
+
+        const date = parseYMD(dateStr);
+        const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, etc.
+        // Tuesday=2, Thursday=4
+        return !APP_CONFIG.EVENING_OPTIONAL_DAYS.includes(dayOfWeek);
     }
 
     // Highlight violations in the calendar
