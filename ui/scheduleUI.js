@@ -632,7 +632,7 @@ export class ScheduleUI {
             }
             // Delegated pill click (assignment or unassigned pill)
             const pill = e.target.closest('.staff-assignment[data-date]');
-            if (pill){
+            if (pill && !e.target.closest('button')){
                 e.stopPropagation();
                 const dateStr = pill.getAttribute('data-date');
                 const shiftKey = pill.getAttribute('data-shift');
