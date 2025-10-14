@@ -538,6 +538,8 @@ export class ScheduleUI {
     // Set current month BEFORE attempting holiday badge update so filter works
     this.currentCalendarMonth = month;
     try { this.ensureHolidaysLoaded(y); } catch(e){ console.warn('[phase] ensureHolidaysLoaded failed', e); }
+    // Bind event delegation for calendar interactions
+    this.bindDelegatesOnce();
     try { this.updateHolidayBadgesExt(y, { retype:true }); } catch(e){ console.warn('[phase] updateHolidayBadges initial failed', e); }
     // Toolbar buttons now handled via direct binding in eventBindings.js
     window.__perf.calendarFullRenders++;
