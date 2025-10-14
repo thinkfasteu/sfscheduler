@@ -222,6 +222,61 @@ export class ScheduleUI {
         }
     }
 
+    // Helper to get base candidates for a shift without filtering out blockers
+    _getBaseCandidatesForShift(dateStr, shift, includeManager = false) {
+        const month = dateStr.substring(0, 7);
+        const candidates = [];
+        const staffList = window.appState?.staffData || [];
+        
+        // Include all staff with basic availability or permanent status
+        staffList.forEach(staff => {
+            const avail = appState.availabilityData?.[staff.id]?.[dateStr]?.[shift];
+            const isAvailable = avail === 'yes' || avail === 'prefer';
+            const isPermanent = staff.role === 'permanent';
+            
+            // Check for exclusions
+            const vac = (appState.vacationsByStaff?.[staff.id] || []).some(p => {
+                if (!p?.start || !p?.end) return false;
+                const t = parseYMD(dateStr).getTime();
+                const st = parseYMD(p.start).getTime();
+                const en = parseYMD(p.end).getTime();
+                return t >= st && t <= en;
+            });
+            const ill = (appState.illnessByStaff?.[staff.id] || []).some(p => {
+                if (!p?.start || !p?.end) return false;
+                const t = parseYMD(dateStr).getTime();
+                const st = parseYMD(p.start).getTime();
+                const en = parseYMD(p.end).getTime();
+                return t >= st && t <= en;
+            });
+            const dayOff = appState.availabilityData?.[`staff:${staff.id}`]?.[dateStr] === 'off';
+            
+            if (!(vac || ill || dayOff) && (isAvailable || isPermanent)) {
+                candidates.push({ staff, score: 0 });
+            }
+        });
+        
+        // Always include staff already assigned this month (for reassignment)
+        const monthData = window.appState?.scheduleData?.[month] || {};
+        Object.values(monthData).forEach(dayData => {
+            if (dayData?.assignments) {
+                Object.values(dayData.assignments).forEach(staffId => {
+                    if (staffId && staffId !== 'manager' && !candidates.find(c => c.staff.id === staffId)) {
+                        const staff = staffList.find(s => s.id === staffId);
+                        if (staff) candidates.push({ staff, score: 0 });
+                    }
+                });
+            }
+        });
+        
+        // Add manager if requested
+        if (includeManager) {
+            candidates.push({ staff: { id: 'manager', name: 'Manager', role: 'manager' }, score: 0 });
+        }
+        
+        return candidates;
+    }
+
     setupTabs() {
         // Make UI instance available globally
         window.ui = this;
@@ -1024,19 +1079,15 @@ export class ScheduleUI {
             } catch(e){ /* noop */ }
         };
         const renderCandidates = () => {
-            const includePermanents = document.getElementById('includePermanentsCheckbox')?.checked || false;
             const includeManager = document.getElementById('includeManagerCheckbox')?.checked || false;
-            let cands = getCandidates(includePermanents);
-            // Add manager wildcard if requested
-            if (includeManager) {
-                const managerCandidate = {
-                    staff: { id: 'manager', name: 'Manager', role: 'manager' },
-                    score: 1000 // high score to prioritize
-                };
-                // Check if already in list
-                if (!cands.some(c => c.staff.id === 'manager')) {
-                    cands.push(managerCandidate);
-                }
+            let cands = this._getBaseCandidatesForShift(dateStr, shiftSel.value, includeManager);
+            // Apply manual filters without rebuilding base pool
+            const q = (document.getElementById('searchFilterInput')?.value || '').toLowerCase();
+            if (q) {
+                cands = cands.filter(c => {
+                    const s = c.staff;
+                    return String(s.name).toLowerCase().includes(q) || String(s.role || '').toLowerCase().includes(q);
+                });
             }
             const sh = shiftSel.value;
             // Use cached validator
@@ -1047,23 +1098,15 @@ export class ScheduleUI {
             const simBase = window.appState?.scheduleData?.[month] || {};
             // Calculate isWeekend for this dateStr
             const isWeekendDay = [0,6].includes(parseYMD(dateStr).getDay());
-            // Ensure already-assigned staff for the date are also listed to allow switching
-            const assignedIds = new Set(Object.values(cur||{}));
-            assignedIds.forEach(id => {
-                if (!cands.some(c => c.staff.id === id)){
-                    const staff = (window.appState?.staffData||[]).find(s=>s.id==id);
-                    if (staff){ cands.push({ staff, score: 0 }); }
-                }
-            });
             // In swap mode, exclude the currently assigned employee from the dropdown
             if (isSwapMode) {
                 const currentId = parseInt(modal.dataset.currentStaff);
                 cands = cands.filter(c => c.staff.id !== currentId);
             }
-            // Build select options with blocker detection
+            // Build select options with blocker annotations (don't filter out)
             const options = cands.map(c => {
                 const s = c.staff;
-                // Use _withScheduleMutation for performance
+                // Use _withScheduleMutation for performance - only for annotation
                 const blocker = this._withScheduleMutation(simBase, dateStr, sh, s.id, () => {
                     const validated = validator.validateSchedule(simBase);
                     return s.id === 'manager' ? '' : (validated?.[dateStr]?.blockers?.[sh] || '');
@@ -1079,12 +1122,11 @@ export class ScheduleUI {
                 if (!isWeekendDay && (sh==='early'||sh==='midday') && s.role==='student') parts.push(`Tag (KW${weekNumLocal}): ${daytimeWeek}`);
                 if (blocker) parts.push(`Blocker: ${blocker}`);
                 const tooltip = parts.join(' | ');
-                const alreadyAssigned = assignedIds.has(s.id);
+                const alreadyAssigned = Object.values(cur||{}).includes(s.id);
                 const assignedNote = alreadyAssigned ? ' – bereits zugewiesen' : '';
                 const label = `${s.name} (Score: ${Math.round(c.score)})${assignedNote}${blocker ? ' ⚠' : ''}`;
-                const disabled = '';
                 const title = ` title="${tooltip}"`;
-                return `<option value="${s.id}"${disabled}${title}>${label}</option>`;
+                return `<option value="${s.id}"${title}>${label}</option>`;
             }).join('');
             staffSel.innerHTML = options;
             // Ensure consent row reflects the default selected option
@@ -1291,34 +1333,6 @@ export class ScheduleUI {
         };
     includeRow.classList.toggle('hidden', !isWeekendSearch);
         includeCb.checked = false;
-        const buildBaseCandidates = () => {
-            const sh = shiftSel.value;
-            const scheduledToday = new Set(Object.values(cur||{}));
-            const base = engine.findCandidatesForShift(dateStr, sh, scheduledToday, weekNum);
-            const mapById = new Map(base.map(c => [c.staff.id, c]));
-            // Always include already assigned (to allow replacement/switching)
-            const assignedIds = new Set(Object.values(cur||{}));
-            assignedIds.forEach(id => {
-                if (!mapById.has(Number(id))){
-                    const st = (window.appState?.staffData||[]).find(s=>s.id==id);
-                    if (st) mapById.set(st.id, { staff: st, score: 0 });
-                }
-            });
-            // Permissive: include anyone with availability or permanents
-            (window.appState?.staffData||[]).forEach(s => {
-                const avail = appState.availabilityData?.[s.id]?.[dateStr]?.[sh];
-                const okAvail = (avail==='yes' || avail==='prefer');
-                const isPerm = s.role==='permanent';
-                const allowPerm = !isWeekendSearch || includeCb.checked; // on weekends, gate permanents by toggle
-                const vac = (appState.vacationsByStaff?.[s.id]||[]).some(p=>{ if(!p?.start||!p?.end) return false; const t=parseYMD(dateStr).getTime(); const st=parseYMD(p.start).getTime(); const en=parseYMD(p.end).getTime(); return t>=st && t<=en; });
-                const ill = (appState.illnessByStaff?.[s.id]||[]).some(p=>{ if(!p?.start||!p?.end) return false; const t=parseYMD(dateStr).getTime(); const st=parseYMD(p.start).getTime(); const en=parseYMD(p.end).getTime(); return t>=st && t<=en; });
-                const dayOff = appState.availabilityData?.[`staff:${s.id}`]?.[dateStr] === 'off';
-                if (!(vac||ill||dayOff) && (okAvail || (isPerm && allowPerm)) && !mapById.has(s.id)){
-                    mapById.set(s.id, { staff: s, score: 0 });
-                }
-            });
-            return Array.from(mapById.values()).sort((a,b)=>b.score-a.score);
-        };
         const renderCandidates = () => {
             const sh = shiftSel.value;
             // Use cached validator
@@ -1327,7 +1341,7 @@ export class ScheduleUI {
             }
             const validator = this._validators[month];
             const simBase = window.appState?.scheduleData?.[month] || {};
-            let cands = buildBaseCandidates();
+            let cands = this._getBaseCandidatesForShift(dateStr, sh, false); // includeManager false for search modal
             // Filter
             const q = (filterInput.value||'').toLowerCase();
             if (q){
@@ -1338,10 +1352,26 @@ export class ScheduleUI {
             }
             const options = cands.map(c => {
                 const s = c.staff;
-                // Simplified blocker check for now
-                const blocker = '';
-                const label = `${s.name} (${s.role||''})${blocker?' ⚠':''}`;
-                const title = blocker ? ` title="Blocker: ${blocker}"` : '';
+                // Use _withScheduleMutation for performance - only for annotation
+                const blocker = this._withScheduleMutation(simBase, dateStr, sh, s.id, () => {
+                    const validated = validator.validateSchedule(simBase);
+                    return s.id === 'manager' ? '' : (validated?.[dateStr]?.blockers?.[sh] || '');
+                });
+                // Build tooltip with fairness/context
+                const state = window.appState;
+                const engine = new SchedulingEngine(month);
+                const weekNumLocal = engine.getWeekNumber(parseYMD(dateStr));
+                const weekendCount = (engine.weekendAssignmentsCount?.[s.id]) ?? 0;
+                const daytimeWeek = (engine.studentDaytimePerWeek?.[s.id]?.[weekNumLocal]) ?? 0;
+                const parts = [`Score: ${Math.round(c.score)}`];
+                if (isWeekendSearch) parts.push(`WE bisher: ${weekendCount}`);
+                if (!isWeekendSearch && (sh==='early'||sh==='midday') && s.role==='student') parts.push(`Tag (KW${weekNumLocal}): ${daytimeWeek}`);
+                if (blocker) parts.push(`Blocker: ${blocker}`);
+                const tooltip = parts.join(' | ');
+                const alreadyAssigned = Object.values(cur||{}).includes(s.id);
+                const assignedNote = alreadyAssigned ? ' – bereits zugewiesen' : '';
+                const label = `${s.name} (Score: ${Math.round(c.score)})${assignedNote}${blocker ? ' ⚠' : ''}`;
+                const title = ` title="${tooltip}"`;
                 return `<option value="${s.id}"${title}>${label}</option>`;
             }).join('');
             staffSel.innerHTML = options;
