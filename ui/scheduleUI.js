@@ -759,7 +759,6 @@ export class ScheduleUI {
                     return `<div class="staff-assignment" title="${title}" data-date="${dateStr}" data-shift="${shift}">
                         <span class="badge">${shift}</span>
                         <span class="assignee-name">${name}</span>
-                        <button class="btn btn-secondary btn-sm swap-btn ml-6" data-date="${dateStr}" data-shift="${shift}">Wechseln</button>
                     </div>`;
                 }
                 const title = `${meta.name||shift} ${meta.time?`(${meta.time})`:''} - nicht zugewiesen`;
@@ -772,7 +771,6 @@ export class ScheduleUI {
                 return `<div class="staff-assignment invalid-shift" data-invalid="true" data-date="${dateStr}" data-shift="${shift}" title="Nicht gültig für ${type}">
                     <span class="badge badge-error">${shift}!</span>
                     <span class="assignee-name">${name}</span>
-                    <button class="btn btn-secondary btn-sm swap-btn ml-6" data-date="${dateStr}" data-shift="${shift}">Anpassen</button>
                 </div>`;
             }).join('');
             cell.innerHTML = validHtml + invalidHtml;
@@ -861,7 +859,6 @@ export class ScheduleUI {
                 return `<div class="staff-assignment" title="${title}" data-date="${dateStr}" data-shift="${shift}">
                         <span class="badge">${shift}</span>
                         <span class="assignee-name">${name}</span>
-                        <button class="btn btn-secondary btn-sm swap-btn ml-6" data-date="${dateStr}" data-shift="${shift}">Wechseln</button>
                     </div>`;
             }
             const title = `${meta.name||shift} ${meta.time?`(${meta.time})`:''} - nicht zugewiesen`;
@@ -874,7 +871,6 @@ export class ScheduleUI {
             return `<div class="staff-assignment invalid-shift" data-invalid="true" data-date="${dateStr}" data-shift="${shift}" title="Nicht gültig für ${type}">
                 <span class="badge badge-error">${shift}!</span>
                 <span class="assignee-name">${name}</span>
-                <button class="btn btn-secondary btn-sm swap-btn ml-6" data-date="${dateStr}" data-shift="${shift}">Anpassen</button>
             </div>`;
         }).join('');
         cellEl.innerHTML = validHtml + invalidHtml;
