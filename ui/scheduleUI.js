@@ -919,6 +919,8 @@ export class ScheduleUI {
             const firstUnassigned = allShifts.find(s => !cur[s]);
             if (firstUnassigned) shiftSel.value = firstUnassigned;
         }
+        // Disable shift selection in swap mode to prevent confusion
+        shiftSel.disabled = isSwapMode;
 
         const title = document.getElementById('swapTitle');
         const detail = document.getElementById('swapDetail');
@@ -998,7 +1000,7 @@ export class ScheduleUI {
         };
         const renderCandidates = () => {
             const includePermanents = document.getElementById('includePermanentsCheckbox')?.checked || false;
-            const cands = getCandidates(includePermanents);
+            let cands = getCandidates(includePermanents);
             const sh = shiftSel.value;
             const validator = new ScheduleValidator(month);
             const simBase = JSON.parse(JSON.stringify(window.appState?.scheduleData?.[month] || {}));
@@ -1012,6 +1014,11 @@ export class ScheduleUI {
                     if (staff){ cands.push({ staff, score: 0 }); }
                 }
             });
+            // In swap mode, exclude the currently assigned employee from the dropdown
+            if (isSwapMode) {
+                const currentId = parseInt(modal.dataset.currentStaff);
+                cands = cands.filter(c => c.staff.id !== currentId);
+            }
             // Build select options with blocker detection
             const options = cands.map(c => {
                 const s = c.staff;
