@@ -769,7 +769,7 @@ export class ScheduleUI {
                 const meta = SHIFTS[shift] || {};
                 if (staffId){
                     const staff = (window.appState?.staffData||[]).find(s=>s.id==staffId);
-                    const name = staff?.name || staffId;
+                    const name = staff?.name || (staffId === 'manager' ? 'Manager' : staffId);
                     const title = `${meta.name||shift} ${meta.time?`(${meta.time})`:''} - ${name}`;
                     return `<div class="staff-assignment" title="${title}" data-date="${dateStr}" data-shift="${shift}">
                         <span class="badge">${shift}</span>
@@ -869,7 +869,7 @@ export class ScheduleUI {
             const meta = SHIFTS[shift] || {};
             if (staffId){
                 const staff = (window.appState?.staffData||[]).find(s=>s.id==staffId);
-                const name = staff?.name || staffId;
+                const name = staff?.name || (staffId === 'manager' ? 'Manager' : staffId);
                 const title = `${meta.name||shift} ${meta.time?`(${meta.time})`:''} - ${name}`;
                 return `<div class="staff-assignment" title="${title}" data-date="${dateStr}" data-shift="${shift}">
                         <span class="badge">${shift}</span>
@@ -1015,7 +1015,19 @@ export class ScheduleUI {
         };
         const renderCandidates = () => {
             const includePermanents = document.getElementById('includePermanentsCheckbox')?.checked || false;
+            const includeManager = document.getElementById('includeManagerCheckbox')?.checked || false;
             let cands = getCandidates(includePermanents);
+            // Add manager wildcard if requested
+            if (includeManager) {
+                const managerCandidate = {
+                    staff: { id: 'manager', name: 'Manager', role: 'manager' },
+                    score: 1000 // high score to prioritize
+                };
+                // Check if already in list
+                if (!cands.some(c => c.staff.id === 'manager')) {
+                    cands.push(managerCandidate);
+                }
+            }
             const sh = shiftSel.value;
             const validator = new ScheduleValidator(month);
             const simBase = JSON.parse(JSON.stringify(window.appState?.scheduleData?.[month] || {}));
@@ -1042,7 +1054,7 @@ export class ScheduleUI {
                 if (!sim[dateStr].assignments) sim[dateStr].assignments = {};
                 sim[dateStr].assignments[sh] = s.id;
                 const validated = validator.validateSchedule(sim);
-                const blocker = validated?.[dateStr]?.blockers?.[sh] || '';
+                const blocker = s.id === 'manager' ? '' : (validated?.[dateStr]?.blockers?.[sh] || '');
                 // Build tooltip with fairness/context
                 const state = window.appState;
                 const engine = new SchedulingEngine(month);
@@ -1092,7 +1104,7 @@ export class ScheduleUI {
                 if (!sim[dateStr].assignments) sim[dateStr].assignments = {};
                 sim[dateStr].assignments[sh] = s.id;
                 const validated = validator.validateSchedule(sim);
-                const blocker = validated?.[dateStr]?.blockers?.[sh];
+                const blocker = s.id === 'manager' ? null : validated?.[dateStr]?.blockers?.[sh];
                 if (blocker) parts.push(`Blockiert: ${blocker}`);
                 return `${s.name}: ${parts.length?parts.join(', '):'—'}`;
             }).join('<br/>');
@@ -1128,6 +1140,14 @@ export class ScheduleUI {
     includeRow.classList.toggle('hidden', !weekend);
     includeCb.checked = false;
     includeCb.onchange = () => renderCandidates();
+    // Manager wildcard toggle - always available
+    const managerRow = document.getElementById('includeManagerRow');
+    const managerCb = document.getElementById('includeManagerCheckbox');
+    if (managerRow) managerRow.classList.remove('hidden'); // always show
+    if (managerCb) {
+        managerCb.checked = false;
+        managerCb.onchange = () => renderCandidates();
+    }
     renderCandidates();
         const notes = document.getElementById('candidateNotes');
         // Notes content set in renderCandidates

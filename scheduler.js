@@ -374,6 +374,7 @@ class SchedulingEngine {
         const hours = SHIFTS[shiftKey].hours;
         const cands=[];
         (appState.staffData||[]).forEach(staff=>{
+            if (staff.id === 'manager') return; // Exclude manager from automated generation
             if (scheduledToday.has(staff.id)) return;
             if (!this.isStaffAvailable(staff, dateStr, shiftKey)) return;
             const weekH = this.staffHoursByWeek[staff.id][weekNum]||0; const monthH = this.monthlyHours[staff.id]||0;
