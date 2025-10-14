@@ -1,98 +1,95 @@
-## Scheduler App Build & Development
+# FTG Sportfabrik Scheduler
 
-**Recent Updates:** Fixed holiday scheduling issues - permanent employees can no longer work holidays, and invalid shifts are cleared during generation.
+The FTG Sportfabrik Scheduler is a browser-based operations console for planning and maintaining monthly duty rosters. It blends automated generation with guided manual workflows, strong validation, and Supabase-backed persistence so planners can ship compliant schedules without losing flexibility.
 
-### Install
-```powershell
-pnpm install # or: npm install / yarn install
-```
+## Prerequisites & Setup
 
-### Development (watch mode)
-```powershell
-npm run dev
-```
-Serves updated bundle at `dist/app.js`; HTML auto-loads it.
+| Requirement | Notes |
+|-------------|-------|
+| Node.js 18+ | Modern ESM build with top-level await |
+| npm 9+ (or pnpm/yarn) | Project scripts assume npm; alternative clients work with equivalent commands |
+| Optional: Supabase project | Enables remote persistence; app falls back to local storage when unset |
 
-### Production Build (hashed bundle)
-```powershell
-npm run build
-```
-Outputs:
-- `dist/app.<hash>.js` (ESM bundle, content-hash for cache busting)
-- `dist/manifest.json` (points to current hashed bundle)
-- `dist/meta.json` (timestamp + hash metadata, non-watch builds)
+1. Install dependencies:
+	```bash
+	npm install
+	```
+2. Configure environment variables (`.env` or `--env-file`). Typical keys:
+	```env
+	SUPABASE_URL=https://<project>.supabase.co
+	SUPABASE_ANON_KEY=<public-anon-key>
+	BACKEND=supabase
+	```
+3. Start the development server:
+	```bash
+	npm run dev
+	```
+	The watcher serves `dist/app.js` and rebuilds on change.
 
-`index.html` fetches `dist/manifest.json` to import the hashed file. If manifest or bundle are missing it falls back to raw module imports.
+## Build, Test & Quality
 
-### Environment Variable Injection
-At build time, variables from `.env` (or a file passed via `--env-file=custom.env`) and the current shell are injected for keys matching:
-`SUPABASE_*`, `APP_*`, `SCHED_*`, `BACKEND*`, `ENV_*`, `VITE_*`.
+| Task | Command | Output |
+|------|---------|--------|
+| Development bundle | `npm run dev` | Incremental build served to the browser |
+| Production bundle | `npm run build` | Hashed bundle in `dist/app.<hash>.js`, `manifest.json`, `meta.json` |
+| Manifest verification | `npm run verify` | Checks manifest integrity and required env vars |
+| Bundle analysis | `npm run analyze` | Emits `dist/metafile.json` & `dist/analysis.json` |
+| Smoke & rule tests | `npm run test` | Business rule regression suite |
 
-Accessible via both:
-- `import.meta.env.MY_KEY`
-- `process.env.MY_KEY`
+Environment variables matching `SUPABASE_*`, `APP_*`, `SCHED_*`, `BACKEND*`, `ENV_*`, `VITE_*` are injected at build time and are available via both `import.meta.env.KEY` and `process.env.KEY`.
 
-Example `.env`:
-```
-SUPABASE_URL=https://example.supabase.co
-SUPABASE_ANON_KEY=public-anon-key
-BACKEND=supabase
-APP_FEATURE_FLAGS=reports,metrics
-```
+## Core Workflows
 
-### Bundle Analysis
-### Verify (CI Helper)
-### Tests
-Run minimal critical tests:
-```powershell
-npm test
-```
-CI pipeline suggestion:
-```powershell
-npm run ci
-```
+### 1. Generating a Monthly Schedule
+1. Open the *Dienstplan* tab and pick the month via the selector.
+2. Press **Plan erstellen** (`generateScheduleBtn`). The `SchedulingEngine` creates assignments for all applicable shifts.
+3. Re-run the button any time to regenerate the month. Months are isolated—other months remain untouched until explicitly regenerated.
 
-### External Libraries SRI
-Replace the placeholder `integrity` values in `index.html` with real hashes (e.g. using `openssl dgst -sha256 -binary | openssl base64 -A`). Until replaced, browsers will ignore invalid SRI.
-Runs a full build and checks manifest integrity:
-```powershell
-npm run verify
-```
-Fails (exit code 1/2) if required env vars are missing or build fails.
+### 2. Manual Adjustments
 
-Generate size report:
-```powershell
-npm run analyze
-```
-Outputs:
-- `dist/metafile.json` (raw esbuild metafile)
-- `dist/analysis.json` (top modules + total KB)
-Console prints top contributors.
+| Tool | When to use | Highlights |
+|------|--------------|------------|
+| Assign/Swap modal | Click a day cell or existing assignment pill | Uses `_getBaseCandidatesForShift` to present a stable list of staff (availability, permanents, existing assignees) and optional manager wildcard. Blockers are shown with a ⚠ glyph and tooltip instead of removing the candidate. |
+| Suchen & Zuweisen modal | Cross-date assignment work | Shares the same base candidate logic, supports search filtering, and enforces weekend consent for permanents lacking preferences. |
+| Consent tracking | Weekend assignments for permanents without preference | Surfaces a consent checkbox tied to `appState.permanentOvertimeConsent`; if no alternative exists the UI raises an overtime request via `__services.overtime`. |
 
+Candidate tooltips summarise fairness metrics (weekend counts, daytime allocation) alongside blocker reasons. The dropdown keeps its size even when blockers exist, enabling informed overrides.
 
-### Notes
-- CSP already allows only `style-src 'self'`; no inline script usage.
-- Future improvements: hash-based filename for long-term caching; environment injection via small pre-build step.
+### 3. Validation & Finalization
 
-### Version Badge & Lock Removal (v1.2.4)
-As of version 1.2.4 the legacy multi‑tab cooperative locking (BroadcastChannel + storage events) was fully removed. The app now always operates in edit mode. A small floating badge (bottom-right) shows the active application version (derived from `manifest.json` when in dist mode, or falling back to the static version string). This replaces the previous lock status indicator.
+1. Click **Plan finalisieren** (`finalizeScheduleBtn`).
+2. Cached `ScheduleValidator` instances (`ScheduleUI._validators`) validate the active month, highlighting blockers inline and adding an accessibility summary to `#scheduleChecklistRoot`.
+3. The finalization modal lists remaining issues (rest periods, max consecutive days, minijob earnings, critical shifts). Finalization is blocked until blockers are resolved.
+4. On success the schedule is persisted (Supabase if configured, otherwise local state) and the calendar refreshes with highlighted compliance state cleared.
 
-Re‑introducing locking later would involve:
-1. Initializing a `BroadcastChannel('scheduler')`.
-2. Generating a per‑tab ID and broadcasting `lock-acquire` / `lock-granted` messages.
-3. Gating mutating actions behind a `window.__TAB_CAN_EDIT` flag.
-4. (Optional) Using localStorage events only for cross‑tab state refresh, not locking.
+### 4. Supabase Persistence & Offline Fallback
 
-Until such a reintroduction is required, the simplified model reduces bundle size and startup logic while keeping the UI responsive.
+- When `BACKEND=supabase`, services in `src/services/index.js` handle writes for schedules, availability, vacations, and overtime credits. Manual assignments, swaps, and consent changes travel through these adapters.
+- Without Supabase credentials the scheduler automatically falls back to local `appState` storage. All validation and generation logic continue to operate for demos or offline use.
 
-### Automatische Plan-Erzeugung & Entfernte Funktionen (v1.2.5)
-Ab Version 1.2.5 wird der Dienstplan eines Monats automatisch erzeugt, sobald der Monat im Dienstplan-Tab geöffnet und (falls Remote-Backend aktiv) die Verfügbarkeiten vorab geladen wurden. Existiert bereits ein Plan (`appState.scheduleData[YYYY-MM]`), findet keine automatische Erzeugung statt.
+## Accessibility & UX Enhancements
 
-Entfernt wurden zur Vereinfachung der Oberfläche:
-* Manueller Button "Dienstplan erstellen"
-* Informelles "Monat abschließen" (Finalize) – Metadaten-Markierung
-* "Lücken prüfen" / "Lücken füllen" (Recovery-Heuristik)
+- **Validator caching:** Reuses one `ScheduleValidator` per month to avoid heavy recomputation during candidate rendering.
+- **Inline warnings:** Candidate lists display blocker reasons in tooltips instead of hiding staff, keeping planners aware of constraints.
+- **Weekend distribution report:** `renderWeekendReport()` summarises weekend load, including overlapping vacations.
+- **Managed modals:** Focus trapping, escape handling, and restoration ensure keyboard accessibility across swap/search dialogs.
 
-Manuelle Anpassungen erfolgen weiterhin durch Anklicken eines Kalendertages (Zuweisungs-Modal) oder über den Dialog "Suchen & Zuweisen".
+## Troubleshooting
 
-Hinweis: Bereits zuvor generierte Pläne bleiben unverändert gespeichert.
+| Symptom | Resolution |
+|---------|------------|
+| Buttons appear inert | Confirm `src/ui/eventBindings.js` runs and `window.handlers` is initialised via `ui/eventHandlers.js`. |
+| Empty candidate dropdown | Ensure availability hydration (`prehydrateAvailability`) succeeded; toggling "Festangestellte" or manager wildcard expands the pool. |
+| Unexpected finalization blockers | Hover blocker ⚠ tooltips or open the finalize modal to see exact rules (rest periods, day limits, minijob earnings, critical shift coverage). |
+| Supabase saves failing | Verify `.env` keys and network requests. The UI logs failures and continues using local state. |
+
+## Additional Documentation
+
+- `CHANGELOG.md` – release history
+- `docs/DEPLOY.md` – deployment runbook
+- `docs/SUPABASE_SETUP.md` – backend provisioning guide
+- `docs/TEST_PROTOCOL.md` – regression checklist
+- `docs/gdpr/*` – GDPR compliance suite
+- `docs/QUICK_REFERENCE_GUIDE.md` – frontline quickstart (kept in sync with this README)
+
+For deeper technical details see `ui/scheduleUI.js`, `scheduler.js`, and `validation.js`, which cover rendering, scoring, and blocker detection.

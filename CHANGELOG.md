@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - Pilot Readiness Release
 
+## [1.3.0] - 2025-10-14
+### Added
+- Stable candidate dropdowns powered by `_getBaseCandidatesForShift`, keeping staff visible while annotating blockers with ⚠ tooltips.
+- Accessibility summary banner that mirrors validator output and announces blockers for screen-reader users.
+- Weekend fairness context inside modal tooltips (weekend counts, daytime distribution) to support manual adjustments.
+
+### Changed
+- Restored explicit **Plan erstellen** workflow; generation no longer auto-triggers on tab open to keep dispatcher control.
+- Finalization gate now blocks persistence until all blockers are resolved and propagates consolidated validation results to the UI.
+- `ScheduleValidator` instances are cached per month to reduce repeated instantiation when rendering candidate lists.
+- Updated frontline and developer documentation (README, Quick Reference) to align with the rebuilt schedule tab.
+
+### Removed
+- Legacy schedule rebuild documentation (`REBUILD_STATUS.md`, `SCHEDULE_REBUILD_GUIDE.md`, `REBUILD_PROMPT_FOR_NEXT_AGENT.md`) after the tab returned to production readiness.
+
 ## [1.2.4] - 2025-10-01
 ### Added
 - Finalize month (informal) workflow with modal summary of unfilled critical shifts (`finalizeMonthBtn`, `finalizeCurrentMonth`, `applyFinalize`).
@@ -44,6 +59,8 @@ This release intentionally keeps schedules editable post-finalization; the final
 ### Notes
 - Bestehende bereits generierte Pläne bleiben unverändert in local/remote storage
 - Eventuelle verbliebene generieren/finalize Referenzen entfernt; fallback Listener entfernt
+
+> **Superseded:** Version 1.3.0 reintroduced the manual generation button and finalized gating after dispatcher feedback. Automatic generation is no longer active.
 
 
 ### Major Features Added
