@@ -132,7 +132,7 @@ li { margin: 6px 0; }
 .list-item { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background: var(--card); box-shadow: var(--shadow); list-style: none; }
 
 /* Modal system (replaces inline styles for CSP hardening) */
-.modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:1000; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+.modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:10000; overflow-y:auto; -webkit-overflow-scrolling:touch; }
 .modal.open { display:block; }
 .modal-content { background: var(--card); margin: 8vh auto; padding:16px; border-radius:10px; width:640px; max-width:95vw; box-shadow: var(--shadow); }
 .modal-content.narrow { width:600px; }
@@ -423,9 +423,11 @@ li { margin: 6px 0; }
 /* Modal + checklist interaction layering */
 /* Ensure checklist sits below modal baseline but can still appear above other UI (adjusted via .modal-open class) */
 #scheduleChecklistRoot .checklist-panel { z-index: 500; }
-.modal.open { z-index: 1000; }
+.modal.open { z-index: 10000; }
 /* When any modal is open (class added via JS helper), disable pointer events so checklist does not steal clicks */
 #scheduleChecklistRoot.modal-open .checklist-panel { pointer-events: none; }
+/* Hide schedule controls when modal is open to prevent overlay issues */
+body.no-scroll #scheduleControls { display: none !important; }
 
 .btn-help {
     background: #6c757d;

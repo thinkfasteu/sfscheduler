@@ -503,7 +503,7 @@ export class ScheduleUI {
 
         let html = '<div id="scheduleStatus" class="status-line hidden"><span class="spinner"></span><span id="scheduleStatusText">Synchronisiere Verfügbarkeiten…</span></div>'
             + '<div class="flex flex-wrap jc-end gap-8 mb-8">'
-            + '<button class="btn btn-secondary" id="showHolidaysBtn">Feiertage</button>'
+            + '<button class="btn btn-secondary" id="scheduleShowHolidaysBtn">Feiertage</button>'
             + '<button class="btn btn-secondary" id="openSearchAssignBtn">Suchen & Zuweisen (Datum wählen)</button>'
             + '</div>';
         html += '<div class="cal"><div class="cal-row cal-head">';

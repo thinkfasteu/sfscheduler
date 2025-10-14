@@ -91,7 +91,7 @@ if (document.readyState === 'loading'){
 // Deferred binding for schedule handlers that may not be available immediately
 function __bindScheduleHandlers() {
   const scheduleButtons = [
-    { id: 'showHolidaysBtn', handler: null, action: () => { window.__toast && window.__toast('Show holidays clicked'); window.showHolidaysPopup && window.showHolidaysPopup(); } },
+    { id: 'scheduleShowHolidaysBtn', handler: null, action: () => { window.__toast && window.__toast('Show holidays clicked'); window.showHolidaysPopup && window.showHolidaysPopup(); } },
     { id: 'openSearchAssignBtn', handler: null, action: () => { 
       window.__toast && window.__toast('Search & assign clicked'); 
       // Use current month or today's date for search modal
