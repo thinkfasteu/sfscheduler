@@ -29,6 +29,36 @@ export class ScheduleValidator {
         return this.consolidateIssues(schedule, issues);
     }
 
+    consolidateIssues(schedule, issues) {
+        // Create a copy of the schedule with blockers added
+        const result = JSON.parse(JSON.stringify(schedule));
+        
+        // Flatten all issues
+        const allIssues = Object.values(issues).flat();
+        
+        // Group issues by dateStr and shiftKey
+        const blockersByDateShift = {};
+        allIssues.forEach(issue => {
+            if (issue.severity === 'error') { // Only hard errors are blockers
+                const key = `${issue.dateStr}-${issue.shiftKey}`;
+                if (!blockersByDateShift[key]) {
+                    blockersByDateShift[key] = [];
+                }
+                blockersByDateShift[key].push(issue.message);
+            }
+        });
+        
+        // Add blockers to result
+        Object.keys(blockersByDateShift).forEach(key => {
+            const [dateStr, shiftKey] = key.split('-');
+            if (!result[dateStr]) result[dateStr] = {};
+            if (!result[dateStr].blockers) result[dateStr].blockers = {};
+            result[dateStr].blockers[shiftKey] = blockersByDateShift[key].join('; ');
+        });
+        
+        return result;
+    }
+
     isAlternativeWeekendDay(dateStr, staff){
         if (!APP_CONFIG?.ALTERNATIVE_WEEKEND_ENABLED) return false;
         if (!staff?.alternativeWeekendDays || staff.alternativeWeekendDays.length!==2) return false;

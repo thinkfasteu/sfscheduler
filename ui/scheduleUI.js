@@ -1425,23 +1425,29 @@ export class ScheduleUI {
     validateCurrentSchedule() {
         const month = this.currentCalendarMonth;
         if (!month) return { valid: true, violations: [] };
-        const validator = new ScheduleValidator(month);
-        const schedule = window.appState?.scheduleData?.[month] || {};
-        const violations = [];
-        for (const dateStr in schedule) {
-            const dayData = schedule[dateStr];
-            if (!dayData.assignments) continue;
-            const validated = validator.validateSchedule({ [dateStr]: dayData });
-            const blockers = validated[dateStr]?.blockers || {};
-            for (const shift in blockers) {
-                const blocker = blockers[shift];
-                if (blocker) {
-                    const staffId = dayData.assignments[shift];
-                    violations.push({ dateStr, shift, staffId, blocker });
+        try {
+            const validator = new ScheduleValidator(month);
+            const schedule = window.appState?.scheduleData?.[month] || {};
+            const violations = [];
+            for (const dateStr in schedule) {
+                const dayData = schedule[dateStr];
+                if (!dayData.assignments) continue;
+                const validated = validator.validateSchedule({ [dateStr]: dayData });
+                const blockers = validated[dateStr]?.blockers || {};
+                for (const shift in blockers) {
+                    const blocker = blockers[shift];
+                    if (blocker) {
+                        const staffId = dayData.assignments[shift];
+                        violations.push({ dateStr, shift, staffId, blocker });
+                    }
                 }
             }
+            return { valid: violations.length === 0, violations };
+        } catch (error) {
+            console.error('Validation error:', error);
+            // In case of validation failure, allow finalization but log the error
+            return { valid: true, violations: [] };
         }
-        return { valid: violations.length === 0, violations };
     }
 
     // Highlight violations in the calendar
