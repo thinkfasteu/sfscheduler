@@ -2,6 +2,7 @@ import { appState } from '../modules/state.js';
 import { ModalManager } from './modalManager.js';
 import { ScheduleValidator } from '../validation.js';
 import { SchedulingEngine } from '../scheduler.js';
+import { exportSchedulePdf } from './pdfExporter.js';
 
 export class EventHandler {
     constructor(ui) {
@@ -365,14 +366,67 @@ export class EventHandler {
     }
 
     exportPdf() {
-        // PDF export placeholder - would need to be implemented  
-        const month = document.getElementById('scheduleMonth').value;
-        if (!month || !appState.scheduleData[month]) {
+        const monthEl = document.getElementById('scheduleMonth');
+        const month = monthEl?.value || this.ui?.currentCalendarMonth;
+        if (!month) {
+            alert('Bitte wählen Sie einen Monat aus.');
+            return;
+        }
+
+        const schedule = appState.scheduleData?.[month];
+        if (!schedule || Object.keys(schedule).length === 0) {
             alert('Kein Dienstplan für Export verfügbar');
             return;
         }
-        alert('PDF Export wird noch nicht unterstützt');
-        // TODO: Implement PDF export functionality
+
+        // Run validation gate identical to finalization blockers
+        const validator = new ScheduleValidator(month);
+        const clonedSchedule = JSON.parse(JSON.stringify(schedule));
+        const { schedule: consolidated } = validator.validateScheduleWithIssues(clonedSchedule);
+
+        const violations = [];
+        Object.entries(consolidated).forEach(([dateStr, day]) => {
+            if (!day?.blockers) return;
+            Object.entries(day.blockers).forEach(([shiftKey, blocker]) => {
+                if (blocker && blocker !== 'manager') {
+                    violations.push({ dateStr, shift: shiftKey, blocker });
+                }
+            });
+        });
+
+        const criticalUnfilled = this.countUnfilledCriticalShifts(month, schedule);
+        if (criticalUnfilled > 4) {
+            violations.push({
+                dateStr: 'MONTH',
+                shift: 'CRITICAL_COVERAGE',
+                blocker: `UNFILLED_CRITICAL_SHIFTS: ${criticalUnfilled} kritische Schichten unbesetzt (max. 4 erlaubt)`
+            });
+        }
+
+        if (violations.length > 0) {
+            if (this.ui?.highlightViolations) {
+                this.ui.highlightViolations(violations);
+            }
+            const msg = violations.map(v => `${v.dateStr} ${v.shift}: ${v.blocker}`).join('\n');
+            alert(`PDF-Export gestoppt: Der Plan enthält noch Blocker.\n\n${msg}`);
+            return;
+        }
+
+        if (this.ui?.clearViolations) {
+            this.ui.clearViolations();
+        }
+
+        try {
+            this.ui?.setStatus?.('Erzeuge PDF…', true);
+            exportSchedulePdf({ month, schedule });
+            this.ui?.setStatus?.('PDF gespeichert ✓', true, false);
+            window.__toast?.('Dienstplan als PDF gespeichert', { variant: 'success' });
+        } catch (error) {
+            console.error('[exportPdf] failed', error);
+            alert(`Fehler beim PDF-Export: ${error.message}`);
+        } finally {
+            setTimeout(() => this.ui?.clearStatus?.(), 1200);
+        }
     }
 
     generateNewSchedule() {

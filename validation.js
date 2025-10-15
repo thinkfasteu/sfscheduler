@@ -30,32 +30,20 @@ export class ScheduleValidator {
     }
 
     consolidateIssues(schedule, issues) {
-        // Create a copy of the schedule with blockers added
-        const result = JSON.parse(JSON.stringify(schedule));
-        
-        // Flatten all issues
-        const allIssues = Object.values(issues).flat();
-        
-        // Group issues by dateStr and shiftKey
-        const blockersByDateShift = {};
-        allIssues.forEach(issue => {
-            if (issue.severity === 'error') { // Only hard errors are blockers
-                const key = `${issue.dateStr}-${issue.shiftKey}`;
-                if (!blockersByDateShift[key]) {
-                    blockersByDateShift[key] = [];
+        const result = { ...schedule };
+        Object.entries(result).forEach(([dateStr, day]) => {
+            day.blockers = {};
+            day.warnings = {};
+            Object.entries(day.assignments || {}).forEach(([shiftKey, staffId]) => {
+                const staffIssues = Object.values(issues).flat().filter((i) => i.staffId === staffId && (!i.dateStr || i.dateStr === dateStr) && (!i.shiftKey || i.shiftKey === shiftKey));
+                if (staffIssues.some((i) => i.severity === "error")) {
+                    day.blockers[shiftKey] = staffIssues.filter((i) => i.severity === "error").map((i) => i.message).join("; ");
                 }
-                blockersByDateShift[key].push(issue.message);
-            }
+                if (staffIssues.some((i) => i.severity === "warning")) {
+                    day.warnings[shiftKey] = staffIssues.filter((i) => i.severity === "warning").map((i) => i.message).join("; ");
+                }
+            });
         });
-        
-        // Add blockers to result
-        Object.keys(blockersByDateShift).forEach(key => {
-            const [dateStr, shiftKey] = key.split('-');
-            if (!result[dateStr]) result[dateStr] = {};
-            if (!result[dateStr].blockers) result[dateStr].blockers = {};
-            result[dateStr].blockers[shiftKey] = blockersByDateShift[key].join('; ');
-        });
-        
         return result;
     }
 
@@ -415,7 +403,7 @@ export class ScheduleValidator {
             Object.entries(daysPerWeek).forEach(([weekNum, map])=>{
                 const days = map[staff.id] || 0;
                 if (days > typical + hardCap){
-                    issues.push({ type:'typicalDays', severity:'error', staffId:staff.id, message:`Week ${weekNum}: ${days} days assigned (typical ${typical}+${hardCap})` });
+                    issues.push({ type:'typicalDays', severity:'warning', staffId:staff.id, message:`Week ${weekNum}: ${days} days assigned (typical ${typical}+${hardCap})` });
                 } else if (days > typical + maxExtra){
                     issues.push({ type:'typicalDays', severity:'warning', staffId:staff.id, message:`Week ${weekNum}: ${days} days exceeds typical (${typical}+${maxExtra})` });
                 } else if (typical - days > 1){
