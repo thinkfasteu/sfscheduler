@@ -1304,20 +1304,9 @@ export class ScheduleUI {
     openSearchAssignModal(dateStr){
         const modal = document.getElementById('searchModal');
         if (!modal) return;
-        const [y,m,d] = dateStr.split('-').map(Number);
-        const date = new Date(y, m-1, d);
-        const isWeekendSearch = [0,6].includes(date.getDay());
-        const holName = this.getHolidayName(dateStr);
-        const allShifts = this.getApplicableShifts(dateStr);
-        document.getElementById('searchTitle').textContent = `Suchen & Zuweisen – ${dateStr}`;
-        document.getElementById('searchDetail').textContent = holName ? `Feiertag: ${holName}` : isWeekendSearch ? 'Wochenende' : 'Wochentag';
-        // Populate shifts
+        const titleEl = document.getElementById('searchTitle');
+        const detailEl = document.getElementById('searchDetail');
         const shiftSel = document.getElementById('searchShiftSelect');
-        shiftSel.innerHTML = allShifts.map(s=>`<option value="${s}">${s}</option>`).join('');
-        const month = dateStr.substring(0,7);
-        const cur = window.appState?.scheduleData?.[month]?.[dateStr]?.assignments || {};
-        const engine = new SchedulingEngine(month);
-        const weekNum = engine.getWeekNumber(date);
         const staffSel = document.getElementById('searchStaffSelect');
         const filterInput = document.getElementById('searchFilterInput');
         const consentRow = document.getElementById('searchConsentRow');
@@ -1325,44 +1314,99 @@ export class ScheduleUI {
         const consentHint = document.getElementById('searchConsentHint');
         const includeRow = document.getElementById('searchIncludePermanentsRow');
         const includeCb = document.getElementById('searchIncludePermanentsCheckbox');
-        // Lightweight consent updater for search modal (avoid full candidate rebuild on selection change)
+        const dateInput = document.getElementById('searchDateInput');
+
+        const baseMonth = dateStr.substring(0,7);
+        const [baseYear, baseMonthNum] = baseMonth.split('-').map(Number);
+        const daysInMonth = new Date(baseYear, baseMonthNum, 0).getDate();
+        const monthMin = `${baseMonth}-01`;
+        const monthMax = `${baseMonth}-${String(daysInMonth).padStart(2,'0')}`;
+
+        let activeDateStr = dateStr;
+        if (dateInput){
+            dateInput.min = monthMin;
+            dateInput.max = monthMax;
+            const existingValue = dateInput.value;
+            if (existingValue && existingValue >= monthMin && existingValue <= monthMax){
+                activeDateStr = existingValue;
+            } else {
+                dateInput.value = activeDateStr;
+            }
+        }
+
+        const syncHeader = () => {
+            const holName = this.getHolidayName(activeDateStr);
+            const dateObj = parseYMD(activeDateStr);
+            const isWeekend = [0,6].includes(dateObj.getDay());
+            if (titleEl) titleEl.textContent = `Suchen & Zuweisen – ${activeDateStr}`;
+            if (detailEl) detailEl.textContent = holName ? `Feiertag: ${holName}` : isWeekend ? 'Wochenende' : 'Wochentag';
+        };
+
+        const updateShiftOptions = (preserveSelection = true) => {
+            if (!shiftSel) return;
+            const applicable = this.getApplicableShifts(activeDateStr);
+            const previous = shiftSel.value;
+            shiftSel.innerHTML = applicable.map(s=>`<option value="${s}">${s}</option>`).join('');
+            if (preserveSelection && applicable.includes(previous)){
+                shiftSel.value = previous;
+            } else if (applicable.length){
+                shiftSel.value = applicable[0];
+            }
+        };
+
+        const updateModalDataset = () => {
+            modal.dataset.date = activeDateStr;
+            if (shiftSel) modal.dataset.shift = shiftSel.value;
+        };
+
         const updateSearchConsentForSelected = () => {
             try {
-                const selectedId = parseInt(staffSel.value || 0);
+                const selectedId = parseInt(staffSel?.value || 0);
                 const staff = (window.appState?.staffData||[]).find(s=>s.id==selectedId);
-                const isWeekendSearchLocal = [0,6].includes(date.getDay());
-                const showConsent = !!(staff && staff.role==='permanent' && isWeekendSearchLocal && !staff.weekendPreference);
-                consentRow.classList.toggle('hidden', !showConsent);
-                consentHint.classList.toggle('hidden', !showConsent);
-                if (showConsent){
-                    const year = String(y);
-                    const hasConsent = !!(window.appState?.permanentOvertimeConsent?.[selectedId]?.[year]?.[dateStr]);
+                const dateObj = parseYMD(activeDateStr);
+                const isWeekend = [0,6].includes(dateObj.getDay());
+                const showConsent = !!(staff && staff.role==='permanent' && isWeekend && !staff.weekendPreference);
+                consentRow?.classList.toggle('hidden', !showConsent);
+                consentHint?.classList.toggle('hidden', !showConsent);
+                if (showConsent && consentCb){
+                    const year = String(dateObj.getFullYear());
+                    const hasConsent = !!(window.appState?.permanentOvertimeConsent?.[selectedId]?.[year]?.[activeDateStr]);
                     consentCb.checked = !!hasConsent;
-                } else {
+                } else if (consentCb){
                     consentCb.checked = false;
                 }
             } catch(e){ /* noop */ }
         };
-    includeRow.classList.toggle('hidden', !isWeekendSearch);
-        includeCb.checked = false;
+
         const renderCandidates = () => {
-            const sh = shiftSel.value;
-            const includePermanentsOverride = !!(includeCb?.checked);
-            const scheduledToday = new Set(Object.values(cur||{}));
+            if (!shiftSel || !staffSel) return;
+            const dateObj = parseYMD(activeDateStr);
+            const month = activeDateStr.substring(0,7);
+            const isWeekendSearch = [0,6].includes(dateObj.getDay());
+            if (includeRow){
+                includeRow.classList.toggle('hidden', !isWeekendSearch);
+                if (!isWeekendSearch && includeCb) includeCb.checked = false;
+            }
 
             if (!this._validators[month]) {
                 this._validators[month] = new ScheduleValidator(month);
             }
             const validator = this._validators[month];
-            const simBase = window.appState?.scheduleData?.[month] || {};
+            const includePermanentsOverride = !!includeCb?.checked;
+            const scheduleMonth = window.appState?.scheduleData?.[month] || {};
+            const currentAssignments = scheduleMonth[activeDateStr]?.assignments || {};
+            const scheduledToday = new Set(Object.values(currentAssignments||{}));
+            const shiftKey = shiftSel.value;
 
-            const baseCandidates = this._getBaseCandidatesForShift(dateStr, sh, {
+            const baseCandidates = this._getBaseCandidatesForShift(activeDateStr, shiftKey, {
                 includeManager: false,
                 includePermanentOverride: includePermanentsOverride
             });
             const candidateMap = new Map(baseCandidates.map(c => [String(c.staff.id), { staff: c.staff, score: c.score ?? 0 }]));
 
-            const engineCandidates = engine.findCandidatesForShift(dateStr, sh, scheduledToday, weekNum);
+            const engine = new SchedulingEngine(month);
+            const weekNum = engine.getWeekNumber(dateObj);
+            const engineCandidates = engine.findCandidatesForShift(activeDateStr, shiftKey, scheduledToday, weekNum);
             engineCandidates.forEach(c => {
                 const key = String(c.staff.id);
                 if (candidateMap.has(key)) {
@@ -1371,107 +1415,155 @@ export class ScheduleUI {
             });
 
             let cands = Array.from(candidateMap.values()).sort((a,b)=> (b.score ?? 0) - (a.score ?? 0));
-            const q = (filterInput.value||'').toLowerCase();
+            const q = (filterInput?.value||'').toLowerCase();
             if (q){
-                cands = cands.filter(c => {
-                    const s = c.staff;
-                    return String(s.name).toLowerCase().includes(q) || String(s.role||'').toLowerCase().includes(q);
+                cands = cands.filter(({ staff }) => {
+                    return String(staff.name).toLowerCase().includes(q) || String(staff.role||'').toLowerCase().includes(q);
                 });
             }
 
-            const options = cands.map(c => {
-                const s = c.staff;
-                const blocker = this._withScheduleMutation(simBase, dateStr, sh, s.id, () => {
-                    const validated = validator.validateSchedule(simBase);
-                    return s.id === 'manager' ? '' : (validated?.[dateStr]?.blockers?.[sh] || '');
+            const options = cands.map(({ staff, score }) => {
+                const blocker = this._withScheduleMutation(scheduleMonth, activeDateStr, shiftKey, staff.id, () => {
+                    const validated = validator.validateSchedule(scheduleMonth);
+                    return staff.id === 'manager' ? '' : (validated?.[activeDateStr]?.blockers?.[shiftKey] || '');
                 });
-                const weekNumLocal = engine.getWeekNumber(parseYMD(dateStr));
-                const weekendCount = (engine.weekendAssignmentsCount?.[s.id]) ?? 0;
-                const daytimeWeek = (engine.studentDaytimePerWeek?.[s.id]?.[weekNumLocal]) ?? 0;
-                const parts = [`Score: ${Math.round(c.score)}`];
+                const weekNumLocal = engine.getWeekNumber(dateObj);
+                const weekendCount = (engine.weekendAssignmentsCount?.[staff.id]) ?? 0;
+                const daytimeWeek = (engine.studentDaytimePerWeek?.[staff.id]?.[weekNumLocal]) ?? 0;
+                const parts = [`Score: ${Math.round(score)}`];
                 if (isWeekendSearch) parts.push(`WE bisher: ${weekendCount}`);
-                if (!isWeekendSearch && (sh==='early'||sh==='midday') && s.role==='student') parts.push(`Tag (KW${weekNumLocal}): ${daytimeWeek}`);
+                if (!isWeekendSearch && (shiftKey==='early'||shiftKey==='midday') && staff.role==='student') parts.push(`Tag (KW${weekNumLocal}): ${daytimeWeek}`);
                 if (blocker) parts.push(`Blocker: ${blocker}`);
                 const tooltip = parts.join(' | ');
-                const alreadyAssigned = Object.values(cur||{}).includes(s.id);
+                const alreadyAssigned = Object.values(currentAssignments||{}).includes(staff.id);
                 const assignedNote = alreadyAssigned ? ' – bereits zugewiesen' : '';
-                const label = `${s.name} (Score: ${Math.round(c.score)})${assignedNote}${blocker ? ' ⚠' : ''}`;
+                const label = `${staff.name} (Score: ${Math.round(score)})${assignedNote}${blocker ? ' ⚠' : ''}`;
                 const title = ` title="${tooltip}"`;
-                return `<option value="${s.id}"${title}>${label}</option>`;
+                return `<option value="${staff.id}"${title}>${label}</option>`;
             }).join('');
             staffSel.innerHTML = options;
             updateSearchConsentForSelected();
         };
-        // Initial render
+
+        if (includeCb) includeCb.checked = false;
+        updateShiftOptions(false);
+        syncHeader();
+        updateModalDataset();
         renderCandidates();
-        // Add explicit 'Leave blank' action
+
+        if (filterInput){
+            filterInput.oninput = renderCandidates;
+            filterInput.onsearch = renderCandidates;
+        }
+        if (includeCb) includeCb.onchange = renderCandidates;
+        if (shiftSel) shiftSel.onchange = () => {
+            updateModalDataset();
+            renderCandidates();
+        };
+        if (staffSel) staffSel.onchange = updateSearchConsentForSelected;
+        if (dateInput){
+            dateInput.onchange = () => {
+                let next = dateInput.value || activeDateStr;
+                if (next < monthMin) next = monthMin;
+                if (next > monthMax) next = monthMax;
+                if (!next) next = activeDateStr;
+                activeDateStr = next;
+                dateInput.value = activeDateStr;
+                updateShiftOptions(true);
+                syncHeader();
+                updateModalDataset();
+                renderCandidates();
+            };
+        }
+        if (consentCb) consentCb.onchange = (e) => {
+            const selectedId = parseInt(staffSel?.value || 0);
+            const dateObj = parseYMD(activeDateStr);
+            if (!selectedId || ![0,6].includes(dateObj.getDay())) return;
+            const year = String(dateObj.getFullYear());
+            const state = window.appState;
+            if (!state.permanentOvertimeConsent) state.permanentOvertimeConsent = {};
+            if (!state.permanentOvertimeConsent[selectedId]) state.permanentOvertimeConsent[selectedId] = {};
+            if (!state.permanentOvertimeConsent[selectedId][year]) state.permanentOvertimeConsent[selectedId][year] = {};
+            if (e.target.checked){
+                state.permanentOvertimeConsent[selectedId][year][activeDateStr] = true;
+            } else {
+                delete state.permanentOvertimeConsent[selectedId][year][activeDateStr];
+            }
+            try{
+                appState.permanentOvertimeConsent = state.permanentOvertimeConsent;
+                appState.save?.();
+            }catch{}
+            renderCandidates();
+        };
+
         const searchLeaveBtn = document.getElementById('searchLeaveBlankBtn');
         if (searchLeaveBtn){
-            searchLeaveBtn.onclick = ()=>{
-                const sh = shiftSel.value; const month = dateStr.substring(0,7);
+            searchLeaveBtn.onclick = () =>{
+                const sh = shiftSel?.value;
+                if (!sh) return;
+                const month = activeDateStr.substring(0,7);
                 if (!window.appState.scheduleData[month]) window.appState.scheduleData[month] = {};
                 const schedule = window.appState.scheduleData[month];
-                if (!schedule[dateStr]) schedule[dateStr] = { assignments:{} };
-                delete schedule[dateStr].assignments[sh];
+                if (!schedule[activeDateStr]) schedule[activeDateStr] = { assignments:{} };
+                delete schedule[activeDateStr].assignments[sh];
                 appState.save?.();
-                this.updateDay(dateStr);
+                this.updateDay(activeDateStr);
                 if (window.modalManager) window.modalManager.close('searchModal'); else window.closeModal?.('searchModal');
             };
         }
-        // Stash context
-        modal.dataset.date = dateStr;
-    (window.modalManager||window).open ? window.modalManager.open('searchModal') : window.showModal?.('searchModal');
-        // Bind assign button
+
+        updateModalDataset();
+        (window.modalManager||window).open ? window.modalManager.open('searchModal') : window.showModal?.('searchModal');
+
         const execBtn = document.getElementById('executeSearchAssignBtn');
-    execBtn.onclick = async () => {
-            const sh = shiftSel.value; const sid = parseInt(staffSel.value||0);
-            if (!sid){ alert('Bitte Mitarbeiter wählen'); return; }
-            const month = dateStr.substring(0,7);
-            // Weekend permanent consent/request check like swap modal
+        execBtn.onclick = async () => {
+            const sh = shiftSel?.value;
+            const sid = parseInt(staffSel?.value||0);
+            if (!sh || !sid){ alert('Bitte Mitarbeiter wählen'); return; }
+            const month = activeDateStr.substring(0,7);
+            const dateObj = parseYMD(activeDateStr);
+            const engine = new SchedulingEngine(month);
+            const currentAssignments = window.appState?.scheduleData?.[month]?.[activeDateStr]?.assignments || {};
+
             try{
-                const isWE = [0,6].includes(date.getDay());
+                const isWE = [0,6].includes(dateObj.getDay());
                 const staff = (window.appState?.staffData||[]).find(s=>s.id==sid);
                 if (isWE && staff?.role==='permanent' && !staff?.weekendPreference){
-                    // Check if non-permanent candidates could fill instead
-                    const scheduledToday = new Set(Object.values(cur||{}));
-                    const cands = engine.findCandidatesForShift(dateStr, sh, scheduledToday, weekNum)
+                    const scheduledToday = new Set(Object.values(currentAssignments||{}));
+                    const cands = engine.findCandidatesForShift(activeDateStr, sh, scheduledToday, engine.getWeekNumber(dateObj))
                         .filter(c => c.staff.role !== 'permanent');
                     const canBeFilledByRegular = cands.some(c => c.score > -999);
                     if (!canBeFilledByRegular){
-                                                try { if (!window.__services) { import('../src/services/index.js').then(m=> { window.__services = m.createServices({}); }); } } catch {}
-                                                const overtimeSvc = window.__services?.overtime;
-                                                const exists = overtimeSvc.listByDate(month,dateStr).some(r=> r.staffId===sid && r.shiftKey===sh && r.status==='requested');
-                                                if(!exists){
-                                                    overtimeSvc.create(month, dateStr, { staffId: sid, shiftKey: sh, reason: 'Unbesetzbare Schicht' });
-                                                    alert('Überstunden-Anfrage erstellt. Bitte im Anfragen-Panel bestätigen.');
-                                                }
-                        return; // do not assign until consent
+                        try { if (!window.__services) { import('../src/services/index.js').then(m=> { window.__services = m.createServices({}); }); } } catch {}
+                        const overtimeSvc = window.__services?.overtime;
+                        const exists = overtimeSvc.listByDate(month, activeDateStr).some(r=> r.staffId===sid && r.shiftKey===sh && r.status==='requested');
+                        if(!exists){
+                            overtimeSvc.create(month, activeDateStr, { staffId: sid, shiftKey: sh, reason: 'Unbesetzbare Schicht' });
+                            alert('Überstunden-Anfrage erstellt. Bitte im Anfragen-Panel bestätigen.');
+                        }
+                        return;
                     }
                 }
             }catch(e){ console.warn('Auto-request check failed', e); }
-            // Use schedule service adapter path (single migrated write path)
+
             try { if (!window.__services) window.__services = (await import('../src/services/index.js')).createServices({}); } catch {}
             const scheduleSvc = window.__services.schedule;
-            // Assign optimistically via adapter
-            scheduleSvc.assign(dateStr, sh, sid);
-            // Re-run validation on updated month
+            scheduleSvc.assign(activeDateStr, sh, sid);
+
             const schedule = appState.scheduleData[month] || (appState.scheduleData[month] = {});
-            if (!schedule[dateStr]) schedule[dateStr] = { assignments: {} }; // ensure shape
+            if (!schedule[activeDateStr]) schedule[activeDateStr] = { assignments: {} };
             const validator = new ScheduleValidator(month);
             const { schedule: consolidated } = validator.validateScheduleWithIssues(schedule);
-            const hasBlocker = consolidated[dateStr]?.blockers?.[sh];
+            const hasBlocker = consolidated[activeDateStr]?.blockers?.[sh];
             if (hasBlocker){
-                // Rollback assignment
-                delete schedule[dateStr].assignments[sh]; appState.save();
+                delete schedule[activeDateStr].assignments[sh]; appState.save();
                 alert(`Zuweisung nicht möglich: ${hasBlocker}`);
                 return;
             }
             appState.scheduleData[month] = consolidated; appState.save();
             try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
-            // Incremental update instead of full calendar rebuild
-            this.updateDay(dateStr);
-            // Weekend report can change fairness stats; refresh only if weekend or holiday
-            const dow = date.getDay();
+            this.updateDay(activeDateStr);
+            const dow = dateObj.getDay();
             if (dow===0 || dow===6){ this.renderWeekendReport(month); }
             if (window.modalManager) window.modalManager.close('searchModal'); else window.closeModal?.('searchModal');
         };
