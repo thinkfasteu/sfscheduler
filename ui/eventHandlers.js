@@ -26,12 +26,13 @@ export class EventHandler {
 
     executeSwap() {
         const modal = document.getElementById('swapModal');
-        const dateStr = modal.dataset.date;
-        const shiftKey = modal.dataset.shift;
-        const currentStaffId = parseInt(modal.dataset.currentStaff);
-        const newStaffId = parseInt(document.getElementById('swapStaffSelect').value);
+        const dateStr = modal?.dataset.date;
+        const shiftKey = modal?.dataset.shift;
+        const currentStaffId = this.parseStaffId(modal?.dataset.currentStaff);
+        const selectEl = document.getElementById('swapStaffSelect');
+        const newStaffId = this.parseStaffId(selectEl?.value);
 
-        if (!dateStr || !shiftKey || !currentStaffId || !newStaffId) {
+        if (!dateStr || !shiftKey || currentStaffId === null || newStaffId === null) {
             alert('Invalid swap parameters');
             return;
         }
@@ -176,8 +177,9 @@ export class EventHandler {
         if (!modal) return;
         const dateStr = modal.dataset.date;
         const shiftKey = modal.dataset.shift;
-        const newStaffId = parseInt(document.getElementById('swapStaffSelect').value);
-        if (!dateStr || !shiftKey || !newStaffId){ alert('Ungültige Auswahl'); return; }
+        const selectEl = document.getElementById('swapStaffSelect');
+        const newStaffId = this.parseStaffId(selectEl?.value);
+        if (!dateStr || !shiftKey || newStaffId === null){ alert('Ungültige Auswahl'); return; }
         // If weekend + permanent without preference and no regular candidates can fill, auto-create overtime request
         try{
             const date = new Date(dateStr);
@@ -221,9 +223,16 @@ export class EventHandler {
         }
         appState.scheduleData[month] = consolidated;
         appState.save();
-    try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
-    this.ui.updateCalendarFromSelect?.();
-    try { this.modalManager.closeModal('swapModal'); } catch {}
+        try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
+        this.ui.updateCalendarFromSelect?.();
+        try { this.modalManager.closeModal('swapModal'); } catch {}
+    }
+
+    parseStaffId(raw){
+        if (raw === undefined) return null;
+        if (raw === 'manager') return 'manager';
+        const parsed = parseInt(raw, 10);
+        return Number.isNaN(parsed) ? null : parsed;
     }
 
     async finalizeSchedule() {
