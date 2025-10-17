@@ -300,6 +300,10 @@ class SchedulingEngine {
     isNightWeekendShift(shiftKey){ return shiftKey==='closing' || shiftKey.startsWith('weekend-'); }
     parseShiftTime(dateStr, timeStr){ const [H,M]=timeStr.split(':').map(Number); const [y,m,d]=dateStr.split('-').map(Number); return new Date(y,m-1,d,H,M); }
 
+    isManagerStaffId(staffId){
+        return staffId === 'manager';
+    }
+
     isAlternativeWeekendDay(dateStr, staff){
         if (!APP_CONFIG?.ALTERNATIVE_WEEKEND_ENABLED) return false;
         if (!staff?.alternativeWeekendDays || staff.alternativeWeekendDays.length!==2) return false;
@@ -648,6 +652,7 @@ class SchedulingEngine {
             const weekNum = this.getWeekNumber(parseYMD(dateStr));
             const assigns = day?.assignments || {};
             Object.entries(assigns).forEach(([shiftKey, staffId]) => {
+                if (this.isManagerStaffId(staffId)) return; // skip manager wildcard entries entirely
                 const hours = SHIFTS[shiftKey]?.hours || 0;
                 this.monthlyHours[staffId] = (this.monthlyHours[staffId] || 0) + hours;
                 const staff = (appState.staffData||[]).find(s=>s.id==staffId);
