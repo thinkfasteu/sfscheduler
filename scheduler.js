@@ -722,15 +722,12 @@ class SchedulingEngine {
             }
             return hasWeekendAvail && !hasWeekdayAvail;
         };
+        let previousDayEndTimes = { ...this.lastShiftEndTimes };
         for (let day=1; day<=schedule.daysInMonth; day++){
             const date = new Date(this.year, this.monthNum-1, day);
             const dateStr = this.toLocalISODate(date);
             const weekNum = this.getWeekNumber(date);
-            
-            // CRITICAL FIX: Re-seed trackers to only include shifts from days before this candidate date
-            // This ensures lastShiftEndTimes only contains end times from previous days for rest-period calculations
-            this.lastShiftEndTimes = {}; // Reset
-            this.seedTrackersFromExistingSchedule(dateStr);
+            this.lastShiftEndTimes = { ...previousDayEndTimes };
             
             if (weekNum !== currentWeek){ currentWeek = weekNum; (appState.staffData||[]).forEach(s=>{ this.daysWorkedThisWeek[s.id]=0; }); }
             
@@ -793,6 +790,7 @@ class SchedulingEngine {
                 }
             }
             this.updateConsecutiveDays(scheduledToday);
+            previousDayEndTimes = { ...this.lastShiftEndTimes };
         }
         // Compute and store carryover-out for next month per staff
         (appState.staffData||[]).forEach(s=>{
