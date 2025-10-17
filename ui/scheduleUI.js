@@ -905,13 +905,14 @@ export class ScheduleUI {
         Array.from(weekendDays).forEach(ds => {
             const assigns = data[ds]?.assignments || {};
             Object.values(assigns).forEach(staffId => {
-                counts[staffId] = (counts[staffId]||0)+1;
+                if (!counts[staffId]) counts[staffId] = new Set();
+                counts[staffId].add(ds);
             });
         });
         const staffList = (window.appState?.staffData||[]);
         const lines = staffList.map(s => {
             const isPerm = s.role==='permanent';
-            const c = Math.floor((counts[s.id]||0)/2); // per-weekend count approx
+            const c = counts[s.id]?.size || 0;
             const emoji = isPerm ? '🔹' : (c>=1 ? '✅' : '⚠️');
             const suffix = isPerm ? 'Festangestellt (keine Anforderungen)' : '';
             return `${emoji} ${s.name}\n${c}/${weekendCount} Wochenenden\n${suffix}`;

@@ -35,6 +35,7 @@ export class ScheduleValidator {
             day.blockers = {};
             day.warnings = {};
             Object.entries(day.assignments || {}).forEach(([shiftKey, staffId]) => {
+                if (staffId === 'manager') return; // Skip blockers for manager wildcard
                 const staffIssues = Object.values(issues).flat().filter((i) => i.staffId === staffId && (!i.dateStr || i.dateStr === dateStr) && (!i.shiftKey || i.shiftKey === shiftKey));
                 if (staffIssues.some((i) => i.severity === "error")) {
                     day.blockers[shiftKey] = staffIssues.filter((i) => i.severity === "error").map((i) => i.message).join("; ");
@@ -118,6 +119,7 @@ export class ScheduleValidator {
         Object.entries(schedule).forEach(([dateStr, day]) => {
             const weekNum = getWeekNumber(parseYMD(dateStr));
             Object.entries(day.assignments || {}).forEach(([shiftKey, staffId]) => {
+                if (staffId === 'manager') return; // Skip workload for manager
                 const hours = SHIFTS[shiftKey].hours;
                 
                 // Track weekly hours
@@ -191,6 +193,7 @@ export class ScheduleValidator {
         const monthlyHours = {};
         Object.entries(schedule).forEach(([dateStr, day]) => {
             Object.entries(day.assignments || {}).forEach(([shiftKey, staffId]) => {
+                if (staffId === 'manager') return; // Skip earnings for manager
                 const hours = SHIFTS[shiftKey]?.hours || 0;
                 monthlyHours[staffId] = (monthlyHours[staffId] || 0) + hours;
             });
@@ -220,6 +223,7 @@ export class ScheduleValidator {
             const weekNum = getWeekNumber(parseYMD(dateStr));
             if (!sampleDateByWeek[weekNum]) sampleDateByWeek[weekNum] = dateStr;
             Object.entries(day.assignments||{}).forEach(([shiftKey, staffId]) => {
+                if (staffId === 'manager') return; // Skip student hours for manager
                 const hours = SHIFTS[shiftKey]?.hours || 0;
                 weeklyHoursByStaff[staffId] = weeklyHoursByStaff[staffId] || {};
                 weeklyHoursByStaff[staffId][weekNum] = (weeklyHoursByStaff[staffId][weekNum] || 0) + hours;
@@ -294,6 +298,7 @@ export class ScheduleValidator {
             if (!isWeekend) return;
 
             Object.values(day.assignments || {}).forEach(staffId => {
+                if (staffId === 'manager') return; // Skip weekend distribution for manager
                 weekendCounts[staffId] = (weekendCounts[staffId] || 0) + 1;
             });
         });
@@ -344,6 +349,7 @@ export class ScheduleValidator {
         };
         Object.entries(schedule).forEach(([dateStr, day])=>{
             Object.entries(day.assignments || {}).forEach(([shiftKey, staffId])=>{
+                if (staffId === 'manager') return; // Skip absence checks for manager
                 const vac = appState.vacationsByStaff?.[staffId] || [];
                 const ill = appState.illnessByStaff?.[staffId] || [];
                 const dayOff = appState.availabilityData?.[`staff:${staffId}`]?.[dateStr] === 'off';
@@ -367,6 +373,7 @@ export class ScheduleValidator {
         Object.entries(schedule).forEach(([dateStr, day])=>{
             const byStaff = {};
             Object.entries(day.assignments || {}).forEach(([shiftKey, staffId])=>{
+                if (staffId === 'manager') return; // Skip overlap checks for manager
                 if (!byStaff[staffId]) byStaff[staffId] = [];
                 byStaff[staffId].push(shiftKey);
             });
@@ -389,7 +396,7 @@ export class ScheduleValidator {
         Object.entries(schedule).forEach(([dateStr, day])=>{
             const weekNum = getWeekNumber(parseYMD(dateStr));
             const seen = new Set();
-            Object.values(day.assignments || {}).forEach(staffId => { seen.add(staffId); });
+            Object.values(day.assignments || {}).forEach(staffId => { if (staffId !== 'manager') seen.add(staffId); });
             seen.forEach(staffId => {
                 daysPerWeek[weekNum] = daysPerWeek[weekNum] || {};
                 daysPerWeek[weekNum][staffId] = (daysPerWeek[weekNum][staffId] || 0) + 1;
