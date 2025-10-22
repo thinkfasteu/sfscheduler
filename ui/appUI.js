@@ -713,11 +713,13 @@ export class AppUI {
     const monthSel = document.getElementById('availabilityMonth');
     const host = document.getElementById('availabilityForm');
     if (!staffSel || !monthSel || !host) return;
-    const staffList = (__services?.staff?.list ? __services.staff.list() : appState.staffData) || [];
-    const staffId = Number(staffSel.value);
-    const staff = staffList.find(s=>s.id===staffId);
+  const staffList = (__services?.staff?.list ? __services.staff.list() : appState.staffData) || [];
+  const staffValue = staffSel.value;
+  const staff = staffList.find(s=> String(s.id) === staffValue);
+  const staffId = staff ? staff.id : staffValue;
+  const staffKey = String(staffId);
     const month = monthSel.value;
-    if (!staffId || !month){ host.innerHTML = '<p>Bitte Mitarbeiter und Monat auswählen.</p>'; return; }
+  if (!staffValue || !month){ host.innerHTML = '<p>Bitte Mitarbeiter und Monat auswählen.</p>'; return; }
     // Pre-hydrate availability for this staff/month if using remote backend
     (async ()=>{
       if (!availSvc?.listRange) return;
@@ -771,6 +773,56 @@ export class AppUI {
     } else {
       html += '<div class="avail-row avail-head avail-cols-regular"><div class="avail-cell">Datum</div><div class="avail-cell">Schichten</div></div>';
     }
+    const getDaySnapshot = (dateStr) => {
+      const remoteDay = availSvc?.getDay ? (availSvc.getDay(staffId, dateStr) || {}) : {};
+      const localDay = appState.availabilityData?.[staffKey]?.[dateStr] || {};
+      return { ...localDay, ...remoteDay };
+    };
+    const getShiftValue = (dateStr, shiftKey) => {
+      const snapshot = getDaySnapshot(dateStr);
+      return snapshot ? snapshot[shiftKey] : undefined;
+    };
+    const isDayOff = (dateStr) => {
+      if (availSvc?.isDayOff && availSvc.isDayOff(staffId, dateStr)) return true;
+      return appState.availabilityData?.[`staff:${staffKey}`]?.[dateStr] === 'off';
+    };
+    const isVoluntary = (dateStr, kind) => {
+      if (availSvc?.isVoluntary && availSvc.isVoluntary(staffId, dateStr, kind)) return true;
+      const key = `${staffKey}::${dateStr}::${kind}`;
+      return !!appState.voluntaryEveningAvailability?.[key];
+    };
+    const applyLocalShift = (dateStr, shiftKey, status) => {
+      if (!appState.availabilityData) appState.availabilityData = {};
+      if (!appState.availabilityData[staffKey]) appState.availabilityData[staffKey] = {};
+      if (!appState.availabilityData[staffKey][dateStr]) appState.availabilityData[staffKey][dateStr] = {};
+      if (!status){
+        delete appState.availabilityData[staffKey][dateStr][shiftKey];
+        if (Object.keys(appState.availabilityData[staffKey][dateStr]).length===0) delete appState.availabilityData[staffKey][dateStr];
+        if (Object.keys(appState.availabilityData[staffKey]).length===0) delete appState.availabilityData[staffKey];
+      } else {
+        appState.availabilityData[staffKey][dateStr][shiftKey] = status;
+      }
+      appState.save?.();
+    };
+    const applyLocalDayOff = (dateStr, isOff) => {
+      const sentinelKey = `staff:${staffKey}`;
+      if (!appState.availabilityData) appState.availabilityData = {};
+      if (!appState.availabilityData[sentinelKey]) appState.availabilityData[sentinelKey] = {};
+      if (isOff) {
+        appState.availabilityData[sentinelKey][dateStr] = 'off';
+      } else {
+        delete appState.availabilityData[sentinelKey][dateStr];
+        if (Object.keys(appState.availabilityData[sentinelKey]).length === 0) delete appState.availabilityData[sentinelKey];
+      }
+      appState.save?.();
+    };
+    const applyLocalVoluntary = (dateStr, kind, checked) => {
+      if (!appState.voluntaryEveningAvailability) appState.voluntaryEveningAvailability = {};
+      const key = `${staffKey}::${dateStr}::${kind}`;
+      if (checked) appState.voluntaryEveningAvailability[key] = true; else delete appState.voluntaryEveningAvailability[key];
+      appState.save?.();
+    };
+
     for (let d=1; d<=days; d++){
       const dateStr = `${y}-${pad2(m)}-${pad2(d)}`;
       const type = getTypeForDate(dateStr);
@@ -779,15 +831,14 @@ export class AppUI {
       const holName = type==='holiday' ? (appState.holidays[String(y)]?.[dateStr]||'') : '';
       const rowClasses = ['avail-row']; if (isWE) rowClasses.push('is-weekend'); if (holName) rowClasses.push('is-holiday');
       const flags = [ isWE ? '<span class="day-flag">Wochenende</span>' : '', holName ? `<span class="day-flag">${holName}</span>` : '' ].filter(Boolean).join('');
-      const off = availSvc?.isDayOff(staffId, dateStr) || appState.dayOffRequests?.[staffId]?.[dateStr] || false;
+      const off = isDayOff(dateStr);
   html += `<div class="${rowClasses.join(' ')} ${isPermanent ? 'avail-cols-permanent' : 'avail-cols-regular'}">`;
   html += `<div class="avail-cell"><strong>${pad2(d)}.${pad2(m)}.${y}</strong> ${flags}</div>`;
   html += '<div class="avail-cell text-left">';
       if (shiftsForDay.length===0){ html += '<span class="na-cell">—</span>'; }
       else {
-        const detailedDay = availSvc?.getDay(staffId, dateStr) || appState.availabilityData?.[staffId]?.[dateStr] || {};
         shiftsForDay.forEach(k=>{
-          let val = detailedDay[k];
+          let val = getShiftValue(dateStr, k);
           // Treat legacy 'no' for non-permanent as unset
           if (!isPermanent && val === 'no') val = undefined;
           const isBlocked = isPermanent ? (val === 'no') : false;
@@ -801,8 +852,8 @@ export class AppUI {
       html += '</div>';
       if (isPermanent){
         const isWeekday = !isWE && !holName;
-        const vEven = isWeekday ? (availSvc?.isVoluntary(staffId, dateStr, 'evening') || appState.voluntaryAvailability?.[staffId]?.[dateStr]?.evening || false) : false;
-        const vClose = isWeekday ? (availSvc?.isVoluntary(staffId, dateStr, 'closing') || appState.voluntaryAvailability?.[staffId]?.[dateStr]?.closing || false) : false;
+        const vEven = isWeekday ? isVoluntary(dateStr, 'evening') : false;
+        const vClose = isWeekday ? isVoluntary(dateStr, 'closing') : false;
   html += `<div class="avail-cell">${isWeekday?`<label class="inline align-center gap-6"><input type="checkbox" class="vol-evening" data-date="${dateStr}" ${vEven?'checked':''}/> <span>Abend</span></label>`:'<span class="na-cell">—</span>'}</div>`;
   html += `<div class="avail-cell">${isWeekday?`<label class="inline align-center gap-6"><input type="checkbox" class="vol-closing" data-date="${dateStr}" ${vClose?'checked':''}/> <span>Spät</span></label>`:'<span class="na-cell">—</span>'}</div>`;
       }
@@ -822,23 +873,15 @@ export class AppUI {
     host.querySelectorAll('button.avail-btn').forEach(btn => {
       btn.addEventListener('click', e => {
         const b = e.currentTarget; const dateStr = b.dataset.date; const shiftKey = b.dataset.shift;
-        const detailedDay = availSvc?.getDay(staffId, dateStr) || {};
-        let current = detailedDay[shiftKey];
+        let current = getShiftValue(dateStr, shiftKey);
         if (staff?.role !== 'permanent' && current === 'no') current = undefined; // migrate legacy
         const next = (staff?.role === 'permanent')
           ? (current === 'no' ? undefined : 'no') // permanent keeps opt-out toggle
           : (current === 'yes' ? 'prefer' : current === 'prefer' ? undefined : 'yes'); // undefined -> yes -> prefer -> undefined
-        if (availSvc) {
-          availSvc.setShift(staffId, dateStr, shiftKey, next);
-        } else {
-          // Fallback to appState update
-          if (!appState.availabilityData) appState.availabilityData = {};
-          if (!appState.availabilityData[staffId]) appState.availabilityData[staffId] = {};
-          if (!appState.availabilityData[staffId][dateStr]) appState.availabilityData[staffId][dateStr] = {};
-          appState.availabilityData[staffId][dateStr][shiftKey] = next;
-          appState.save();
-          console.warn('[Availability] Updated local appState (remote service unavailable)');
+        if (availSvc?.setShift) {
+          try { availSvc.setShift(staffId, dateStr, shiftKey, next); } catch (err) { console.warn('[Availability] setShift failed (will rely on local state)', err); }
         }
+        applyLocalShift(dateStr, shiftKey, next);
         this.handleAvailabilityDisplay();
       });
     });
@@ -847,31 +890,18 @@ export class AppUI {
       const toggleVol = (kind, cb) => {
         const dateStr = cb.getAttribute('data-date');
         if (availSvc) {
-          availSvc.setVoluntary(staffId, dateStr, kind, cb.checked);
-        } else {
-          // Fallback to appState update
-          if (!appState.voluntaryAvailability) appState.voluntaryAvailability = {};
-          if (!appState.voluntaryAvailability[staffId]) appState.voluntaryAvailability[staffId] = {};
-          if (!appState.voluntaryAvailability[staffId][dateStr]) appState.voluntaryAvailability[staffId][dateStr] = {};
-          appState.voluntaryAvailability[staffId][dateStr][kind] = cb.checked;
-          appState.save();
-          console.warn('[Availability] Updated local appState for voluntary (remote service unavailable)');
+          try { availSvc.setVoluntary(staffId, dateStr, kind, cb.checked); } catch (err) { console.warn('[Availability] setVoluntary failed (will rely on local state)', err); }
         }
+        applyLocalVoluntary(dateStr, kind, cb.checked);
       };
       host.querySelectorAll('input.vol-evening').forEach(cb => cb.addEventListener('change', e=>toggleVol('evening', e.currentTarget)));
       host.querySelectorAll('input.vol-closing').forEach(cb => cb.addEventListener('change', e=>toggleVol('closing', e.currentTarget)));
       host.querySelectorAll('button[data-dayoff="1"]').forEach(btn => btn.addEventListener('click', e => {
         const b = e.currentTarget; const dateStr = b.dataset.date; const isOff = b.dataset.off === '1';
-        if (availSvc) {
-          availSvc.setDayOff(staffId, dateStr, !isOff);
-        } else {
-          // Fallback to appState update
-          if (!appState.dayOffRequests) appState.dayOffRequests = {};
-          if (!appState.dayOffRequests[staffId]) appState.dayOffRequests[staffId] = {};
-          appState.dayOffRequests[staffId][dateStr] = !isOff;
-          appState.save();
-          console.warn('[Availability] Updated local appState for dayoff (remote service unavailable)');
+        if (availSvc?.setDayOff) {
+          try { availSvc.setDayOff(staffId, dateStr, !isOff); } catch (err) { console.warn('[Availability] setDayOff failed (will rely on local state)', err); }
         }
+        applyLocalDayOff(dateStr, !isOff);
         this.handleAvailabilityDisplay();
       }));
     }
