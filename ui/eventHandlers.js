@@ -413,16 +413,9 @@ export class EventHandler {
         }
 
         if (violations.length > 0) {
-            if (this.ui?.highlightViolations) {
-                this.ui.highlightViolations(violations);
-            }
             const msg = violations.map(v => `${v.dateStr} ${v.shift}: ${v.blocker}`).join('\n');
-            alert(`PDF-Export gestoppt: Der Plan enthält noch Blocker.\n\n${msg}`);
-            return;
-        }
-
-        if (this.ui?.clearViolations) {
-            this.ui.clearViolations();
+            const confirmed = confirm(`Der Plan enthält noch Fehler und wurde nicht finalisiert.\n\n${msg}\n\nTrotzdem PDF exportieren?`);
+            if (!confirmed) return;
         }
 
         try {
