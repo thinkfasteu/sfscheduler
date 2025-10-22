@@ -335,7 +335,7 @@ export class AppUI {
 
   renderStaffList(){
     const host = document.getElementById('staffList');
-    if (!host) return;
+    if (!host) return; 
     const staffSvc = __services?.staff;
     if (!staffSvc){
       host.innerHTML = '<p>Dienste werden initialisiert…</p>';
@@ -821,10 +821,13 @@ export class AppUI {
       const isWE = type==='weekend';
       const holName = type==='holiday' ? (appState.holidays[String(y)]?.[dateStr]||'') : '';
       const rowClasses = ['avail-row']; if (isWE) rowClasses.push('is-weekend'); if (holName) rowClasses.push('is-holiday');
-      const flags = [ isWE ? '<span class="day-flag">Wochenende</span>' : '', holName ? `<span class="day-flag">${holName}</span>` : '' ].filter(Boolean).join('');
+  const dateObj = parseYMD(dateStr);
+  const dayIndex = (dateObj instanceof Date && !Number.isNaN(dateObj?.getTime?.())) ? dateObj.getDay() : new Date(`${dateStr}T00:00:00`).getDay();
+  const weekdayLabel = ['So','Mo','Di','Mi','Do','Fr','Sa'][dayIndex] || '';
+    const flags = [ isWE ? '<span class="day-flag">Wochenende</span>' : '', holName ? `<span class="day-flag">${holName}</span>` : '' ].filter(Boolean).join('');
       const off = isDayOff(dateStr);
   html += `<div class="${rowClasses.join(' ')} ${isPermanent ? 'avail-cols-permanent' : 'avail-cols-regular'}">`;
-  html += `<div class="avail-cell"><strong>${pad2(d)}.${pad2(m)}.${y}</strong> ${flags}</div>`;
+  html += `<div class="avail-cell"><span class="day-label">${weekdayLabel}</span><strong>${pad2(d)}.${pad2(m)}.${y}</strong> ${flags}</div>`;
   html += '<div class="avail-cell text-left">';
       if (shiftsForDay.length===0){ html += '<span class="na-cell">—</span>'; }
       else {
