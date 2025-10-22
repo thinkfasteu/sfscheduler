@@ -779,13 +779,13 @@ export class AppUI {
       const holName = type==='holiday' ? (appState.holidays[String(y)]?.[dateStr]||'') : '';
       const rowClasses = ['avail-row']; if (isWE) rowClasses.push('is-weekend'); if (holName) rowClasses.push('is-holiday');
       const flags = [ isWE ? '<span class="day-flag">Wochenende</span>' : '', holName ? `<span class="day-flag">${holName}</span>` : '' ].filter(Boolean).join('');
-      const off = availSvc?.isDayOff(staffId, dateStr) || false;
+      const off = availSvc?.isDayOff(staffId, dateStr) || appState.dayOffRequests?.[staffId]?.[dateStr] || false;
   html += `<div class="${rowClasses.join(' ')} ${isPermanent ? 'avail-cols-permanent' : 'avail-cols-regular'}">`;
   html += `<div class="avail-cell"><strong>${pad2(d)}.${pad2(m)}.${y}</strong> ${flags}</div>`;
   html += '<div class="avail-cell text-left">';
       if (shiftsForDay.length===0){ html += '<span class="na-cell">—</span>'; }
       else {
-        const detailedDay = availSvc?.getDay(staffId, dateStr) || {};
+        const detailedDay = availSvc?.getDay(staffId, dateStr) || appState.availabilityData?.[staffId]?.[dateStr] || {};
         shiftsForDay.forEach(k=>{
           let val = detailedDay[k];
           // Treat legacy 'no' for non-permanent as unset
@@ -801,8 +801,8 @@ export class AppUI {
       html += '</div>';
       if (isPermanent){
         const isWeekday = !isWE && !holName;
-        const vEven = isWeekday ? (availSvc?.isVoluntary(staffId, dateStr, 'evening')||false) : false;
-        const vClose = isWeekday ? (availSvc?.isVoluntary(staffId, dateStr, 'closing')||false) : false;
+        const vEven = isWeekday ? (availSvc?.isVoluntary(staffId, dateStr, 'evening') || appState.voluntaryAvailability?.[staffId]?.[dateStr]?.evening || false) : false;
+        const vClose = isWeekday ? (availSvc?.isVoluntary(staffId, dateStr, 'closing') || appState.voluntaryAvailability?.[staffId]?.[dateStr]?.closing || false) : false;
   html += `<div class="avail-cell">${isWeekday?`<label class="inline align-center gap-6"><input type="checkbox" class="vol-evening" data-date="${dateStr}" ${vEven?'checked':''}/> <span>Abend</span></label>`:'<span class="na-cell">—</span>'}</div>`;
   html += `<div class="avail-cell">${isWeekday?`<label class="inline align-center gap-6"><input type="checkbox" class="vol-closing" data-date="${dateStr}" ${vClose?'checked':''}/> <span>Spät</span></label>`:'<span class="na-cell">—</span>'}</div>`;
       }
@@ -828,7 +828,17 @@ export class AppUI {
         const next = (staff?.role === 'permanent')
           ? (current === 'no' ? undefined : 'no') // permanent keeps opt-out toggle
           : (current === 'yes' ? 'prefer' : current === 'prefer' ? undefined : 'yes'); // undefined -> yes -> prefer -> undefined
-        availSvc?.setShift(staffId, dateStr, shiftKey, next);
+        if (availSvc) {
+          availSvc.setShift(staffId, dateStr, shiftKey, next);
+        } else {
+          // Fallback to appState update
+          if (!appState.availabilityData) appState.availabilityData = {};
+          if (!appState.availabilityData[staffId]) appState.availabilityData[staffId] = {};
+          if (!appState.availabilityData[staffId][dateStr]) appState.availabilityData[staffId][dateStr] = {};
+          appState.availabilityData[staffId][dateStr][shiftKey] = next;
+          appState.save();
+          console.warn('[Availability] Updated local appState (remote service unavailable)');
+        }
         this.handleAvailabilityDisplay();
       });
     });
@@ -836,13 +846,32 @@ export class AppUI {
     if (isPermanent){
       const toggleVol = (kind, cb) => {
         const dateStr = cb.getAttribute('data-date');
-        availSvc?.setVoluntary(staffId, dateStr, kind, cb.checked);
+        if (availSvc) {
+          availSvc.setVoluntary(staffId, dateStr, kind, cb.checked);
+        } else {
+          // Fallback to appState update
+          if (!appState.voluntaryAvailability) appState.voluntaryAvailability = {};
+          if (!appState.voluntaryAvailability[staffId]) appState.voluntaryAvailability[staffId] = {};
+          if (!appState.voluntaryAvailability[staffId][dateStr]) appState.voluntaryAvailability[staffId][dateStr] = {};
+          appState.voluntaryAvailability[staffId][dateStr][kind] = cb.checked;
+          appState.save();
+          console.warn('[Availability] Updated local appState for voluntary (remote service unavailable)');
+        }
       };
       host.querySelectorAll('input.vol-evening').forEach(cb => cb.addEventListener('change', e=>toggleVol('evening', e.currentTarget)));
       host.querySelectorAll('input.vol-closing').forEach(cb => cb.addEventListener('change', e=>toggleVol('closing', e.currentTarget)));
       host.querySelectorAll('button[data-dayoff="1"]').forEach(btn => btn.addEventListener('click', e => {
         const b = e.currentTarget; const dateStr = b.dataset.date; const isOff = b.dataset.off === '1';
-        availSvc?.setDayOff(staffId, dateStr, !isOff);
+        if (availSvc) {
+          availSvc.setDayOff(staffId, dateStr, !isOff);
+        } else {
+          // Fallback to appState update
+          if (!appState.dayOffRequests) appState.dayOffRequests = {};
+          if (!appState.dayOffRequests[staffId]) appState.dayOffRequests[staffId] = {};
+          appState.dayOffRequests[staffId][dateStr] = !isOff;
+          appState.save();
+          console.warn('[Availability] Updated local appState for dayoff (remote service unavailable)');
+        }
         this.handleAvailabilityDisplay();
       }));
     }
