@@ -868,7 +868,7 @@ export class AppUI {
     try {
       const autoCarry = __services?.carryover?.auto ? __services.carryover.auto(staff, month, { getPrevMonthKey: this.getPrevMonthKey.bind(this), sumStaffHoursForMonth: this.sumStaffHoursForMonth.bind(this) }) : this.computeAutoCarryover(staff, month);
       const manualCarry = (__services?.carryover ? __services.carryover.get(staffId, month) : Number(appState.carryoverByStaffAndMonth?.[staffId]?.[month] ?? 0));
-  html += `\n<div class="card mt-12 p-12">\n  <div class="fw-600 mb-4">Stundenübertrag (Vormonat → ${month})</div>\n  <div class="text-muted fs-90 mb-8">Ein positiver Wert erhöht das Monatsziel (z. B. +3h), ein negativer Wert verringert es (z. B. -3h).</div>\n  <div class="form-row grid-cols-auto-120px-auto-auto align-end gap-10">\n    <label for="carryoverInput">Manueller Übertrag</label>\n    <input type="number" id="carryoverInput" value="${manualCarry}" step="0.25" class="w-120" />\n    <div class="text-muted">Auto (${autoCarry.toFixed(2)} h)</div>\n    <button class="btn" id="carryoverSaveBtn">Speichern</button>\n  </div>\n  <div class="text-muted fs-85 mt-6">Ergebnisse sind kumulativ; Ziel ist, den Übertrag bis zum Ende des Folgemonats auf 0 zu bringen.</div>\n</div>`;
+  html += `\n<div class="card mt-12 p-12">\n  <div class="fw-600 mb-4">Stundenübertrag (Vormonat → ${month})</div>\n  <div class="text-muted fs-90 mb-8">Ein positiver Wert erhöht das Monatsziel (z. B. +3h), ein negativer Wert verringert es (z. B. -3h).</div>\n  <div class="form-row grid-cols-auto-120px-auto-auto-auto align-end gap-10">\n    <label for="carryoverInput">Manueller Übertrag</label>\n    <input type="number" id="carryoverInput" value="${manualCarry}" step="0.25" class="w-120" />\n    <div class="text-muted">Auto (${autoCarry.toFixed(2)} h)</div>\n    <button class="btn" id="carryoverSaveBtn">Speichern</button>\n    <button class="btn btn-secondary" id="carryoverResetBtn">Zurücksetzen</button>\n  </div>\n  <div class="text-muted fs-85 mt-6">Ergebnisse sind kumulativ; Ziel ist, den Übertrag bis zum Ende des Folgemonats auf 0 zu bringen.</div>\n</div>`;
     } catch(e){ console.warn('Carryover panel render failed', e); }
     host.innerHTML = html;
 
@@ -933,6 +933,23 @@ export class AppUI {
           if (!appState.carryoverByStaffAndMonth) appState.carryoverByStaffAndMonth = {};
           if (!appState.carryoverByStaffAndMonth[staffId]) appState.carryoverByStaffAndMonth[staffId] = {};
           appState.carryoverByStaffAndMonth[staffId][month] = Number.isFinite(val)?val:0;
+          appState.save();
+        }
+        this.handleAvailabilityDisplay();
+      });
+    }
+    const resetBtn = host.querySelector('#carryoverResetBtn');
+    if (resetBtn){
+      resetBtn.addEventListener('click', ()=>{
+        const inp = host.querySelector('#carryoverInput');
+        inp.value = 0;
+        if (__services?.carryover){
+          __services.carryover.set(staffId, month, 0);
+          __services?.audit?.log?.(auditMsg('carryover.reset',{staffId,month,value:0}));
+        } else {
+          if (!appState.carryoverByStaffAndMonth) appState.carryoverByStaffAndMonth = {};
+          if (!appState.carryoverByStaffAndMonth[staffId]) appState.carryoverByStaffAndMonth[staffId] = {};
+          appState.carryoverByStaffAndMonth[staffId][month] = 0;
           appState.save();
         }
         this.handleAvailabilityDisplay();
