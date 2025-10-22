@@ -1,8 +1,28 @@
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import autoTableModule from 'jspdf-autotable';
 import { appState } from '../modules/state.js';
 import { SHIFTS } from '../modules/config.js';
 import { formatDateDE, parseYMD } from '../utils/dateUtils.js';
+
+let resolvedAutoTable = null;
+
+function resolveAutoTable(mod) {
+	if (!mod) return null;
+	if (typeof mod === 'function') return mod;
+	if (typeof mod.autoTable === 'function') return mod.autoTable;
+	if (mod.default && mod.default !== mod) return resolveAutoTable(mod.default);
+	return null;
+}
+
+function getAutoTable() {
+	if (!resolvedAutoTable) {
+		resolvedAutoTable = resolveAutoTable(autoTableModule);
+	}
+	if (typeof resolvedAutoTable !== 'function') {
+		throw new Error('jspdf-autotable plugin not available');
+	}
+	return resolvedAutoTable;
+}
 
 const PAGE_MARGINS = { top: 32, right: 16, bottom: 38, left: 16 };
 const HEADER_COLOR = [33, 37, 41];
@@ -187,6 +207,7 @@ export function exportSchedulePdf({ month, schedule }) {
 	doc.setFontSize(16);
 	doc.text(`Dienstplan ${monthLabel}`, PAGE_MARGINS.left, 22);
 
+	const autoTable = getAutoTable();
 	autoTable(doc, {
 		startY: PAGE_MARGINS.top,
 		margin: PAGE_MARGINS,

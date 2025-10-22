@@ -10,8 +10,11 @@ let __services = (typeof window!=='undefined' && window.__services) ? window.__s
 export class AppUI {
   constructor(scheduleUI){
     this.scheduleUI = scheduleUI;
-  // Track when async service hydration (Supabase) finished so we can avoid showing an empty state prematurely
-  this._servicesHydrated = false;
+    // Track when async service hydration (Supabase) finished so we can avoid showing an empty state prematurely
+    this._servicesHydrated = false;
+    this._lastAvailabilitySyncKey = null;
+    this._availabilityHydrateTimer = null;
+    this._availabilityHydrationInFlight = false;
   }
 
   init(){
