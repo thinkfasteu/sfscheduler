@@ -15,6 +15,7 @@ export class AppUI {
     this._lastAvailabilitySyncKey = null;
     this._availabilityHydrateTimer = null;
     this._availabilityHydrationInFlight = false;
+    this._lastAvailabilityHydratedAt = 0;
   }
 
   init(){
@@ -724,48 +725,32 @@ export class AppUI {
   const staffKey = String(staffId);
     const month = monthSel.value;
   if (!staffValue || !month){ host.innerHTML = '<p>Bitte Mitarbeiter und Monat auswählen.</p>'; return; }
-    // Pre-hydrate availability for this staff/month if using remote backend
-    (async ()=>{
-      if (!availSvc?.listRange) return;
-      const store = window.__services?.store;
-      const remote = !!(store && (store.remote || store.constructor?.name === 'SupabaseAdapter'));
-      if (!remote) return;
-      const readyPromise = window.__services?.ready;
-      try {
-        if (readyPromise?.then) {
-          await readyPromise;
-        }
-      } catch (readyErr) {
-        console.warn('[Availability] service init wait failed', readyErr);
-      }
-      const [yy,mm] = month.split('-').map(Number);
-      const fromDate = `${yy}-${String(mm).padStart(2,'0')}-01`;
-      const toDate = `${yy}-${String(mm).padStart(2,'0')}-${String(new Date(yy, mm, 0).getDate()).padStart(2,'0')}`;
-      const previous = host.innerHTML;
-      host.innerHTML = '<div class="status-line"><span class="spinner"></span><span>Verfügbarkeiten laden…</span></div>' + previous;
-      const selDisabled = { s: staffSel.disabled, m: monthSel.disabled };
-      staffSel.disabled = true; monthSel.disabled = true;
-      let status;
-      try {
-        await availSvc.listRange(staffId, fromDate, toDate);
-        status = host.querySelector('.status-line');
-        if (status){
-          const sp = status.querySelector('.spinner');
-          if (sp) sp.classList.add('hidden');
-          status.querySelector('span:last-child').textContent = 'Synchronisiert ✓';
-        }
-      } catch(e){
-        console.warn('[Availability] pre-hydration failed', e);
-        status = host.querySelector('.status-line');
-        if (status){ status.querySelector('span:last-child').textContent = 'Synchronisation fehlgeschlagen'; }
-      } finally {
-        staffSel.disabled = selDisabled.s; monthSel.disabled = selDisabled.m;
-        status = status || host.querySelector('.status-line');
-        if (status){ setTimeout(()=>{ status.remove(); }, 1200); }
-      }
-    })();
     const [y,m] = month.split('-').map(Number);
     const days = new Date(y, m, 0).getDate();
+
+    const ensureSyncStatus = (message, variant) => {
+      let statusLine = host.querySelector('.availability-sync-status');
+      if (!statusLine) {
+        statusLine = document.createElement('div');
+        statusLine.className = 'status-line availability-sync-status';
+        const spinner = document.createElement('span');
+        spinner.className = 'spinner';
+        const text = document.createElement('span');
+        text.textContent = message || '';
+        statusLine.appendChild(spinner);
+        statusLine.appendChild(text);
+        host.prepend(statusLine);
+      } else {
+        const spinner = statusLine.querySelector('.spinner');
+        if (spinner) spinner.classList.toggle('hidden', variant === 'success');
+        const text = statusLine.querySelector('span:last-child');
+        if (text) text.textContent = message || '';
+        statusLine.classList.remove('status-error','status-success');
+        if (variant === 'error') statusLine.classList.add('status-error');
+        if (variant === 'success') statusLine.classList.add('status-success');
+      }
+      return statusLine;
+    };
 
     const getTypeForDate = (dateStr) => {
       const d = parseYMD(dateStr); const isWE = d.getDay()===0 || d.getDay()===6; const hol = appState.holidays[String(y)]?.[dateStr]; return hol ? 'holiday' : (isWE ? 'weekend' : 'weekday'); };
@@ -787,8 +772,10 @@ export class AppUI {
       return snapshot ? snapshot[shiftKey] : undefined;
     };
     const isDayOff = (dateStr) => {
-      if (availSvc?.isDayOff && availSvc.isDayOff(staffId, dateStr)) return true;
-      return appState.availabilityData?.[`staff:${staffKey}`]?.[dateStr] === 'off';
+      const remote = availSvc?.isDayOff ? availSvc.isDayOff(staffId, dateStr) : undefined;
+      const localSentinel = appState.availabilityData?.[`staff:${staffKey}`]?.[dateStr];
+      const normalizedLocal = localSentinel === 'off' || localSentinel === true;
+      return !!(remote || normalizedLocal);
     };
     const isVoluntary = (dateStr, kind) => {
       if (availSvc?.isVoluntary && availSvc.isVoluntary(staffId, dateStr, kind)) return true;
@@ -930,6 +917,61 @@ export class AppUI {
         this.handleAvailabilityDisplay();
       });
     }
+
+    const runRemoteSync = async () => {
+      if (!availSvc?.listRange) return;
+      const store = window.__services?.store;
+      const remote = !!(store && (store.remote || store.constructor?.name === 'SupabaseAdapter'));
+      if (!remote) return;
+
+      const syncKey = `${staffKey}::${month}`;
+      if (this._availabilityHydrationInFlight && this._lastAvailabilitySyncKey === syncKey) return;
+      if (this._lastAvailabilitySyncKey === syncKey && (Date.now() - this._lastAvailabilityHydratedAt) < 1500) return;
+
+      const readyPromise = window.__services?.ready;
+      try {
+        if (readyPromise?.then) {
+          await readyPromise;
+        }
+      } catch (readyErr) {
+        console.warn('[Availability] service init wait failed', readyErr);
+      }
+
+      const [yy, mm] = month.split('-').map(Number);
+      const fromDate = `${yy}-${String(mm).padStart(2,'0')}-01`;
+      const toDate = `${yy}-${String(mm).padStart(2,'0')}-${String(new Date(yy, mm, 0).getDate()).padStart(2,'0')}`;
+
+      const statusLine = ensureSyncStatus('Verfügbarkeiten laden…');
+      const spinner = statusLine?.querySelector('.spinner');
+      if (spinner) spinner.classList.remove('hidden');
+
+      const selDisabled = { s: staffSel.disabled, m: monthSel.disabled };
+      staffSel.disabled = true;
+      monthSel.disabled = true;
+
+      this._availabilityHydrationInFlight = true;
+      this._lastAvailabilitySyncKey = syncKey;
+
+      try {
+        await availSvc.listRange(staffId, fromDate, toDate);
+        ensureSyncStatus('Synchronisiert ✓', 'success');
+        this._lastAvailabilityHydratedAt = Date.now();
+      } catch (err) {
+        console.warn('[Availability] pre-hydration failed', err);
+        ensureSyncStatus('Synchronisation fehlgeschlagen', 'error');
+      } finally {
+        staffSel.disabled = selDisabled.s;
+        monthSel.disabled = selDisabled.m;
+        this._availabilityHydrationInFlight = false;
+        const cleanup = () => {
+          const line = host.querySelector('.availability-sync-status');
+          if (line) line.remove();
+        };
+        setTimeout(cleanup, 1200);
+      }
+    };
+
+    runRemoteSync().catch(err => console.warn('[Availability] sync failed', err));
   }
 
   // ==== Vacation ====
