@@ -54,6 +54,13 @@ export class AppUI {
   this.renderTempIllnessList();
   // Urlaub: Ledger init
   this.initVacationLedger();
+  // Ensure vacation data hydrated across tabs
+  try {
+    this.syncVacationCaches().then(()=>{
+      try { this.renderVacationList(); if (this.renderVacationSummaryTable) this.renderVacationSummaryTable(); }
+      catch(err){ console.warn('Vacation render after sync failed', err); }
+    }).catch(err=> console.warn('syncVacationCaches init failed', err));
+  } catch(err){ console.warn('Unable to schedule vacation cache sync', err); }
   // Register service event listeners (e.g., ledger conflicts)
   try { this._attachServiceEventListeners(); } catch(e) { /* ignore */ }
   // Andere Mitarbeitende init
@@ -90,7 +97,7 @@ export class AppUI {
   }
 
   // ==== Staff ====
-  addStaff(){
+  async addStaff(){
     const nameEl = document.getElementById('staffName');
     const roleEl = document.getElementById('staffType');
     const hoursEl = document.getElementById('contractHours');
@@ -154,10 +161,10 @@ export class AppUI {
       // Persist temp periods via service if available
       if (Array.isArray(appState.tempVacationPeriods)){
         if (__services?.vacation){
-          const existing = __services.vacation.listVacations(editId);
+          const existing = await Promise.resolve(__services.vacation.listVacations(editId)) || [];
           // Replace strategy: remove all then add
-          for (let i=existing.length-1;i>=0;i--) __services.vacation.removeVacation(editId, i);
-          appState.tempVacationPeriods.forEach(p=> __services.vacation.addVacation(editId, p));
+          for (let i=existing.length-1;i>=0;i--){ await Promise.resolve(__services.vacation.removeVacation(editId, i)); }
+          for (const p of appState.tempVacationPeriods){ await Promise.resolve(__services.vacation.addVacation(editId, p)); }
         } else {
           if (!appState.vacationsByStaff[editId]) appState.vacationsByStaff[editId] = [];
           appState.vacationsByStaff[editId] = [...(appState.tempVacationPeriods||[])];
@@ -165,32 +172,34 @@ export class AppUI {
       }
       if (Array.isArray(appState.tempIllnessPeriods)){
         if (__services?.vacation){
-          const existingIll = __services.vacation.listIllness(editId);
-            for (let i=existingIll.length-1;i>=0;i--) __services.vacation.removeIllness(editId, i);
-            appState.tempIllnessPeriods.forEach(p=> __services.vacation.addIllness(editId, p));
+          const existingIll = await Promise.resolve(__services.vacation.listIllness(editId)) || [];
+          for (let i=existingIll.length-1;i>=0;i--){ await Promise.resolve(__services.vacation.removeIllness(editId, i)); }
+          for (const p of appState.tempIllnessPeriods){ await Promise.resolve(__services.vacation.addIllness(editId, p)); }
         } else {
           if (!appState.illnessByStaff) appState.illnessByStaff = {};
           if (!appState.illnessByStaff[editId]) appState.illnessByStaff[editId] = [];
           appState.illnessByStaff[editId] = [...(appState.tempIllnessPeriods||[])];
         }
       }
+      await this.syncVacationCaches([editId]);
     } else {
       const staff = staffSvc.create({ ...staffData, alternativeWeekendDays: [] });
       const nextId = staff.id;
       if (Array.isArray(appState.tempVacationPeriods) && appState.tempVacationPeriods.length){
-        if (__services?.vacation){ appState.tempVacationPeriods.forEach(p=> __services.vacation.addVacation(nextId, p)); }
+        if (__services?.vacation){ for (const p of appState.tempVacationPeriods){ await Promise.resolve(__services.vacation.addVacation(nextId, p)); } }
         else {
           if (!appState.vacationsByStaff[nextId]) appState.vacationsByStaff[nextId] = [];
           appState.vacationsByStaff[nextId] = [...appState.tempVacationPeriods];
         }
       }
       if (Array.isArray(appState.tempIllnessPeriods) && appState.tempIllnessPeriods.length){
-        if (__services?.vacation){ appState.tempIllnessPeriods.forEach(p=> __services.vacation.addIllness(nextId, p)); }
+        if (__services?.vacation){ for (const p of appState.tempIllnessPeriods){ await Promise.resolve(__services.vacation.addIllness(nextId, p)); } }
         else {
           if (!appState.illnessByStaff) appState.illnessByStaff = {};
           appState.illnessByStaff[nextId] = [...appState.tempIllnessPeriods];
         }
       }
+      await this.syncVacationCaches([nextId]);
     }
     appState.save();
     this.resetStaffForm();
@@ -1182,7 +1191,7 @@ export class AppUI {
   tbody.innerHTML = rows || '<tr><td colspan=\"2\" class=\"text-center text-muted\">Keine Einträge</td></tr>';
   }
 
-  addVacationPeriod(){
+  async addVacationPeriod(){
     const startEl = document.getElementById('vacationStart');
     const endEl = document.getElementById('vacationEnd');
     const staffSel = document.getElementById('vacationStaffSelect');
@@ -1191,12 +1200,17 @@ export class AppUI {
     const staffId = Number(staffSel?.value || 0);
     if (!staffId){ alert('Bitte Mitarbeiter wählen'); return; }
     if (!start || !end){ alert('Bitte Zeitraum wählen'); return; }
-    if (__services?.vacation){ __services.vacation.addVacation(staffId, { start, end }); __services?.audit?.log?.(auditMsg('vacation.add',{staffId,start,end})); }
-    else {
+    if (__services?.vacation){
+      await Promise.resolve(__services.vacation.addVacation(staffId, { start, end }));
+      __services?.audit?.log?.(auditMsg('vacation.add',{staffId,start,end}));
+    } else {
       if (!appState.vacationsByStaff[staffId]) appState.vacationsByStaff[staffId] = [];
       appState.vacationsByStaff[staffId].push({ start, end }); appState.save();
     }
+  await this.syncVacationCaches([staffId]);
+  this.renderStaffList();
     this.renderVacationList();
+    if (this.renderVacationSummaryTable) this.renderVacationSummaryTable();
     startEl.value = ''; endEl.value='';
   }
 
@@ -1210,14 +1224,20 @@ export class AppUI {
       ? list.map((p,idx)=>`<li>${p.start} bis ${p.end} <button class="btn btn-danger" data-idx="${idx}">Entfernen</button></li>`).join('')
       : '<li>Keine Einträge</li>';
     host.querySelectorAll('button[data-idx]').forEach(btn=>{
-      btn.addEventListener('click', (e)=>{
+      btn.addEventListener('click', async (e)=>{
         const i = Number(e.currentTarget.dataset.idx);
-        if (__services?.vacation){ __services.vacation.removeVacation(staffId, i); __services?.audit?.log?.(auditMsg('vacation.remove',{staffId,index:i})); }
+        if (__services?.vacation){
+          await Promise.resolve(__services.vacation.removeVacation(staffId, i));
+          __services?.audit?.log?.(auditMsg('vacation.remove',{staffId,index:i}));
+        }
         else {
-          if (!appState.vacationsByStaff[staffId]) return;
+          if (!appState.vacationsByStaff[staffId]) appState.vacationsByStaff[staffId] = [];
           appState.vacationsByStaff[staffId].splice(i,1); appState.save();
         }
+        await this.syncVacationCaches([staffId]);
+        this.renderStaffList();
         this.renderVacationList();
+        if (this.renderVacationSummaryTable) this.renderVacationSummaryTable();
       });
     });
     staffSel.addEventListener('change', ()=> this.renderVacationList());
@@ -1236,6 +1256,63 @@ export class AppUI {
     return total;
   }
 
+  async syncVacationCaches(targetStaffIds){
+    try {
+      if (!appState.vacationsByStaff || typeof appState.vacationsByStaff !== 'object') appState.vacationsByStaff = {};
+      if (!appState.illnessByStaff || typeof appState.illnessByStaff !== 'object') appState.illnessByStaff = {};
+
+      const ready = __services?.ready;
+      if (ready?.then){
+        try { await ready; }
+        catch(err){ console.warn('[AppUI] Vacation cache sync waiting for services failed', err); }
+      }
+
+      const staffSvc = __services?.staff;
+      const vacSvc = __services?.vacation;
+
+      let staffIds = Array.isArray(targetStaffIds) && targetStaffIds.length ? [...targetStaffIds] : [];
+      if (!staffIds.length && staffSvc?.list){
+        staffIds = staffSvc.list().map(s=>s.id).filter(id=>id!==undefined && id!==null);
+      }
+      if (!staffIds.length && Array.isArray(appState.staffData)){
+        staffIds = appState.staffData.map(s=>s?.id).filter(id=>id!==undefined && id!==null);
+      }
+      if (!staffIds.length){
+        staffIds = Object.keys(appState.vacationsByStaff || {}).map(id=>Number(id)).filter(id=>!Number.isNaN(id));
+      }
+      staffIds = Array.from(new Set(staffIds));
+
+      if (!staffIds.length) return;
+
+      if (!vacSvc){
+        // Ensure structures exist even without service support
+        staffIds.forEach(id=>{
+          if (!Array.isArray(appState.vacationsByStaff[id])) appState.vacationsByStaff[id] = [...(appState.vacationsByStaff[id] || [])];
+          if (!Array.isArray(appState.illnessByStaff[id])) appState.illnessByStaff[id] = [...(appState.illnessByStaff[id] || [])];
+        });
+        return;
+      }
+
+      const cloneList = (rows)=>Array.isArray(rows) ? rows.map(entry=>({ ...entry })) : [];
+
+      for (const id of staffIds){
+        try {
+          const vacationsRaw = await Promise.resolve(vacSvc.listVacations(id));
+          const illnessRaw = await Promise.resolve(vacSvc.listIllness(id));
+          const vacations = cloneList(vacationsRaw || []);
+          const illness = cloneList(illnessRaw || []);
+          appState.vacationsByStaff[id] = vacations;
+          appState.illnessByStaff[id] = illness;
+        } catch(err){
+          console.warn('[AppUI] Failed syncing vacations for staff', id, err);
+        }
+      }
+      appState.save?.();
+    } catch(err){
+      console.warn('[AppUI] syncVacationCaches failed', err);
+    }
+  }
+
   // Incremental update helpers for availability toggles
   updateShiftButtonState(button, dateStr, shiftKey, isPermanent) {
     const val = this.getShiftValue(dateStr, shiftKey);
@@ -1247,6 +1324,8 @@ export class AppUI {
     // Update button classes and text
     button.className = `avail-btn ${stateClass} shift-btn`;
     button.innerHTML = `${name}: ${label}`;
+    const datasetState = isPermanent ? (isBlocked ? 'no' : '') : (val || '');
+    if (datasetState) button.dataset.state = datasetState; else delete button.dataset.state;
   }
 
   updateDayOffButtonState(button, dateStr) {
