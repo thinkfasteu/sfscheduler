@@ -878,7 +878,8 @@ export class AppUI {
           try { availSvc.setShift(staffId, dateStr, shiftKey, next); console.log('[Availability] Remote setShift called'); } catch (err) { console.warn('[Availability] setShift failed (will rely on local state)', err); }
         }
         applyLocalShift(dateStr, shiftKey, next);
-        this.handleAvailabilityDisplay();
+        // Incremental update instead of full re-render
+        this.updateShiftButtonState(b, dateStr, shiftKey, staff?.role === 'permanent');
       });
     });
     // Voluntary checkboxes
@@ -900,7 +901,15 @@ export class AppUI {
           try { availSvc.setDayOff(staffId, dateStr, !isOff); console.log('[Availability] Remote setDayOff called'); } catch (err) { console.warn('[Availability] setDayOff failed (will rely on local state)', err); }
         }
         applyLocalDayOff(dateStr, !isOff);
-        this.handleAvailabilityDisplay();
+        // Incremental update instead of full re-render
+        this.updateDayOffButtonState(b, dateStr);
+        // Also disable/enable shift buttons in the same row
+        const row = b.closest('.avail-row');
+        if (row) {
+          row.querySelectorAll('button.avail-btn').forEach(shiftBtn => {
+            shiftBtn.disabled = !isOff; // if now off, disable; if now on, enable
+          });
+        }
       }));
     }
     const carryBtn = host.querySelector('#carryoverSaveBtn');
@@ -1225,6 +1234,57 @@ export class AppUI {
     let total = 0;
     for (const p of periods){ total += this.countOverlapDaysInYear(p.start, p.end, year, weekdaysOnly); }
     return total;
+  }
+
+  // Incremental update helpers for availability toggles
+  updateShiftButtonState(button, dateStr, shiftKey, isPermanent) {
+    const val = this.getShiftValue(dateStr, shiftKey);
+    const isBlocked = isPermanent ? (val === 'no') : false;
+    const stateClass = isPermanent ? (isBlocked ? 'state-no' : 'state-unset') : (val ? `state-${val}` : 'state-unset');
+    const meta = SHIFTS[shiftKey] || {}; const name = meta.name || shiftKey;
+    const label = isPermanent ? (isBlocked ? '✗' : '—') : (val === 'prefer' ? '★' : val === 'yes' ? '✓' : '—');
+    
+    // Update button classes and text
+    button.className = `avail-btn ${stateClass} shift-btn`;
+    button.innerHTML = `${name}: ${label}`;
+  }
+
+  updateDayOffButtonState(button, dateStr) {
+    const isOff = this.isDayOff(dateStr);
+    button.className = `btn ${isOff ? 'btn-secondary' : ''}`;
+    button.innerHTML = isOff ? 'Freiwunsch' : 'Frei wünschen';
+    button.dataset.off = isOff ? '1' : '0';
+  }
+
+  // Helper methods to access local state (duplicating logic from handleAvailabilityDisplay for incremental updates)
+  getShiftValue(dateStr, shiftKey) {
+    const availSvc = __services?.availability;
+    const staffSel = document.getElementById('availabilityStaffSelect');
+    const staffList = (__services?.staff?.list ? __services.staff.list() : appState.staffData) || [];
+    const staffValue = staffSel.value;
+    const staff = staffList.find(s=> String(s.id) === staffValue);
+    const staffId = staff ? staff.id : staffValue;
+    const staffKey = String(staffId);
+
+    const remoteDay = availSvc?.getDay ? (availSvc.getDay(staffId, dateStr) || {}) : {};
+    const localDay = appState.availabilityData?.[staffKey]?.[dateStr] || {};
+    const snapshot = { ...localDay, ...remoteDay };
+    return snapshot ? snapshot[shiftKey] : undefined;
+  }
+
+  isDayOff(dateStr) {
+    const availSvc = __services?.availability;
+    const staffSel = document.getElementById('availabilityStaffSelect');
+    const staffList = (__services?.staff?.list ? __services.staff.list() : appState.staffData) || [];
+    const staffValue = staffSel.value;
+    const staff = staffList.find(s=> String(s.id) === staffValue);
+    const staffId = staff ? staff.id : staffValue;
+    const staffKey = String(staffId);
+
+    const remote = availSvc?.isDayOff ? availSvc.isDayOff(staffId, dateStr) : undefined;
+    const localSentinel = appState.availabilityData?.[`staff:${staffKey}`]?.[dateStr];
+    const normalizedLocal = localSentinel === 'off' || localSentinel === true;
+    return !!(remote || normalizedLocal);
   }
 }
 
