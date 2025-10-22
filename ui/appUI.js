@@ -720,24 +720,43 @@ export class AppUI {
     if (!staffId || !month){ host.innerHTML = '<p>Bitte Mitarbeiter und Monat auswählen.</p>'; return; }
     // Pre-hydrate availability for this staff/month if using remote backend
     (async ()=>{
+      if (!availSvc?.listRange) return;
+      const store = window.__services?.store;
+      const remote = !!(store && (store.remote || store.constructor?.name === 'SupabaseAdapter'));
+      if (!remote) return;
+      const readyPromise = window.__services?.ready;
       try {
-        if (!availSvc?.listRange) return;
-        if (!window.__services || !window.__services.ready) return;
-        await window.__services.ready;
-        const store = window.__services.store; const remote = !!(store && (store.remote || (store.constructor && store.constructor.name==='SupabaseAdapter')));
-        if (!remote) return;
-        const [yy,mm] = month.split('-').map(Number);
-        const fromDate = `${yy}-${String(mm).padStart(2,'0')}-01`;
-        const toDate = `${yy}-${String(mm).padStart(2,'0')}-${String(new Date(yy, mm, 0).getDate()).padStart(2,'0')}`;
-        // Show inline spinner/status in host while syncing
-        const old = host.innerHTML;
-        host.innerHTML = '<div class="status-line"><span class="spinner"></span><span>Verfügbarkeiten laden…</span></div>' + old;
-        const selDisabled = { s: staffSel.disabled, m: monthSel.disabled };
-        staffSel.disabled = true; monthSel.disabled = true;
-        try { await availSvc.listRange(staffId, fromDate, toDate); } finally { staffSel.disabled = selDisabled.s; monthSel.disabled = selDisabled.m; }
-        // Brief confirmation
-        const status = host.querySelector('.status-line'); if (status){ const sp=status.querySelector('.spinner'); if (sp) sp.classList.add('hidden'); status.querySelector('span:last-child').textContent = 'Synchronisiert ✓'; setTimeout(()=>{ status.remove(); }, 900); }
-      } catch(e){ console.warn('[Availability] pre-hydration failed', e); }
+        if (readyPromise?.then) {
+          await readyPromise;
+        }
+      } catch (readyErr) {
+        console.warn('[Availability] service init wait failed', readyErr);
+      }
+      const [yy,mm] = month.split('-').map(Number);
+      const fromDate = `${yy}-${String(mm).padStart(2,'0')}-01`;
+      const toDate = `${yy}-${String(mm).padStart(2,'0')}-${String(new Date(yy, mm, 0).getDate()).padStart(2,'0')}`;
+      const previous = host.innerHTML;
+      host.innerHTML = '<div class="status-line"><span class="spinner"></span><span>Verfügbarkeiten laden…</span></div>' + previous;
+      const selDisabled = { s: staffSel.disabled, m: monthSel.disabled };
+      staffSel.disabled = true; monthSel.disabled = true;
+      let status;
+      try {
+        await availSvc.listRange(staffId, fromDate, toDate);
+        status = host.querySelector('.status-line');
+        if (status){
+          const sp = status.querySelector('.spinner');
+          if (sp) sp.classList.add('hidden');
+          status.querySelector('span:last-child').textContent = 'Synchronisiert ✓';
+        }
+      } catch(e){
+        console.warn('[Availability] pre-hydration failed', e);
+        status = host.querySelector('.status-line');
+        if (status){ status.querySelector('span:last-child').textContent = 'Synchronisation fehlgeschlagen'; }
+      } finally {
+        staffSel.disabled = selDisabled.s; monthSel.disabled = selDisabled.m;
+        status = status || host.querySelector('.status-line');
+        if (status){ setTimeout(()=>{ status.remove(); }, 1200); }
+      }
     })();
     const [y,m] = month.split('-').map(Number);
     const days = new Date(y, m, 0).getDate();
