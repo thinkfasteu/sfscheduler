@@ -711,6 +711,7 @@ export class AppUI {
   }
 
   handleAvailabilityDisplay(){
+    console.log('[Availability] handleAvailabilityDisplay called', { staffSel: document.getElementById('availabilityStaffSelect')?.value, month: document.getElementById('availabilityMonth')?.value });
     const availSvc = __services?.availability; // Fallback kept only for legacy sections
     const staffSel = document.getElementById('availabilityStaffSelect');
     const monthSel = document.getElementById('availabilityMonth');
@@ -875,14 +876,16 @@ export class AppUI {
   // Shift buttons
     host.querySelectorAll('button.avail-btn').forEach(btn => {
       btn.addEventListener('click', e => {
+        console.log('[Availability] Shift button clicked', { dateStr: e.currentTarget.dataset.date, shiftKey: e.currentTarget.dataset.shift, staffId, staffRole: staff?.role });
         const b = e.currentTarget; const dateStr = b.dataset.date; const shiftKey = b.dataset.shift;
         let current = getShiftValue(dateStr, shiftKey);
         if (staff?.role !== 'permanent' && current === 'no') current = undefined; // migrate legacy
         const next = (staff?.role === 'permanent')
           ? (current === 'no' ? undefined : 'no') // permanent keeps opt-out toggle
           : (current === 'yes' ? 'prefer' : current === 'prefer' ? undefined : 'yes'); // undefined -> yes -> prefer -> undefined
+        console.log('[Availability] Updating shift', { dateStr, shiftKey, current, next });
         if (availSvc?.setShift) {
-          try { availSvc.setShift(staffId, dateStr, shiftKey, next); } catch (err) { console.warn('[Availability] setShift failed (will rely on local state)', err); }
+          try { availSvc.setShift(staffId, dateStr, shiftKey, next); console.log('[Availability] Remote setShift called'); } catch (err) { console.warn('[Availability] setShift failed (will rely on local state)', err); }
         }
         applyLocalShift(dateStr, shiftKey, next);
         this.handleAvailabilityDisplay();
@@ -891,18 +894,20 @@ export class AppUI {
     // Voluntary checkboxes
     if (isPermanent){
       const toggleVol = (kind, cb) => {
+        console.log('[Availability] Voluntary checkbox changed', { dateStr: cb.getAttribute('data-date'), kind, checked: cb.checked, staffId });
         const dateStr = cb.getAttribute('data-date');
         if (availSvc) {
-          try { availSvc.setVoluntary(staffId, dateStr, kind, cb.checked); } catch (err) { console.warn('[Availability] setVoluntary failed (will rely on local state)', err); }
+          try { availSvc.setVoluntary(staffId, dateStr, kind, cb.checked); console.log('[Availability] Remote setVoluntary called'); } catch (err) { console.warn('[Availability] setVoluntary failed (will rely on local state)', err); }
         }
         applyLocalVoluntary(dateStr, kind, cb.checked);
       };
       host.querySelectorAll('input.vol-evening').forEach(cb => cb.addEventListener('change', e=>toggleVol('evening', e.currentTarget)));
       host.querySelectorAll('input.vol-closing').forEach(cb => cb.addEventListener('change', e=>toggleVol('closing', e.currentTarget)));
       host.querySelectorAll('button[data-dayoff="1"]').forEach(btn => btn.addEventListener('click', e => {
+        console.log('[Availability] Day off button clicked', { dateStr: e.currentTarget.dataset.date, currentOff: e.currentTarget.dataset.off, staffId });
         const b = e.currentTarget; const dateStr = b.dataset.date; const isOff = b.dataset.off === '1';
         if (availSvc?.setDayOff) {
-          try { availSvc.setDayOff(staffId, dateStr, !isOff); } catch (err) { console.warn('[Availability] setDayOff failed (will rely on local state)', err); }
+          try { availSvc.setDayOff(staffId, dateStr, !isOff); console.log('[Availability] Remote setDayOff called'); } catch (err) { console.warn('[Availability] setDayOff failed (will rely on local state)', err); }
         }
         applyLocalDayOff(dateStr, !isOff);
         this.handleAvailabilityDisplay();
