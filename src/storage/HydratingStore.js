@@ -428,7 +428,8 @@ export class HydratingStore {
   removeVacation(staffId, idx){
     const list = appState.vacationsByStaff?.[staffId]; if (!Array.isArray(list) || idx<0 || idx>=list.length) return false;
     const [removed] = list.splice(idx,1); appState.save?.();
-    if (removed?.id && !this.remote.disabled){ this._enqueue('removeVacation', async ()=> { await this.remote.removeVacation(removed.id); }); }
+    const recordId = removed?.id || removed?.meta?.id;
+    if (recordId && !this.remote.disabled){ this._enqueue('removeVacation', async ()=> { await this.remote.removeVacation(recordId); }); }
     return true;
   }
   listIllness(staffId){ return appState.illnessByStaff?.[staffId] || []; }
@@ -499,7 +500,8 @@ export class HydratingStore {
   removeIllness(staffId, idx){
     const list = appState.illnessByStaff?.[staffId]; if (!Array.isArray(list) || idx<0 || idx>=list.length) return false;
     const [removed] = list.splice(idx,1); appState.save?.();
-    if (removed?.id && !this.remote.disabled){ this._enqueue('removeIllness', async ()=> { await this.remote.removeIllness(removed.id); }); }
+    const recordId = removed?.id || removed?.meta?.id;
+    if (recordId && !this.remote.disabled){ this._enqueue('removeIllness', async ()=> { await this.remote.removeIllness(recordId); }); }
     return true;
   }
   listOvertimeRequests(){ return Object.values(appState.overtimeRequests||{}).flatMap(m=> Object.values(m||{}).flat()); }

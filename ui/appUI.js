@@ -1483,6 +1483,8 @@ export class AppUI {
       if (__services?.vacation?.[serviceMethod]) {
         await Promise.resolve(__services.vacation[serviceMethod](staffId, period));
         __services?.audit?.log?.(auditMsg(auditAction, { staffId, ...period }));
+        // Re-load data to ensure consistency with service
+        await this.loadVacationData([staffId]);
       }
     } catch (err) {
       console.warn(`[AppUI] Failed to persist ${isIllness ? 'illness' : 'vacation'} to service`, err);
@@ -1513,6 +1515,8 @@ export class AppUI {
       if (__services?.vacation?.[serviceMethod]) {
         await Promise.resolve(__services.vacation[serviceMethod](staffId, index));
         __services?.audit?.log?.(auditMsg(auditAction, { staffId, index, ...removed }));
+        // Re-load data to ensure consistency with service
+        await this.loadVacationData([staffId]);
       }
     } catch (err) {
       console.warn(`[AppUI] Failed to delete ${isIllness ? 'illness' : 'vacation'} from service`, err);
