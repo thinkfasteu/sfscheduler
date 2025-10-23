@@ -1199,6 +1199,7 @@ export class AppUI {
       const rec = earnings[s.id] || { hours:0, earnings:0 };
       const h = Math.round(rec.hours*100)/100;
       const earn = rec.earnings;
+      const contractedHours = Number(s.contractHours || 0);
       let status = 'OK';
       
       // Practical limits status for Minijob and Student roles
@@ -1214,9 +1215,9 @@ export class AppUI {
         if (earn > cap + 1e-6) status = `> Minijob-Cap (${cap.toFixed(0)}€)`;
       }
       const otH = Number(overtimeByStaff[s.id]||0);
-  return `<tr><td class=\"text-left\">${s.name}${practicalLimitsInfo}</td><td>${s.role}</td><td>${h.toFixed(2)}</td><td>${otH>0?otH.toFixed(2):'—'}</td><td>${(Math.round(earn*100)/100).toFixed(2)} €</td><td>${status}</td></tr>`;
+  return `<tr><td class=\"text-left\">${s.name}${practicalLimitsInfo}</td><td>${s.role}</td><td>${contractedHours.toFixed(2)}</td><td>${h.toFixed(2)}</td><td>${otH>0?otH.toFixed(2):'—'}</td><td>${(Math.round(earn*100)/100).toFixed(2)} €</td><td>${status}</td></tr>`;
     }).join('');
-  tbody.innerHTML = rows || '<tr><td colspan=\"6\" class=\"text-center text-muted\">Keine Daten</td></tr>';
+  tbody.innerHTML = rows || '<tr><td colspan=\"7\" class=\"text-center text-muted\">Keine Daten</td></tr>';
   }
 
   renderStudentWeeklyReport(month){
