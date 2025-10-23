@@ -420,7 +420,9 @@ export class HydratingStore {
   listVacations(staffId){ return appState.vacationsByStaff?.[staffId] || []; }
   addVacation(staffId, period){
     if (!appState.vacationsByStaff[staffId]) appState.vacationsByStaff[staffId] = [];
-    const rec = { id: period.id || `v-${Date.now()}-${Math.random().toString(36).slice(2)}`, start:period.start, end:period.end };
+    const recordId = period.id || period.meta?.id || `v-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const meta = { ...(period.meta||{}), id: recordId, staffId };
+    const rec = { id: recordId, start:period.start, end:period.end, meta };
     appState.vacationsByStaff[staffId].push(rec); appState.save?.();
     if (!this.remote.disabled){ this._enqueue('addVacation', async ()=> { await this.remote.addVacation(staffId, period); }); }
     return rec;
@@ -429,7 +431,10 @@ export class HydratingStore {
     const list = appState.vacationsByStaff?.[staffId]; if (!Array.isArray(list) || idx<0 || idx>=list.length) return false;
     const [removed] = list.splice(idx,1); appState.save?.();
     const recordId = removed?.id || removed?.meta?.id;
-    if (recordId && !this.remote.disabled){ this._enqueue('removeVacation', async ()=> { await this.remote.removeVacation(recordId); }); }
+    if (recordId && !this.remote.disabled){ this._enqueue('removeVacation', async ()=> {
+      if (typeof this.remote.removeVacationById === 'function') { await this.remote.removeVacationById(recordId); }
+      else { await this.remote.removeVacation(recordId); }
+    }); }
     return true;
   }
   removeVacationById(id){
@@ -441,7 +446,10 @@ export class HydratingStore {
         if (idx >= 0) {
           list.splice(idx, 1);
           appState.save?.();
-          if (!this.remote.disabled){ this._enqueue('removeVacation', async ()=> { await this.remote.removeVacation(id); }); }
+          if (!this.remote.disabled){ this._enqueue('removeVacationById', async ()=> {
+            if (typeof this.remote.removeVacationById === 'function'){ await this.remote.removeVacationById(id); }
+            else { await this.remote.removeVacation(id); }
+          }); }
           return true;
         }
       }
@@ -451,7 +459,9 @@ export class HydratingStore {
   listIllness(staffId){ return appState.illnessByStaff?.[staffId] || []; }
   addIllness(staffId, period){
     if (!appState.illnessByStaff[staffId]) appState.illnessByStaff[staffId] = [];
-    const rec = { id: period.id || `i-${Date.now()}-${Math.random().toString(36).slice(2)}`, start:period.start, end:period.end };
+    const recordId = period.id || period.meta?.id || `i-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const meta = { ...(period.meta||{}), id: recordId, staffId };
+    const rec = { id: recordId, start:period.start, end:period.end, meta };
     appState.illnessByStaff[staffId].push(rec); appState.save?.();
     if (!this.remote.disabled){ this._enqueue('addIllness', async ()=> { await this.remote.addIllness(staffId, period); }); }
     return rec;
@@ -517,7 +527,10 @@ export class HydratingStore {
     const list = appState.illnessByStaff?.[staffId]; if (!Array.isArray(list) || idx<0 || idx>=list.length) return false;
     const [removed] = list.splice(idx,1); appState.save?.();
     const recordId = removed?.id || removed?.meta?.id;
-    if (recordId && !this.remote.disabled){ this._enqueue('removeIllness', async ()=> { await this.remote.removeIllness(recordId); }); }
+    if (recordId && !this.remote.disabled){ this._enqueue('removeIllness', async ()=> {
+      if (typeof this.remote.removeIllnessById === 'function'){ await this.remote.removeIllnessById(recordId); }
+      else { await this.remote.removeIllness(recordId); }
+    }); }
     return true;
   }
   removeIllnessById(id){
@@ -529,7 +542,10 @@ export class HydratingStore {
         if (idx >= 0) {
           list.splice(idx, 1);
           appState.save?.();
-          if (!this.remote.disabled){ this._enqueue('removeIllness', async ()=> { await this.remote.removeIllness(id); }); }
+          if (!this.remote.disabled){ this._enqueue('removeIllnessById', async ()=> {
+            if (typeof this.remote.removeIllnessById === 'function'){ await this.remote.removeIllnessById(id); }
+            else { await this.remote.removeIllness(id); }
+          }); }
           return true;
         }
       }

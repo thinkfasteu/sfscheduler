@@ -1513,7 +1513,7 @@ export class AppUI {
     // Try to persist to service
     try {
       if (__services?.vacation?.[serviceMethod]) {
-        const recordId = removed.meta?.id;
+        const recordId = removed.meta?.id || removed.id;
         if (recordId) {
           await Promise.resolve(__services.vacation[serviceMethod](recordId));
           __services?.audit?.log?.(auditMsg(auditAction, { staffId, recordId, ...removed }));

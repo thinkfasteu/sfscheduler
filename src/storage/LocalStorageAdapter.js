@@ -106,11 +106,41 @@ export class LocalStorageAdapter {
 
   // ---- Vacation / Illness ----
   listVacations(staffId){ return appState.vacationsByStaff?.[staffId] || []; }
-  addVacation(staffId, period){ if (!appState.vacationsByStaff[staffId]) appState.vacationsByStaff[staffId]=[]; appState.vacationsByStaff[staffId].push(period); appState.save(); return true; }
+  addVacation(staffId, period){
+    if (!appState.vacationsByStaff[staffId]) appState.vacationsByStaff[staffId]=[];
+    const meta = { ...(period.meta||{}) };
+    if (!meta.id) meta.id = period.id || `local-v-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const rec = { id: meta.id, start: period.start, end: period.end, meta };
+    appState.vacationsByStaff[staffId].push(rec); appState.save(); return rec;
+  }
   removeVacation(staffId, idx){ const arr = appState.vacationsByStaff?.[staffId]; if (!arr||!arr[idx]) return false; arr.splice(idx,1); appState.save(); return true; }
+  removeVacationById(id){
+    for (const staffId in appState.vacationsByStaff){
+      const list = appState.vacationsByStaff[staffId];
+      if (!Array.isArray(list)) continue;
+      const idx = list.findIndex(v => v?.meta?.id === id || v?.id === id);
+      if (idx >= 0){ list.splice(idx,1); appState.save(); return true; }
+    }
+    return false;
+  }
   listIllness(staffId){ return appState.illnessByStaff?.[staffId] || []; }
-  addIllness(staffId, period){ if (!appState.illnessByStaff[staffId]) appState.illnessByStaff[staffId]=[]; appState.illnessByStaff[staffId].push(period); appState.save(); return true; }
+  addIllness(staffId, period){
+    if (!appState.illnessByStaff[staffId]) appState.illnessByStaff[staffId]=[];
+    const meta = { ...(period.meta||{}) };
+    if (!meta.id) meta.id = period.id || `local-i-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const rec = { id: meta.id, start: period.start, end: period.end, meta };
+    appState.illnessByStaff[staffId].push(rec); appState.save(); return rec;
+  }
   removeIllness(staffId, idx){ const arr = appState.illnessByStaff?.[staffId]; if (!arr||!arr[idx]) return false; arr.splice(idx,1); appState.save(); return true; }
+  removeIllnessById(id){
+    for (const staffId in appState.illnessByStaff){
+      const list = appState.illnessByStaff[staffId];
+      if (!Array.isArray(list)) continue;
+      const idx = list.findIndex(v => v?.meta?.id === id || v?.id === id);
+      if (idx >= 0){ list.splice(idx,1); appState.save(); return true; }
+    }
+    return false;
+  }
   // ---- Vacation Ledger (local) ----
   getVacationLedgerYear(year){
     if (!appState.vacationLedger[year]) appState.vacationLedger[year] = {};

@@ -344,6 +344,8 @@ export class SupabaseAdapter {
   async addIllness(staffId, period){ if (this.disabled) return { id:`temp-${Date.now()}`, staffId, start:period.start, end:period.end }; const recs = await this._rpc('absences', { method:'POST', body: JSON.stringify([{ staff_id:staffId, start_date:period.start, end_date:period.end, type:'illness', version:1 }]) }); const r = recs[0]; return { id:r.id, staffId:r.staff_id, start:r.start_date, end:r.end_date }; }
   async removeVacation(id){ if (this.disabled) return true; await this._rpc(`absences?id=eq.${id}`, { method:'DELETE' }); return true; }
   async removeIllness(id){ if (this.disabled) return true; await this._rpc(`absences?id=eq.${id}`, { method:'DELETE' }); return true; }
+  async removeVacationById(id){ return this.removeVacation(id); }
+  async removeIllnessById(id){ return this.removeIllness(id); }
 
   // Overtime placeholders
   // NEXT: implement parity with LocalStorageAdapter using overtime_requests / overtime_consents tables
