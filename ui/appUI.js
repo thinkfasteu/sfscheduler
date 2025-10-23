@@ -1,6 +1,7 @@
 import { appState } from '../modules/state.js'; // TODO remove direct non-staff usage later
 import { APP_CONFIG, SHIFTS } from '../modules/config.js';
 import { toLocalISOMonth, toLocalISODate, pad2, parseYMD } from '../utils/dateUtils.js';
+import { countOverlapDaysInYear } from '../src/domain/compute.js';
 // Add audit message helper
 import { auditMsg } from '../src/services/auditMessages.js';
 // Services facade (migrating away from direct appState)
@@ -1265,13 +1266,13 @@ export class AppUI {
   countPlannedVacationDaysForYear(staffId, year, weekdaysOnly=true){
     const periods = appState.vacationsByStaff?.[staffId] || [];
     let total = 0;
-    for (const p of periods){ total += this.countOverlapDaysInYear(p.start, p.end, year, weekdaysOnly); }
+    for (const p of periods){ total += countOverlapDaysInYear(p.start, p.end, year, weekdaysOnly); }
     return total;
   }
   countSickDaysForYear(staffId, year, weekdaysOnly=false){
     const periods = appState.illnessByStaff?.[staffId] || [];
     let total = 0;
-    for (const p of periods){ total += this.countOverlapDaysInYear(p.start, p.end, year, weekdaysOnly); }
+    for (const p of periods){ total += countOverlapDaysInYear(p.start, p.end, year, weekdaysOnly); }
     return total;
   }
 
