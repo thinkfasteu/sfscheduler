@@ -534,16 +534,7 @@ export class AppUI {
     if (!start || !end || end < start){ alert('Bitte gültigen Urlaubszeitraum wählen'); return; }
     appState.tempVacationPeriods = appState.tempVacationPeriods || [];
     appState.tempVacationPeriods.push({ start, end });
-    
-    // For cross-tab persistence: also add to main vacationsByStaff if editing a staff member
-    const editIdEl = document.getElementById('staffIdToEdit');
-    const editId = Number(editIdEl?.value || 0);
-    if (editId) {
-      appState.vacationsByStaff = appState.vacationsByStaff || {};
-      appState.vacationsByStaff[editId] = appState.vacationsByStaff[editId] || [];
-      appState.vacationsByStaff[editId].push({ start, end });
-    }
-    
+
     appState.save();
     this.renderTempVacationList();
     if (startEl) startEl.value=''; if (endEl) endEl.value='';
@@ -690,18 +681,7 @@ export class AppUI {
     host.querySelectorAll('button[data-rm-vac]').forEach(btn=>{
       btn.addEventListener('click', (e)=>{
         const i = Number(e.currentTarget.getAttribute('data-rm-vac'));
-        appState.tempVacationPeriods.splice(i,1); 
-        
-        // For cross-tab persistence: also remove from main vacationsByStaff if editing a staff member
-        const editIdEl = document.getElementById('staffIdToEdit');
-        const editId = Number(editIdEl?.value || 0);
-        if (editId && appState.vacationsByStaff?.[editId]) {
-          // Remove the vacation at the same index (assuming temp list mirrors main list during editing)
-          if (i < appState.vacationsByStaff[editId].length) {
-            appState.vacationsByStaff[editId].splice(i, 1);
-          }
-        }
-        
+        appState.tempVacationPeriods.splice(i,1);
         appState.save(); this.renderTempVacationList();
       });
     });
