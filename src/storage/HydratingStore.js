@@ -446,31 +446,31 @@ export class HydratingStore {
     return true;
   }
   async removeVacationById(id){
-    // Find and remove the vacation with this ID across all staff
+    let removedLocally = false;
     for (const staffId in appState.vacationsByStaff) {
       const list = appState.vacationsByStaff[staffId];
-      if (Array.isArray(list)) {
-        const idx = list.findIndex(v => (v.id === id || v.meta?.id === id));
-        if (idx >= 0) {
-          list.splice(idx, 1);
-          appState.save?.();
-          if (!this.remote.disabled){
-            try {
-              if (typeof this.remote.removeVacationById === 'function'){ await this.remote.removeVacationById(id); }
-              else { await this.remote.removeVacation(id); }
-            } catch(err){
-              console.warn('[HydratingStore] remote removeVacationById failed, scheduling retry', err);
-              this._enqueue('removeVacationById', async ()=> {
-                if (typeof this.remote.removeVacationById === 'function'){ await this.remote.removeVacationById(id); }
-                else { await this.remote.removeVacation(id); }
-              });
-            }
-          }
-          return true;
-        }
+      if (!Array.isArray(list)) continue;
+      const idx = list.findIndex(v => (v.id === id || v.meta?.id === id));
+      if (idx >= 0) {
+        list.splice(idx, 1);
+        removedLocally = true;
       }
     }
-    return false;
+    if (removedLocally) appState.save?.();
+
+    if (!this.remote.disabled){
+      try {
+        if (typeof this.remote.removeVacationById === 'function'){ await this.remote.removeVacationById(id); }
+        else { await this.remote.removeVacation(id); }
+      } catch(err){
+        console.warn('[HydratingStore] remote removeVacationById failed, scheduling retry', err);
+        this._enqueue('removeVacationById', async ()=> {
+          if (typeof this.remote.removeVacationById === 'function'){ await this.remote.removeVacationById(id); }
+          else { await this.remote.removeVacation(id); }
+        });
+      }
+    }
+    return removedLocally;
   }
   listIllness(staffId){ return appState.illnessByStaff?.[staffId] || []; }
   addIllness(staffId, period){
@@ -558,31 +558,31 @@ export class HydratingStore {
     return true;
   }
   async removeIllnessById(id){
-    // Find and remove the illness with this ID across all staff
+    let removedLocally = false;
     for (const staffId in appState.illnessByStaff) {
       const list = appState.illnessByStaff[staffId];
-      if (Array.isArray(list)) {
-        const idx = list.findIndex(v => (v.id === id || v.meta?.id === id));
-        if (idx >= 0) {
-          list.splice(idx, 1);
-          appState.save?.();
-          if (!this.remote.disabled){
-            try {
-              if (typeof this.remote.removeIllnessById === 'function'){ await this.remote.removeIllnessById(id); }
-              else { await this.remote.removeIllness(id); }
-            } catch(err){
-              console.warn('[HydratingStore] remote removeIllnessById failed, scheduling retry', err);
-              this._enqueue('removeIllnessById', async ()=> {
-                if (typeof this.remote.removeIllnessById === 'function'){ await this.remote.removeIllnessById(id); }
-                else { await this.remote.removeIllness(id); }
-              });
-            }
-          }
-          return true;
-        }
+      if (!Array.isArray(list)) continue;
+      const idx = list.findIndex(v => (v.id === id || v.meta?.id === id));
+      if (idx >= 0) {
+        list.splice(idx, 1);
+        removedLocally = true;
       }
     }
-    return false;
+    if (removedLocally) appState.save?.();
+
+    if (!this.remote.disabled){
+      try {
+        if (typeof this.remote.removeIllnessById === 'function'){ await this.remote.removeIllnessById(id); }
+        else { await this.remote.removeIllness(id); }
+      } catch(err){
+        console.warn('[HydratingStore] remote removeIllnessById failed, scheduling retry', err);
+        this._enqueue('removeIllnessById', async ()=> {
+          if (typeof this.remote.removeIllnessById === 'function'){ await this.remote.removeIllnessById(id); }
+          else { await this.remote.removeIllness(id); }
+        });
+      }
+    }
+    return removedLocally;
   }
   listOvertimeRequests(){ return Object.values(appState.overtimeRequests||{}).flatMap(m=> Object.values(m||{}).flat()); }
   createOvertimeRequest(month, dateStr, req){
