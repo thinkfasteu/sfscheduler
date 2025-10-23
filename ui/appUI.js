@@ -56,11 +56,11 @@ export class AppUI {
   this.initVacationLedger();
   // Ensure vacation data hydrated across tabs
   try {
-    this.syncVacationCaches().then(()=>{
+    this.loadVacationData().then(()=>{
       try { this.renderVacationList(); if (this.renderVacationSummaryTable) this.renderVacationSummaryTable(); }
-      catch(err){ console.warn('Vacation render after sync failed', err); }
-    }).catch(err=> console.warn('syncVacationCaches init failed', err));
-  } catch(err){ console.warn('Unable to schedule vacation cache sync', err); }
+      catch(err){ console.warn('Vacation render after load failed', err); }
+    }).catch(err=> console.warn('loadVacationData init failed', err));
+  } catch(err){ console.warn('Unable to schedule vacation data load', err); }
   // Register service event listeners (e.g., ledger conflicts)
   try { this._attachServiceEventListeners(); } catch(e) { /* ignore */ }
   // Andere Mitarbeitende init
@@ -158,48 +158,44 @@ export class AppUI {
     if (editId) {
       const staff = staffSvc.update(editId, staffData);
       if (!staff) { alert('Mitarbeiter nicht gefunden'); return; }
-      // Persist temp periods via service if available
+      // Persist temp periods via unified helpers
       if (Array.isArray(appState.tempVacationPeriods)){
-        if (__services?.vacation){
-          const existing = await Promise.resolve(__services.vacation.listVacations(editId)) || [];
-          // Replace strategy: remove all then add
-          for (let i=existing.length-1;i>=0;i--){ await Promise.resolve(__services.vacation.removeVacation(editId, i)); }
-          for (const p of appState.tempVacationPeriods){ await Promise.resolve(__services.vacation.addVacation(editId, p)); }
-        } else {
-          if (!appState.vacationsByStaff[editId]) appState.vacationsByStaff[editId] = [];
-          appState.vacationsByStaff[editId] = [...(appState.tempVacationPeriods||[])];
+        // Clear existing vacations
+        const existingVacations = appState.vacationsByStaff[editId] || [];
+        for (let i = existingVacations.length - 1; i >= 0; i--) {
+          try { await this.deleteVacationRange(editId, i, false); } catch (err) { console.warn('Failed to remove old vacation', err); }
+        }
+        // Add new vacations
+        for (const p of appState.tempVacationPeriods) {
+          try { await this.upsertVacationRange(editId, p, false); } catch (err) { console.warn('Failed to add vacation', err); }
         }
       }
       if (Array.isArray(appState.tempIllnessPeriods)){
-        if (__services?.vacation){
-          const existingIll = await Promise.resolve(__services.vacation.listIllness(editId)) || [];
-          for (let i=existingIll.length-1;i>=0;i--){ await Promise.resolve(__services.vacation.removeIllness(editId, i)); }
-          for (const p of appState.tempIllnessPeriods){ await Promise.resolve(__services.vacation.addIllness(editId, p)); }
-        } else {
-          if (!appState.illnessByStaff) appState.illnessByStaff = {};
-          if (!appState.illnessByStaff[editId]) appState.illnessByStaff[editId] = [];
-          appState.illnessByStaff[editId] = [...(appState.tempIllnessPeriods||[])];
+        // Clear existing illness
+        const existingIllness = appState.illnessByStaff[editId] || [];
+        for (let i = existingIllness.length - 1; i >= 0; i--) {
+          try { await this.deleteVacationRange(editId, i, true); } catch (err) { console.warn('Failed to remove old illness', err); }
+        }
+        // Add new illness
+        for (const p of appState.tempIllnessPeriods) {
+          try { await this.upsertVacationRange(editId, p, true); } catch (err) { console.warn('Failed to add illness', err); }
         }
       }
-      await this.syncVacationCaches([editId]);
+      await this.loadVacationData([editId]);
     } else {
       const staff = staffSvc.create({ ...staffData, alternativeWeekendDays: [] });
       const nextId = staff.id;
       if (Array.isArray(appState.tempVacationPeriods) && appState.tempVacationPeriods.length){
-        if (__services?.vacation){ for (const p of appState.tempVacationPeriods){ await Promise.resolve(__services.vacation.addVacation(nextId, p)); } }
-        else {
-          if (!appState.vacationsByStaff[nextId]) appState.vacationsByStaff[nextId] = [];
-          appState.vacationsByStaff[nextId] = [...appState.tempVacationPeriods];
+        for (const p of appState.tempVacationPeriods) {
+          try { await this.upsertVacationRange(nextId, p, false); } catch (err) { console.warn('Failed to add vacation for new staff', err); }
         }
       }
       if (Array.isArray(appState.tempIllnessPeriods) && appState.tempIllnessPeriods.length){
-        if (__services?.vacation){ for (const p of appState.tempIllnessPeriods){ await Promise.resolve(__services.vacation.addIllness(nextId, p)); } }
-        else {
-          if (!appState.illnessByStaff) appState.illnessByStaff = {};
-          appState.illnessByStaff[nextId] = [...appState.tempIllnessPeriods];
+        for (const p of appState.tempIllnessPeriods) {
+          try { await this.upsertVacationRange(nextId, p, true); } catch (err) { console.warn('Failed to add illness for new staff', err); }
         }
       }
-      await this.syncVacationCaches([nextId]);
+      await this.loadVacationData([nextId]);
     }
     appState.save();
     this.resetStaffForm();
@@ -1217,18 +1213,15 @@ export class AppUI {
     const staffId = Number(staffSel?.value || 0);
     if (!staffId){ alert('Bitte Mitarbeiter wählen'); return; }
     if (!start || !end){ alert('Bitte Zeitraum wählen'); return; }
-    if (__services?.vacation){
-      await Promise.resolve(__services.vacation.addVacation(staffId, { start, end }));
-      __services?.audit?.log?.(auditMsg('vacation.add',{staffId,start,end}));
-    } else {
-      if (!appState.vacationsByStaff[staffId]) appState.vacationsByStaff[staffId] = [];
-      appState.vacationsByStaff[staffId].push({ start, end }); appState.save();
+    try {
+      await this.upsertVacationRange(staffId, { start, end });
+      this.renderStaffList();
+      this.renderVacationList();
+      if (this.renderVacationSummaryTable) this.renderVacationSummaryTable();
+      startEl.value = ''; endEl.value='';
+    } catch (err) {
+      alert(err.message);
     }
-  await this.syncVacationCaches([staffId]);
-  this.renderStaffList();
-    this.renderVacationList();
-    if (this.renderVacationSummaryTable) this.renderVacationSummaryTable();
-    startEl.value = ''; endEl.value='';
   }
 
   renderVacationList(){
@@ -1236,38 +1229,34 @@ export class AppUI {
     const staffSel = document.getElementById('vacationStaffSelect');
     if (!host || !staffSel) return;
     const staffId = Number(staffSel.value || 0);
-    const list = staffId ? (__services?.vacation ? __services.vacation.listVacations(staffId) : (appState.vacationsByStaff[staffId]||[])) : [];
+    const list = staffId ? (appState.vacationsByStaff[staffId] || []) : [];
     host.innerHTML = list.length
       ? list.map((p,idx)=>`<li>${p.start} bis ${p.end} <button class="btn btn-danger" data-idx="${idx}">Entfernen</button></li>`).join('')
       : '<li>Keine Einträge</li>';
     host.querySelectorAll('button[data-idx]').forEach(btn=>{
       btn.addEventListener('click', async (e)=>{
         const i = Number(e.currentTarget.dataset.idx);
-        if (__services?.vacation){
-          await Promise.resolve(__services.vacation.removeVacation(staffId, i));
-          __services?.audit?.log?.(auditMsg('vacation.remove',{staffId,index:i}));
+        try {
+          await this.deleteVacationRange(staffId, i);
+          this.renderStaffList();
+          this.renderVacationList();
+          if (this.renderVacationSummaryTable) this.renderVacationSummaryTable();
+        } catch (err) {
+          alert(err.message);
         }
-        else {
-          if (!appState.vacationsByStaff[staffId]) appState.vacationsByStaff[staffId] = [];
-          appState.vacationsByStaff[staffId].splice(i,1); appState.save();
-        }
-        await this.syncVacationCaches([staffId]);
-        this.renderStaffList();
-        this.renderVacationList();
-        if (this.renderVacationSummaryTable) this.renderVacationSummaryTable();
       });
     });
     staffSel.addEventListener('change', ()=> this.renderVacationList());
   }
 
   countPlannedVacationDaysForYear(staffId, year, weekdaysOnly=true){
-    const periods = __services?.vacation ? __services.vacation.listVacations(staffId) : (appState.vacationsByStaff?.[staffId] || []);
+    const periods = appState.vacationsByStaff?.[staffId] || [];
     let total = 0;
     for (const p of periods){ total += this.countOverlapDaysInYear(p.start, p.end, year, weekdaysOnly); }
     return total;
   }
   countSickDaysForYear(staffId, year, weekdaysOnly=false){
-    const periods = __services?.vacation ? __services.vacation.listIllness(staffId) : (appState.illnessByStaff?.[staffId] || []);
+    const periods = appState.illnessByStaff?.[staffId] || [];
     let total = 0;
     for (const p of periods){ total += this.countOverlapDaysInYear(p.start, p.end, year, weekdaysOnly); }
     return total;
@@ -1327,6 +1316,139 @@ export class AppUI {
       appState.save?.();
     } catch(err){
       console.warn('[AppUI] syncVacationCaches failed', err);
+    }
+  }
+
+  // Vacation data management helpers - unify storage across tabs
+  async loadVacationData(staffIds = null) {
+    try {
+      if (!appState.vacationsByStaff || typeof appState.vacationsByStaff !== 'object') appState.vacationsByStaff = {};
+      if (!appState.illnessByStaff || typeof appState.illnessByStaff !== 'object') appState.illnessByStaff = {};
+
+      const vacSvc = __services?.vacation;
+      if (!vacSvc) {
+        // Fallback to local state
+        if (staffIds) {
+          staffIds.forEach(id => {
+            if (!Array.isArray(appState.vacationsByStaff[id])) appState.vacationsByStaff[id] = [];
+            if (!Array.isArray(appState.illnessByStaff[id])) appState.illnessByStaff[id] = [];
+          });
+        }
+        this.rebuildVacationRequests();
+        return;
+      }
+
+      let targetIds = staffIds;
+      if (!targetIds) {
+        const staffSvc = __services?.staff;
+        targetIds = staffSvc?.list?.().map(s => s.id).filter(id => id !== undefined && id !== null) || [];
+        if (!targetIds.length) {
+          targetIds = Object.keys(appState.vacationsByStaff || {}).map(id => Number(id)).filter(id => !Number.isNaN(id));
+        }
+      }
+
+      const cloneList = (rows) => Array.isArray(rows) ? rows.map(entry => ({ ...entry })) : [];
+
+      for (const id of targetIds) {
+        try {
+          const vacationsRaw = await Promise.resolve(vacSvc.listVacations(id));
+          const illnessRaw = await Promise.resolve(vacSvc.listIllness(id));
+          appState.vacationsByStaff[id] = cloneList(vacationsRaw || []);
+          appState.illnessByStaff[id] = cloneList(illnessRaw || []);
+        } catch (err) {
+          console.warn('[AppUI] Failed loading vacations for staff', id, err);
+        }
+      }
+
+      this.rebuildVacationRequests();
+      appState.save?.();
+    } catch (err) {
+      console.warn('[AppUI] loadVacationData failed', err);
+    }
+  }
+
+  rebuildVacationRequests() {
+    // Rebuild appState.vacationRequests from canonical appState.vacationsByStaff for Urlaub tab compatibility
+    const requests = [];
+    Object.entries(appState.vacationsByStaff || {}).forEach(([staffId, periods]) => {
+      if (Array.isArray(periods)) {
+        periods.forEach(period => {
+          if (period.start && period.end) {
+            // Expand range to individual dates for Urlaub tab
+            const start = new Date(period.start);
+            const end = new Date(period.end);
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+              requests.push({
+                id: `${staffId}-${period.start}-${period.end}-${d.toISOString().split('T')[0]}`,
+                staffId: Number(staffId),
+                date: d.toISOString().split('T')[0],
+                type: 'vacation'
+              });
+            }
+          }
+        });
+      }
+    });
+    appState.vacationRequests = requests;
+  }
+
+  async upsertVacationRange(staffId, period, isIllness = false) {
+    const collection = isIllness ? 'illnessByStaff' : 'vacationsByStaff';
+    const serviceMethod = isIllness ? 'addIllness' : 'addVacation';
+    const auditAction = isIllness ? 'illness.add' : 'vacation.add';
+
+    // Update local state first
+    if (!appState[collection][staffId]) appState[collection][staffId] = [];
+    appState[collection][staffId].push({ ...period });
+    this.rebuildVacationRequests();
+    appState.save?.();
+
+    // Try to persist to service
+    try {
+      if (__services?.vacation?.[serviceMethod]) {
+        await Promise.resolve(__services.vacation[serviceMethod](staffId, period));
+        __services?.audit?.log?.(auditMsg(auditAction, { staffId, ...period }));
+      }
+    } catch (err) {
+      console.warn(`[AppUI] Failed to persist ${isIllness ? 'illness' : 'vacation'} to service`, err);
+      // Revert local changes
+      appState[collection][staffId].pop();
+      this.rebuildVacationRequests();
+      appState.save?.();
+      throw new Error(`Fehler beim Speichern: ${err.message}`);
+    }
+  }
+
+  async deleteVacationRange(staffId, index, isIllness = false) {
+    const collection = isIllness ? 'illnessByStaff' : 'vacationsByStaff';
+    const serviceMethod = isIllness ? 'removeIllness' : 'removeVacation';
+    const auditAction = isIllness ? 'illness.remove' : 'vacation.remove';
+
+    if (!appState[collection][staffId] || !appState[collection][staffId][index]) {
+      throw new Error('Eintrag nicht gefunden');
+    }
+
+    // Store for potential revert
+    const removed = appState[collection][staffId][index];
+
+    // Update local state first
+    appState[collection][staffId].splice(index, 1);
+    this.rebuildVacationRequests();
+    appState.save?.();
+
+    // Try to persist to service
+    try {
+      if (__services?.vacation?.[serviceMethod]) {
+        await Promise.resolve(__services.vacation[serviceMethod](staffId, index));
+        __services?.audit?.log?.(auditMsg(auditAction, { staffId, index, ...removed }));
+      }
+    } catch (err) {
+      console.warn(`[AppUI] Failed to delete ${isIllness ? 'illness' : 'vacation'} from service`, err);
+      // Revert local changes
+      appState[collection][staffId].splice(index, 0, removed);
+      this.rebuildVacationRequests();
+      appState.save?.();
+      throw new Error(`Fehler beim Löschen: ${err.message}`);
     }
   }
 
