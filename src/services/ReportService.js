@@ -10,6 +10,7 @@ export function createReportService(store, injectedState){
     earnings: new Map(),           // key: month -> { staffId: { hours, earnings } }
     studentWeekly: new Map(),      // key: month -> weeks structure
     overtimeCredits: new Map(),    // key: month -> creditsByStaffWeek
+    contractedHours: new Map(),    // key: month -> { staffId: contractedHours }
     dirtyMonths: new Set()
   };
   function markDirty(dateStr){
@@ -132,5 +133,62 @@ export function createReportService(store, injectedState){
     // Always recompute to reflect latest schedule state; could be optimized with dirty flags later.
     return recomputeOvertimeCredits(month);
   }
-  return { sumMonthlyHours, computeEarnings, recomputeOvertimeCredits, getWeekNumber, studentWeekly, getOvertimeCredits, _cache:cache };
+
+  function countVacationDaysInMonth(staffId, month){
+    const vacations = state.vacationsByStaff?.[staffId] || [];
+    const [year, monthNum] = month.split('-').map(Number);
+    let total = 0;
+    for (const period of vacations) {
+      const start = parseYMD(period.start);
+      const end = parseYMD(period.end);
+      if (isNaN(start) || isNaN(end)) continue;
+      const monthStart = new Date(year, monthNum - 1, 1);
+      const monthEnd = new Date(year, monthNum, 0); // Last day of month
+      const overlapStart = start > monthStart ? start : monthStart;
+      const overlapEnd = end < monthEnd ? end : monthEnd;
+      if (overlapEnd >= overlapStart) {
+        const cur = new Date(overlapStart);
+        while (cur <= overlapEnd) {
+          const day = cur.getDay();
+          // Count weekdays (Monday-Friday) as vacation days
+          if (day >= 1 && day <= 5) total++;
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
+    }
+    return total;
+  }
+
+  function computeContractedHours(month){
+    if (cache.contractedHours.has(month) && !cache.dirtyMonths.has(month)) return cache.contractedHours.get(month);
+    const out = {};
+    (state.staffData||[]).forEach(s => {
+      const contractHours = Number(s.contractHours || 0);
+      const typicalWorkdays = Number(s.typicalWorkdays || 5);
+      if (contractHours <= 0 || typicalWorkdays <= 0) {
+        out[s.id] = 0;
+        return;
+      }
+      const hoursPerDay = contractHours / typicalWorkdays;
+      // Calculate working days in month
+      const [year, monthNum] = month.split('-').map(Number);
+      const monthStart = new Date(year, monthNum - 1, 1);
+      const monthEnd = new Date(year, monthNum, 0);
+      let workingDaysInMonth = 0;
+      const cur = new Date(monthStart);
+      while (cur <= monthEnd) {
+        const day = cur.getDay();
+        if (day >= 1 && day <= 5) workingDaysInMonth++; // Monday-Friday
+        cur.setDate(cur.getDate() + 1);
+      }
+      // Subtract vacation days
+      const vacationDays = countVacationDaysInMonth(s.id, month);
+      const effectiveWorkingDays = Math.max(0, workingDaysInMonth - vacationDays);
+      out[s.id] = effectiveWorkingDays * hoursPerDay;
+    });
+    cache.contractedHours.set(month, out);
+    return out;
+  }
+
+  return { sumMonthlyHours, computeEarnings, recomputeOvertimeCredits, getWeekNumber, studentWeekly, getOvertimeCredits, computeContractedHours, _cache:cache };
 }

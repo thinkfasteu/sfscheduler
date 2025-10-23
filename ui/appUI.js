@@ -1193,13 +1193,14 @@ export class AppUI {
   renderMonthlyHoursReport(month){
     const tbody = document.getElementById('monthlyHoursReport'); if (!tbody) return;
   const earnings = __services?.report?.computeEarnings ? __services.report.computeEarnings(month) : {};
+    const contracted = __services?.report?.computeContractedHours ? __services.report.computeContractedHours(month) : {};
     const ot = appState.overtimeCredits?.[month] || {};
     const overtimeByStaff = Object.fromEntries(Object.entries(ot).map(([sid, weeks]) => [sid, Object.values(weeks||{}).reduce((a,b)=>a+Number(b||0),0)]));
     const rows = (appState.staffData||[]).map(s => {
       const rec = earnings[s.id] || { hours:0, earnings:0 };
       const h = Math.round(rec.hours*100)/100;
       const earn = rec.earnings;
-      const contractedHours = Number(s.contractHours || 0);
+      const contractedHours = Number(contracted[s.id] || s.contractHours || 0);
       let status = 'OK';
       
       // Practical limits status for Minijob and Student roles
