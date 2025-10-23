@@ -1349,12 +1349,27 @@ export class AppUI {
 
       const cloneList = (rows) => Array.isArray(rows) ? rows.map(entry => ({ ...entry })) : [];
 
+      // Normalize vacation/illness data to use { start, end } keys
+      const normalizePeriod = (row) => {
+        const start = row.start ?? row.startDate;
+        const end = row.end ?? row.endDate;
+        if (!start || !end) {
+          console.warn('[AppUI] Skipping vacation/illness entry with missing start/end:', row);
+          return null;
+        }
+        // Preserve metadata in meta field
+        const { start: _, end: __, startDate: ___, endDate: ____, ...meta } = row;
+        return { start, end, meta: Object.keys(meta).length > 0 ? meta : undefined };
+      };
+
       for (const id of targetIds) {
         try {
           const vacationsRaw = await Promise.resolve(vacSvc.listVacations(id));
           const illnessRaw = await Promise.resolve(vacSvc.listIllness(id));
-          appState.vacationsByStaff[id] = cloneList(vacationsRaw || []);
-          appState.illnessByStaff[id] = cloneList(illnessRaw || []);
+          const vacations = cloneList(vacationsRaw || []).map(normalizePeriod).filter(Boolean);
+          const illness = cloneList(illnessRaw || []).map(normalizePeriod).filter(Boolean);
+          appState.vacationsByStaff[id] = vacations;
+          appState.illnessByStaff[id] = illness;
         } catch (err) {
           console.warn('[AppUI] Failed loading vacations for staff', id, err);
         }
