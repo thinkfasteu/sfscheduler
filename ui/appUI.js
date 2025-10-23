@@ -61,6 +61,8 @@ export class AppUI {
       catch(err){ console.warn('Vacation render after load failed', err); }
     }).catch(err=> console.warn('loadVacationData init failed', err));
   } catch(err){ console.warn('Unable to schedule vacation data load', err); }
+  // Wire Urlaub tab add button
+  document.getElementById('addVacationPeriodBtn')?.addEventListener('click', () => this.addVacationPeriod());
   // Register service event listeners (e.g., ledger conflicts)
   try { this._attachServiceEventListeners(); } catch(e) { /* ignore */ }
   // Andere Mitarbeitende init
@@ -643,6 +645,17 @@ export class AppUI {
       });
     });
   setTimeout(()=>{ wrap.classList.add('fade-out'); setTimeout(()=>wrap.remove(), 600); }, 10000);
+  }
+
+  showSyncFailureToast(message = 'Synchronisation fehlgeschlagen, Änderung lokal gespeichert') {
+    this.ensureToastContainer();
+    const wrap = document.createElement('div');
+    wrap.className = 'toast toast-warning';
+    wrap.innerHTML = `<div class="fw-600">Sync-Fehler</div><div class="fs-13">${message}</div><div class="flex-gap-6"><button class="btn btn-sm btn-danger ml-auto" data-act="close">✕</button></div>`;
+    const container = document.getElementById('toastContainer');
+    container.appendChild(wrap);
+    wrap.querySelector('button[data-act="close"]').addEventListener('click', () => wrap.remove());
+    setTimeout(() => { wrap.classList.add('fade-out'); setTimeout(() => wrap.remove(), 600); }, 5000);
   }
 
   renderIllnessList(){
@@ -1426,11 +1439,8 @@ export class AppUI {
       }
     } catch (err) {
       console.warn(`[AppUI] Failed to persist ${isIllness ? 'illness' : 'vacation'} to service`, err);
-      // Revert local changes
-      appState[collection][staffId].pop();
-      this.rebuildVacationRequests();
-      appState.save?.();
-      throw new Error(`Fehler beim Speichern: ${err.message}`);
+      // Do not revert local changes; show toast instead
+      this.showSyncFailureToast(`Fehler beim Speichern: ${err.message}`);
     }
   }
 
@@ -1459,11 +1469,8 @@ export class AppUI {
       }
     } catch (err) {
       console.warn(`[AppUI] Failed to delete ${isIllness ? 'illness' : 'vacation'} from service`, err);
-      // Revert local changes
-      appState[collection][staffId].splice(index, 0, removed);
-      this.rebuildVacationRequests();
-      appState.save?.();
-      throw new Error(`Fehler beim Löschen: ${err.message}`);
+      // Do not revert local changes; show toast instead
+      this.showSyncFailureToast(`Fehler beim Löschen: ${err.message}`);
     }
   }
 
