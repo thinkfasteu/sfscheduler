@@ -1495,7 +1495,7 @@ export class AppUI {
 
   async deleteVacationRange(staffId, index, isIllness = false) {
     const collection = isIllness ? 'illnessByStaff' : 'vacationsByStaff';
-    const serviceMethod = isIllness ? 'removeIllness' : 'removeVacation';
+    const serviceMethod = isIllness ? 'removeIllnessById' : 'removeVacationById';
     const auditAction = isIllness ? 'illness.remove' : 'vacation.remove';
 
     if (!appState[collection][staffId] || !appState[collection][staffId][index]) {
@@ -1513,10 +1513,15 @@ export class AppUI {
     // Try to persist to service
     try {
       if (__services?.vacation?.[serviceMethod]) {
-        await Promise.resolve(__services.vacation[serviceMethod](staffId, index));
-        __services?.audit?.log?.(auditMsg(auditAction, { staffId, index, ...removed }));
-        // Re-load data to ensure consistency with service
-        await this.loadVacationData([staffId]);
+        const recordId = removed.meta?.id;
+        if (recordId) {
+          await Promise.resolve(__services.vacation[serviceMethod](recordId));
+          __services?.audit?.log?.(auditMsg(auditAction, { staffId, recordId, ...removed }));
+          // Re-load data to ensure consistency with service
+          await this.loadVacationData([staffId]);
+        } else {
+          console.warn(`[AppUI] Cannot delete ${isIllness ? 'illness' : 'vacation'} remotely: no record ID available (local only)`, removed);
+        }
       }
     } catch (err) {
       console.warn(`[AppUI] Failed to delete ${isIllness ? 'illness' : 'vacation'} from service`, err);

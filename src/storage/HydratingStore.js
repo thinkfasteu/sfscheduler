@@ -432,6 +432,22 @@ export class HydratingStore {
     if (recordId && !this.remote.disabled){ this._enqueue('removeVacation', async ()=> { await this.remote.removeVacation(recordId); }); }
     return true;
   }
+  removeVacationById(id){
+    // Find and remove the vacation with this ID across all staff
+    for (const staffId in appState.vacationsByStaff) {
+      const list = appState.vacationsByStaff[staffId];
+      if (Array.isArray(list)) {
+        const idx = list.findIndex(v => (v.id === id || v.meta?.id === id));
+        if (idx >= 0) {
+          list.splice(idx, 1);
+          appState.save?.();
+          if (!this.remote.disabled){ this._enqueue('removeVacation', async ()=> { await this.remote.removeVacation(id); }); }
+          return true;
+        }
+      }
+    }
+    return false;
+  }
   listIllness(staffId){ return appState.illnessByStaff?.[staffId] || []; }
   addIllness(staffId, period){
     if (!appState.illnessByStaff[staffId]) appState.illnessByStaff[staffId] = [];
@@ -503,6 +519,22 @@ export class HydratingStore {
     const recordId = removed?.id || removed?.meta?.id;
     if (recordId && !this.remote.disabled){ this._enqueue('removeIllness', async ()=> { await this.remote.removeIllness(recordId); }); }
     return true;
+  }
+  removeIllnessById(id){
+    // Find and remove the illness with this ID across all staff
+    for (const staffId in appState.illnessByStaff) {
+      const list = appState.illnessByStaff[staffId];
+      if (Array.isArray(list)) {
+        const idx = list.findIndex(v => (v.id === id || v.meta?.id === id));
+        if (idx >= 0) {
+          list.splice(idx, 1);
+          appState.save?.();
+          if (!this.remote.disabled){ this._enqueue('removeIllness', async ()=> { await this.remote.removeIllness(id); }); }
+          return true;
+        }
+      }
+    }
+    return false;
   }
   listOvertimeRequests(){ return Object.values(appState.overtimeRequests||{}).flatMap(m=> Object.values(m||{}).flat()); }
   createOvertimeRequest(month, dateStr, req){
