@@ -168,13 +168,6 @@
                             <textarea id="notesPracticalCaps" placeholder="z.B. Prüfungszeiten, Semesterferien..." rows="2"></textarea>
                         </div>
                     </div>
-                    <h4>Urlaubszeiträume</h4>
-                    <div class="form-row grid-cols-1fr-1fr-auto align-end">
-                        <div><label>Von</label><input type="date" id="staffVacationStart" /></div>
-                        <div><label>Bis</label><input type="date" id="staffVacationEnd" /></div>
-                        <button id="addStaffVacationBtn" class="btn btn-secondary">Urlaub hinzufügen</button>
-                    </div>
-                    <ul id="staffVacationList"></ul>
 
                     <h4>Krankheitszeiträume</h4>
                     <div class="form-row grid-cols-1fr-1fr-auto align-end">
@@ -267,6 +260,7 @@
                     <div><label>Von</label><input type="date" id="vacationStart" /></div>
                     <div><label>Bis</label><input type="date" id="vacationEnd" /></div>
                     <button id="addVacationPeriodBtn" class="btn btn-secondary">Urlaub hinzufügen</button>
+                    <button id="quickIllnessBtn" class="btn btn-warning">Krankmeldung</button>
                 </div>
                 <ul id="vacationList"></ul>
 
@@ -524,6 +518,29 @@
         </div>
         <div class="hint mt-8">
             Hinweis: Kandidatenliste basiert auf Regeln und Verfügbarkeiten; Blocker werden als Hinweis angezeigt und verhindern die Zuweisung.
+        </div>
+    </div>
+</div>
+
+<!-- Quick Add Illness Modal -->
+<div id="quickIllnessModal" class="modal">
+    <div class="modal-content narrow">
+        <div class="modal-header">
+            <h3>Krankmeldung hinzufügen</h3>
+            <button id="quickIllnessModalCloseBtn" class="btn btn-secondary">Schließen</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Mitarbeiter</label>
+                <select id="quickIllnessStaffSelect"></select>
+            </div>
+            <div class="form-row grid-cols-1fr-1fr align-end">
+                <div><label>Von</label><input type="date" id="quickIllnessStart" /></div>
+                <div><label>Bis</label><input type="date" id="quickIllnessEnd" /></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="quickIllnessAddBtn" class="btn btn-success">Hinzufügen</button>
         </div>
     </div>
 </div>

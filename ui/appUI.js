@@ -51,7 +51,6 @@ export class AppUI {
   this.initHolidays();
   this.renderIcsSources();
   // Render temp lists (when editing)
-  this.renderTempVacationList();
   this.renderTempIllnessList();
   // Urlaub: Ledger init
   this.initVacationLedger();
@@ -64,6 +63,9 @@ export class AppUI {
   } catch(err){ console.warn('Unable to schedule vacation data load', err); }
   // Wire Urlaub tab add button
   document.getElementById('addVacationPeriodBtn')?.addEventListener('click', () => this.addVacationPeriod());
+  document.getElementById('quickIllnessBtn')?.addEventListener('click', () => this.showQuickIllnessModal());
+  document.getElementById('quickIllnessModalCloseBtn')?.addEventListener('click', () => this.hideQuickIllnessModal());
+  document.getElementById('quickIllnessAddBtn')?.addEventListener('click', () => this.addQuickIllness());
   // Register service event listeners (e.g., ledger conflicts)
   try { this._attachServiceEventListeners(); } catch(e) { /* ignore */ }
   // Andere Mitarbeitende init
@@ -162,17 +164,6 @@ export class AppUI {
       const staff = staffSvc.update(editId, staffData);
       if (!staff) { alert('Mitarbeiter nicht gefunden'); return; }
       // Persist temp periods via unified helpers
-      if (Array.isArray(appState.tempVacationPeriods)){
-        // Clear existing vacations
-        const existingVacations = appState.vacationsByStaff[editId] || [];
-        for (let i = existingVacations.length - 1; i >= 0; i--) {
-          try { await this.deleteVacationRange(editId, i, false); } catch (err) { console.warn('Failed to remove old vacation', err); }
-        }
-        // Add new vacations
-        for (const p of appState.tempVacationPeriods) {
-          try { await this.upsertVacationRange(editId, p, false); } catch (err) { console.warn('Failed to add vacation', err); }
-        }
-      }
       if (Array.isArray(appState.tempIllnessPeriods)){
         // Clear existing illness
         const existingIllness = appState.illnessByStaff[editId] || [];
@@ -188,11 +179,6 @@ export class AppUI {
     } else {
       const staff = staffSvc.create({ ...staffData, alternativeWeekendDays: [] });
       const nextId = staff.id;
-      if (Array.isArray(appState.tempVacationPeriods) && appState.tempVacationPeriods.length){
-        for (const p of appState.tempVacationPeriods) {
-          try { await this.upsertVacationRange(nextId, p, false); } catch (err) { console.warn('Failed to add vacation for new staff', err); }
-        }
-      }
       if (Array.isArray(appState.tempIllnessPeriods) && appState.tempIllnessPeriods.length){
         for (const p of appState.tempIllnessPeriods) {
           try { await this.upsertVacationRange(nextId, p, true); } catch (err) { console.warn('Failed to add illness for new staff', err); }
@@ -335,9 +321,7 @@ export class AppUI {
     const saveBtn = document.getElementById('saveStaffBtn'); if (saveBtn) saveBtn.textContent = 'Arbeitskraft speichern';
   const cancelBtn = document.getElementById('cancelEditBtn'); if (cancelBtn) cancelBtn.hidden = true;
     // Clear temp lists
-    appState.tempVacationPeriods = [];
     appState.tempIllnessPeriods = [];
-    this.renderTempVacationList();
     this.renderTempIllnessList();
   }
 
@@ -427,10 +411,8 @@ export class AppUI {
         const editIdEl = document.getElementById('staffIdToEdit'); if (editIdEl) editIdEl.value = String(id);
         const saveBtn = document.getElementById('saveStaffBtn'); if (saveBtn) saveBtn.textContent = 'Änderungen speichern';
   const cancelBtn = document.getElementById('cancelEditBtn'); if (cancelBtn) cancelBtn.hidden = false;
-        // Load per-staff vacations/illnesses to temp lists for editing
-        appState.tempVacationPeriods = [...(appState.vacationsByStaff?.[id]||[])];
+        // Load per-staff illnesses to temp lists for editing
         appState.tempIllnessPeriods = [...(appState.illnessByStaff?.[id]||[])];
-        this.renderTempVacationList();
         this.renderTempIllnessList();
         // Switch to tab remains in place
       });
@@ -526,19 +508,7 @@ export class AppUI {
     });
   }
 
-  // ==== Staff temp Vacation/Illness (form) ====
-  addStaffVacationPeriod(){
-    const startEl = document.getElementById('staffVacationStart');
-    const endEl = document.getElementById('staffVacationEnd');
-    const start = startEl?.value; const end = endEl?.value;
-    if (!start || !end || end < start){ alert('Bitte gültigen Urlaubszeitraum wählen'); return; }
-    appState.tempVacationPeriods = appState.tempVacationPeriods || [];
-    appState.tempVacationPeriods.push({ start, end });
-
-    appState.save();
-    this.renderTempVacationList();
-    if (startEl) startEl.value=''; if (endEl) endEl.value='';
-  }
+  // ==== Staff temp Illness (form) ====
   renderTempIllnessList(){ /* already defined later if duplicated, guard */ }
 
   // ==== Vacation Ledger (summary panel) ==== 
@@ -670,19 +640,6 @@ export class AppUI {
       btn.addEventListener('click', (e)=>{
         const i = Number(e.currentTarget.getAttribute('data-rm-ill'));
         appState.tempIllnessPeriods.splice(i,1); appState.save(); this.renderIllnessList();
-      });
-    });
-  }
-  renderTempVacationList(){
-    const host = document.getElementById('staffVacationList');
-    if (!host) return;
-    const list = appState.tempVacationPeriods || [];
-    host.innerHTML = list.length ? list.map((p,idx)=>`<li class="list-item"><span>${p.start} bis ${p.end}</span><button class="btn btn-sm btn-danger" data-rm-vac="${idx}" title="Entfernen">✕</button></li>`).join('') : '<li class="list-item"><span>Keine Einträge</span></li>';
-    host.querySelectorAll('button[data-rm-vac]').forEach(btn=>{
-      btn.addEventListener('click', (e)=>{
-        const i = Number(e.currentTarget.getAttribute('data-rm-vac'));
-        appState.tempVacationPeriods.splice(i,1);
-        appState.save(); this.renderTempVacationList();
       });
     });
   }
@@ -1579,5 +1536,54 @@ function initRoleChangeHandler() {
     };
     roleEl.addEventListener('change', sync);
     sync(); // Run initially
+  }
+}
+
+// Quick Illness Modal functions
+function showQuickIllnessModal() {
+  const modal = document.getElementById('quickIllnessModal');
+  if (!modal) return;
+  // Populate staff select
+  const staffSel = document.getElementById('quickIllnessStaffSelect');
+  if (staffSel) {
+    const staffList = (__services?.staff?.list ? __services.staff.list() : appState.staffData) || [];
+    staffSel.innerHTML = '<option value="">-- Mitarbeiter wählen --</option>' + staffList.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    // Pre-select if vacation staff is selected
+    const vacStaffSel = document.getElementById('vacationStaffSelect');
+    if (vacStaffSel && vacStaffSel.value) {
+      staffSel.value = vacStaffSel.value;
+    }
+  }
+  modal.style.display = 'block';
+}
+
+function hideQuickIllnessModal() {
+  const modal = document.getElementById('quickIllnessModal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function addQuickIllness() {
+  const staffSel = document.getElementById('quickIllnessStaffSelect');
+  const startEl = document.getElementById('quickIllnessStart');
+  const endEl = document.getElementById('quickIllnessEnd');
+  const staffId = Number(staffSel?.value);
+  const start = startEl?.value;
+  const end = endEl?.value;
+  if (!staffId || !start || !end || end < start) {
+    alert('Bitte Mitarbeiter und gültigen Krankheitszeitraum wählen');
+    return;
+  }
+  try {
+    await appUI.upsertVacationRange(staffId, { start, end }, true);
+    await appUI.loadVacationData([staffId]);
+    appUI.renderVacationList();
+    if (appUI.renderVacationSummaryTable) appUI.renderVacationSummaryTable();
+    hideQuickIllnessModal();
+    // Clear fields
+    if (startEl) startEl.value = '';
+    if (endEl) endEl.value = '';
+  } catch (err) {
+    console.error('Failed to add illness', err);
+    alert('Fehler beim Hinzufügen der Krankmeldung');
   }
 }
