@@ -17,6 +17,7 @@ export class AppUI {
     this._availabilityHydrateTimer = null;
     this._availabilityHydrationInFlight = false;
     this._lastAvailabilityHydratedAt = 0;
+    this._vacationControlsBound = false;
   }
 
   init(){
@@ -61,11 +62,13 @@ export class AppUI {
       catch(err){ console.warn('Vacation render after load failed', err); }
     }).catch(err=> console.warn('loadVacationData init failed', err));
   } catch(err){ console.warn('Unable to schedule vacation data load', err); }
-  // Wire Urlaub tab add button
-  document.getElementById('addVacationPeriodBtn')?.addEventListener('click', () => this.addVacationPeriod());
-  document.getElementById('quickIllnessBtn')?.addEventListener('click', () => this.showQuickIllnessModal());
-  document.getElementById('quickIllnessModalCloseBtn')?.addEventListener('click', () => this.hideQuickIllnessModal());
-  document.getElementById('quickIllnessAddBtn')?.addEventListener('click', () => this.addQuickIllness());
+  if (!this._vacationControlsBound) {
+    document.getElementById('addVacationPeriodBtn')?.addEventListener('click', () => this.addVacationPeriod());
+    document.getElementById('quickIllnessBtn')?.addEventListener('click', () => this.showQuickIllnessModal());
+    document.getElementById('quickIllnessModalCloseBtn')?.addEventListener('click', () => this.hideQuickIllnessModal());
+    document.getElementById('quickIllnessAddBtn')?.addEventListener('click', () => this.addQuickIllness());
+    this._vacationControlsBound = true;
+  }
   // Register service event listeners (e.g., ledger conflicts)
   try { this._attachServiceEventListeners(); } catch(e) { /* ignore */ }
   // Andere Mitarbeitende init
@@ -1514,7 +1517,17 @@ export class AppUI {
     });
     if (removedAssignments > 0) {
       appState.save?.();
-      try { window.handlers?.ui?.updateCalendarFromSelect?.(); } catch {}
+      try {
+        if (this.scheduleUI?.updateCalendarFromSelect) {
+          this.scheduleUI.updateCalendarFromSelect();
+        } else if (window.scheduleUI?.updateCalendarFromSelect) {
+          window.scheduleUI.updateCalendarFromSelect();
+        } else {
+          window.handlers?.ui?.updateCalendarFromSelect?.();
+        }
+      } catch (err) {
+        console.warn('[AppUI] calendar refresh after illness removal failed', err);
+      }
     }
   }
 
