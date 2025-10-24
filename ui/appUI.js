@@ -20,6 +20,12 @@ export class AppUI {
     this._vacationControlsBound = false;
   }
 
+  _defaultVacationAllowance(staff){
+    const configured = Number(APP_CONFIG?.DEFAULT_VACATION_DAYS ?? APP_CONFIG?.DEFAULT_VACATION_ALLOWANCE);
+    if (!Number.isNaN(configured) && configured > 0) return configured;
+    return 30;
+  }
+
   init(){
     // If services not yet initialized (dynamic import still loading), defer setup
     if (!__services){
@@ -538,7 +544,7 @@ export class AppUI {
     const rows = staffList.map(s => {
       const planned = this.countPlannedVacationDaysForYear ? this.countPlannedVacationDaysForYear(s.id, year) : 0;
       const sick = this.countSickDaysForYear ? this.countSickDaysForYear(s.id, year) : 0;
-      const allowance = (ledger?.[s.id]?.allowance) ?? (s.role==='permanent'?30:0);
+  const allowance = (ledger?.[s.id]?.allowance) ?? this._defaultVacationAllowance(s);
       const takenManual = (ledger?.[s.id]?.takenManual) ?? 0;
       const carryPrev = (ledger?.[s.id]?.carryPrev) ?? 0;
       const remaining = allowance + carryPrev - takenManual - planned;
