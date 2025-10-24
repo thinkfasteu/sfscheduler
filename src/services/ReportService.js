@@ -162,29 +162,29 @@ export function createReportService(store, injectedState){
   function computeContractedHours(month){
     if (cache.contractedHours.has(month) && !cache.dirtyMonths.has(month)) return cache.contractedHours.get(month);
     const out = {};
+    const baselineWorkdays = Number(APP_CONFIG?.WORKDAYS_PER_WEEK || 5) || 5;
     (state.staffData||[]).forEach(s => {
-      const contractHours = Number(s.contractHours || 0);
-      const typicalWorkdays = Number(s.typicalWorkdays || 5);
-      if (contractHours <= 0 || typicalWorkdays <= 0) {
+      const weeklyContractHours = Number(s.contractHours || 0);
+      if (weeklyContractHours <= 0) {
         out[s.id] = 0;
         return;
       }
-      const hoursPerDay = contractHours / typicalWorkdays;
-      // Calculate working days in month
       const [year, monthNum] = month.split('-').map(Number);
       const monthStart = new Date(year, monthNum - 1, 1);
       const monthEnd = new Date(year, monthNum, 0);
-      let workingDaysInMonth = 0;
-      const cur = new Date(monthStart);
-      while (cur <= monthEnd) {
-        const day = cur.getDay();
-        if (day >= 1 && day <= 5) workingDaysInMonth++; // Monday-Friday
-        cur.setDate(cur.getDate() + 1);
+      let workingWeekdays = 0;
+      const cursor = new Date(monthStart);
+      while (cursor <= monthEnd) {
+        const day = cursor.getDay();
+        if (day >= 1 && day <= 5) workingWeekdays++;
+        cursor.setDate(cursor.getDate() + 1);
       }
-      // Subtract vacation days
-      const vacationDays = countVacationDaysInMonth(s.id, month);
-      const effectiveWorkingDays = Math.max(0, workingDaysInMonth - vacationDays);
-      out[s.id] = effectiveWorkingDays * hoursPerDay;
+      const vacationWeekdays = countVacationDaysInMonth(s.id, month);
+      const effectiveWeekdays = Math.max(0, workingWeekdays - vacationWeekdays);
+      const expectedHours = (baselineWorkdays > 0)
+        ? weeklyContractHours * (effectiveWeekdays / baselineWorkdays)
+        : 0;
+      out[s.id] = expectedHours;
     });
     cache.contractedHours.set(month, out);
     return out;
