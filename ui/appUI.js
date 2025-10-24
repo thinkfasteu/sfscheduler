@@ -1365,8 +1365,12 @@ export class AppUI {
           const illnessRaw = await Promise.resolve(vacSvc.listIllness(id));
           const vacations = cloneList(vacationsRaw || []).map(normalizePeriod).filter(Boolean);
           const illness = cloneList(illnessRaw || []).map(normalizePeriod).filter(Boolean);
-          appState.vacationsByStaff[id] = vacations;
-          appState.illnessByStaff[id] = illness;
+
+          const existingVacations = Array.isArray(appState.vacationsByStaff[id]) ? appState.vacationsByStaff[id] : [];
+          const existingIllness = Array.isArray(appState.illnessByStaff[id]) ? appState.illnessByStaff[id] : [];
+
+          appState.vacationsByStaff[id] = this._mergePeriods(existingVacations, vacations);
+          appState.illnessByStaff[id] = this._mergePeriods(existingIllness, illness);
         } catch (err) {
           console.warn('[AppUI] Failed loading vacations for staff', id, err);
         }
@@ -1376,6 +1380,200 @@ export class AppUI {
       appState.save?.();
     } catch (err) {
       console.warn('[AppUI] loadVacationData failed', err);
+    }
+  }
+
+  _mergePeriods(existingList = [], incomingList = []) {
+    const byRange = new Map();
+    const byId = new Map();
+    const place = (period, source) => {
+      if (!period || !period.start || !period.end) return;
+      const id = period.meta?.id || period.id;
+      const rangeKey = `${period.start}::${period.end}`;
+
+      if (id) {
+        if (byId.has(id)) return;
+      }
+
+      const current = byRange.get(rangeKey);
+      if (!current) {
+        byRange.set(rangeKey, period);
+        if (id) byId.set(id, period);
+        return;
+      }
+
+      const currentId = current.meta?.id || current.id;
+      const currentPending = !!current.meta?.pending;
+      const incomingPending = !!period.meta?.pending;
+
+      // Prefer entries with stable IDs over local placeholders
+      if (!currentId && id) {
+        byRange.set(rangeKey, period);
+        if (id) byId.set(id, period);
+        return;
+      }
+
+      // Prefer non-pending (synced) entries over pending ones
+      if (currentPending && !incomingPending) {
+        if (currentId) byId.delete(currentId);
+        byRange.set(rangeKey, period);
+        if (id) byId.set(id, period);
+        return;
+      }
+
+      // If both represent the same canonical record (ID match), keep first
+      if (id && currentId && String(id) === String(currentId)) {
+        return;
+      }
+
+      // Otherwise keep existing (remote takes precedence because it is processed first)
+      if (id && !byId.has(id)) {
+        byId.set(id, current);
+      }
+    };
+
+    (incomingList || []).forEach(period => place(period, 'remote'));
+    (existingList || []).forEach(period => place(period, 'local'));
+    return Array.from(byRange.values());
+  }
+
+  _generateLocalAbsenceId(prefix) {
+    const base = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return `local-${prefix}-${base}`;
+  }
+
+  _ensureLocalPeriod(staffId, collection, period, isIllness, markPending = false) {
+    if (!period?.start || !period?.end) return false;
+    if (!appState[collection]) appState[collection] = {};
+    if (!Array.isArray(appState[collection][staffId])) appState[collection][staffId] = [];
+    const list = appState[collection][staffId];
+    const candidateId = period?.meta?.id || period?.id;
+    const existing = list.find(item => {
+      if (!item) return false;
+      const itemId = item.meta?.id || item.id;
+      if (candidateId && itemId) return String(itemId) === String(candidateId);
+      return item.start === period.start && item.end === period.end;
+    });
+    if (existing) {
+      if (markPending && !existing.meta?.pending) {
+        existing.meta = { ...(existing.meta || {}), pending: true };
+        return true;
+      }
+      return false;
+    }
+    const meta = { ...(period.meta || {}) };
+    if (!meta.id) meta.id = this._generateLocalAbsenceId(isIllness ? 'ill' : 'vac');
+    if (markPending) meta.pending = true;
+    list.push({ start: period.start, end: period.end, meta });
+    return true;
+  }
+
+  _removeAssignmentsForStaffRange(staffId, start, end) {
+    if (!staffId || !start || !end) return;
+    if (!appState.scheduleData || typeof appState.scheduleData !== 'object') return;
+    let startDate;
+    let endDate;
+    try {
+      startDate = parseYMD(start);
+      endDate = parseYMD(end);
+    } catch {
+      return;
+    }
+    if (!(startDate instanceof Date) || Number.isNaN(startDate.getTime())) return;
+    if (!(endDate instanceof Date) || Number.isNaN(endDate.getTime())) return;
+    const startTs = startDate.getTime();
+    const endTs = endDate.getTime();
+    if (endTs < startTs) return;
+    let removedAssignments = 0;
+    Object.values(appState.scheduleData).forEach(monthValue => {
+      const container = monthValue && typeof monthValue === 'object' && monthValue.data && typeof monthValue.data === 'object'
+        ? monthValue.data
+        : monthValue;
+      if (!container || typeof container !== 'object') return;
+      Object.entries(container).forEach(([dateStr, dayObj]) => {
+        if (!dayObj || !dayObj.assignments) return;
+        let dateObj;
+        try { dateObj = parseYMD(dateStr); } catch { return; }
+        if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return;
+        const dateTs = dateObj.getTime();
+        if (dateTs < startTs || dateTs > endTs) return;
+        let changed = false;
+        Object.keys({ ...(dayObj.assignments || {}) }).forEach(shiftKey => {
+          if (String(dayObj.assignments[shiftKey]) === String(staffId)) {
+            delete dayObj.assignments[shiftKey];
+            changed = true;
+          }
+        });
+        if (changed) {
+          removedAssignments += 1;
+          if (dayObj.blockers) delete dayObj.blockers;
+        }
+      });
+    });
+    if (removedAssignments > 0) {
+      appState.save?.();
+      try { window.handlers?.ui?.updateCalendarFromSelect?.(); } catch {}
+    }
+  }
+
+  showQuickIllnessModal() {
+    const modal = document.getElementById('quickIllnessModal');
+    if (!modal) return;
+    const staffSel = document.getElementById('quickIllnessStaffSelect');
+    if (staffSel) {
+      const staffList = (__services?.staff?.list ? __services.staff.list() : appState.staffData) || [];
+      staffSel.innerHTML = '<option value="">-- Mitarbeiter wählen --</option>' + staffList.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+      const vacStaffSel = document.getElementById('vacationStaffSelect');
+      if (vacStaffSel && vacStaffSel.value) {
+        staffSel.value = vacStaffSel.value;
+      }
+    }
+    try {
+      if (window.modalManager?.open) {
+        window.modalManager.open('quickIllnessModal');
+        return;
+      }
+    } catch (err) {
+      console.warn('[AppUI] quickIllnessModal open via modalManager failed', err);
+    }
+    modal.style.display = 'block';
+  }
+
+  hideQuickIllnessModal() {
+    try {
+      if (window.modalManager?.close) {
+        window.modalManager.close('quickIllnessModal');
+        return;
+      }
+    } catch (err) {
+      console.warn('[AppUI] quickIllnessModal close via modalManager failed', err);
+    }
+    const modal = document.getElementById('quickIllnessModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async addQuickIllness() {
+    const staffSel = document.getElementById('quickIllnessStaffSelect');
+    const startEl = document.getElementById('quickIllnessStart');
+    const endEl = document.getElementById('quickIllnessEnd');
+    const staffId = Number(staffSel?.value);
+    const start = startEl?.value;
+    const end = endEl?.value;
+    if (!staffId || !start || !end || end < start) {
+      alert('Bitte Mitarbeiter und gültigen Krankheitszeitraum wählen');
+      return;
+    }
+    try {
+      await this.upsertVacationRange(staffId, { start, end }, true);
+      this.renderIllnessList?.();
+      this.hideQuickIllnessModal();
+      if (startEl) startEl.value = '';
+      if (endEl) endEl.value = '';
+    } catch (err) {
+      console.error('Failed to add illness', err);
+      alert('Fehler beim Hinzufügen der Krankmeldung');
     }
   }
 
@@ -1408,25 +1606,40 @@ export class AppUI {
     const collection = isIllness ? 'illnessByStaff' : 'vacationsByStaff';
     const serviceMethod = isIllness ? 'addIllness' : 'addVacation';
     const auditAction = isIllness ? 'illness.add' : 'vacation.add';
-
-    // Update local state first
+    if (!appState[collection]) appState[collection] = {};
     if (!appState[collection][staffId]) appState[collection][staffId] = [];
-    appState[collection][staffId].push({ ...period });
-    this.rebuildVacationRequests();
-    appState.save?.();
 
-    // Try to persist to service
-    try {
-      if (__services?.vacation?.[serviceMethod]) {
-        await Promise.resolve(__services.vacation[serviceMethod](staffId, period));
+    const service = __services?.vacation?.[serviceMethod];
+    let localMutated = false;
+    let rehydrated = false;
+
+    const ensureLocal = (markPending = false) => {
+      const changed = this._ensureLocalPeriod(staffId, collection, period, isIllness, markPending);
+      localMutated = localMutated || changed;
+    };
+
+    if (!service) {
+      ensureLocal(false);
+    } else {
+      try {
+        await Promise.resolve(service(staffId, period));
         __services?.audit?.log?.(auditMsg(auditAction, { staffId, ...period }));
-        // Re-load data to ensure consistency with service
         await this.loadVacationData([staffId]);
+        rehydrated = true;
+      } catch (err) {
+        console.warn(`[AppUI] Failed to persist ${isIllness ? 'illness' : 'vacation'} to service`, err);
+        ensureLocal(true);
+        this.showSyncFailureToast(`Fehler beim Speichern: ${err.message}`);
       }
-    } catch (err) {
-      console.warn(`[AppUI] Failed to persist ${isIllness ? 'illness' : 'vacation'} to service`, err);
-      // Do not revert local changes; show toast instead
-      this.showSyncFailureToast(`Fehler beim Speichern: ${err.message}`);
+    }
+
+    if (!service || (localMutated && !rehydrated)) {
+      this.rebuildVacationRequests();
+      appState.save?.();
+    }
+
+    if (isIllness) {
+      this._removeAssignmentsForStaffRange(staffId, period.start, period.end);
     }
   }
 
@@ -1539,51 +1752,3 @@ function initRoleChangeHandler() {
   }
 }
 
-// Quick Illness Modal functions
-function showQuickIllnessModal() {
-  const modal = document.getElementById('quickIllnessModal');
-  if (!modal) return;
-  // Populate staff select
-  const staffSel = document.getElementById('quickIllnessStaffSelect');
-  if (staffSel) {
-    const staffList = (__services?.staff?.list ? __services.staff.list() : appState.staffData) || [];
-    staffSel.innerHTML = '<option value="">-- Mitarbeiter wählen --</option>' + staffList.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-    // Pre-select if vacation staff is selected
-    const vacStaffSel = document.getElementById('vacationStaffSelect');
-    if (vacStaffSel && vacStaffSel.value) {
-      staffSel.value = vacStaffSel.value;
-    }
-  }
-  modal.style.display = 'block';
-}
-
-function hideQuickIllnessModal() {
-  const modal = document.getElementById('quickIllnessModal');
-  if (modal) modal.style.display = 'none';
-}
-
-async function addQuickIllness() {
-  const staffSel = document.getElementById('quickIllnessStaffSelect');
-  const startEl = document.getElementById('quickIllnessStart');
-  const endEl = document.getElementById('quickIllnessEnd');
-  const staffId = Number(staffSel?.value);
-  const start = startEl?.value;
-  const end = endEl?.value;
-  if (!staffId || !start || !end || end < start) {
-    alert('Bitte Mitarbeiter und gültigen Krankheitszeitraum wählen');
-    return;
-  }
-  try {
-    await appUI.upsertVacationRange(staffId, { start, end }, true);
-    await appUI.loadVacationData([staffId]);
-    appUI.renderVacationList();
-    if (appUI.renderVacationSummaryTable) appUI.renderVacationSummaryTable();
-    hideQuickIllnessModal();
-    // Clear fields
-    if (startEl) startEl.value = '';
-    if (endEl) endEl.value = '';
-  } catch (err) {
-    console.error('Failed to add illness', err);
-    alert('Fehler beim Hinzufügen der Krankmeldung');
-  }
-}
