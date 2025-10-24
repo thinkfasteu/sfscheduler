@@ -99,6 +99,7 @@ export class AppState {
       });
   // Run light migrations after load (idempotent)
   try { this.migrateVoluntaryEveningKeys(); } catch {}
+  try { this.normalizeStaffRecords(); } catch {}
   // Persist if anything changed
   try { this.save(true); } catch {}
     }
@@ -178,6 +179,37 @@ export class AppState {
       }
     });
     if (changed) this.voluntaryEveningAvailability = map;
+  }
+
+  normalizeStaffRecords(){
+    if (!Array.isArray(this.staffData)) return;
+    let changed = false;
+    this.staffData.forEach(entry => {
+      if (!entry || typeof entry !== 'object') return;
+      if (entry.typicalWorkdays == null && entry.typical_workdays != null) {
+        entry.typicalWorkdays = entry.typical_workdays;
+        changed = true;
+      }
+      if (entry.contractHours == null && entry.contract_hours != null) {
+        entry.contractHours = entry.contract_hours;
+        changed = true;
+      }
+      if (entry.weekendPreference == null && entry.weekend_preference != null) {
+        entry.weekendPreference = entry.weekend_preference;
+        changed = true;
+      }
+    });
+    if (changed) {
+      // Strip legacy snake_case fields after mapping
+      this.staffData = this.staffData.map(entry => {
+        if (!entry || typeof entry !== 'object') return entry;
+        if ('typical_workdays' in entry || 'contract_hours' in entry || 'weekend_preference' in entry) {
+          const { typical_workdays, contract_hours, weekend_preference, ...rest } = entry;
+          return rest;
+        }
+        return entry;
+      });
+    }
   }
 }
 
