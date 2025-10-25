@@ -627,8 +627,15 @@ export class HydratingStore {
   auditList(){ return Array.isArray(appState.auditLog)? appState.auditLog : []; }
   auditLog(message, meta){
     if (!Array.isArray(appState.auditLog)) appState.auditLog = [];
-    appState.auditLog.push({ timestamp: Date.now(), message, meta });
+    const entry = { timestamp: Date.now(), message, meta };
+    appState.auditLog.push(entry);
     appState.save?.();
+    try {
+      const services = (typeof window !== 'undefined' && window.__services)
+        || (typeof globalThis !== 'undefined' && globalThis.__services);
+      services?.events?.emit?.('audit:logged', entry);
+    } catch(err){ console.warn('[HydratingStore] audit emit failed', err); }
     if (!this.remote.disabled){ this._enqueue('auditLog', async ()=> { await this.remote.auditLog(message, meta); }); }
+    return true;
   }
 }

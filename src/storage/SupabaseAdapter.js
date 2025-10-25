@@ -359,14 +359,43 @@ export class SupabaseAdapter {
   // Audit (local only for now)
   auditList(){
     if (this.disabled) return [];
-    // Return latest 200 entries (reverse chronological)
-    return this._rpc('audit_log?select=*&order=ts.desc&limit=200').then(rows=> rows.map(r=>({ id:r.id, timestamp: Date.parse(r.ts)||Date.now(), message:r.message, meta:r.meta||null })) ).catch(()=>[]);
+    const fetchWithOrder = async (col)=>{
+      try { return await this._rpc(`audit_log?select=*&order=${col}.desc&limit=200`); }
+      catch { return null; }
+    };
+    return (async ()=>{
+      let rows = await fetchWithOrder('created_at');
+      if (!rows) rows = await fetchWithOrder('ts');
+      if (!rows) rows = await this._rpc('audit_log?select=*&limit=200').catch(()=>[]);
+      if (!Array.isArray(rows)) rows = [];
+      return rows.map(r=>{
+        const rawTs = r.ts ?? r.created_at ?? r.timestamp ?? r.inserted_at;
+        let timestamp = typeof rawTs === 'number' && Number.isFinite(rawTs) ? rawTs : Date.parse(rawTs || '');
+        if (!Number.isFinite(timestamp)) timestamp = Date.now();
+        const message = r.message ?? r.action ?? '';
+        const meta = r.meta ?? r.metadata ?? r.payload ?? null;
+        return { id:r.id, timestamp, message, meta };
+      });
+    })();
   }
   async auditLog(message, meta){
     if (this.disabled) return;
-    try {
-      await this._rpc('audit_log', { method:'POST', body: JSON.stringify([{ ts: new Date().toISOString(), message, meta: meta||null }]) });
-    } catch(e){ console.warn('[SupabaseAdapter] auditLog failed (non-fatal)', e); }
+    const ts = new Date().toISOString();
+    const payloads = [
+      { ts, message, meta: meta ?? null },
+      { created_at: ts, action: message, metadata: meta ?? null },
+      { created_at: ts, action: message, payload: meta ?? null }
+    ];
+    let lastError = null;
+    for (const body of payloads){
+      try {
+        await this._rpc('audit_log', { method:'POST', body: JSON.stringify([body]) });
+        return;
+      } catch(err){
+        lastError = err;
+      }
+    }
+    if (lastError) console.warn('[SupabaseAdapter] auditLog failed (non-fatal)', lastError);
   }
 
   // ---- Overtime Requests (tables: overtime_requests, overtime_consents) ----

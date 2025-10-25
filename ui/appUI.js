@@ -18,6 +18,7 @@ export class AppUI {
     this._availabilityHydrationInFlight = false;
     this._lastAvailabilityHydratedAt = 0;
     this._vacationControlsBound = false;
+    this._auditHydrationPromise = null;
   }
 
   _defaultVacationAllowance(staff){
@@ -95,7 +96,8 @@ export class AppUI {
      this._servicesHydrated = true;
      try { this.renderStaffList(); this.populateAvailabilitySelectors(); } catch(e){ console.warn('[UI] late staff render failed', e); }
    }
-   this.renderAuditLog();
+  this.renderAuditLog();
+  this._hydrateAuditLog().catch(err=> console.warn('[AppUI] initial audit hydration failed', err));
    // Fallback polling in case ready promise resolves before init or events missed
    if (backendMode==='supabase' && __services?.ready){
      let tries=0; const poll=()=>{ if (this._servicesHydrated) return; tries++; if ((__services?.staff?.list?.()||[]).length){ this._servicesHydrated=true; try{ this.renderStaffList(); }catch{} return; } if (tries<20) setTimeout(poll, 300); }; poll();
@@ -108,6 +110,7 @@ export class AppUI {
     __services?.events?.on('ledgerConflict', (p)=>{ console.warn('[UI] ledger conflict', p); this.showLedgerConflictToast(p); });
     __services?.events?.on('staff:hydrated', ()=>{ try { this._servicesHydrated = true; this.renderStaffList(); this.populateAvailabilitySelectors(); } catch(e){ console.warn('[UI] staff:hydrated render failed', e); } });
     __services?.events?.on('staff:created', ()=>{ try { this.renderStaffList(); this.populateAvailabilitySelectors(); } catch(e){ console.warn('[UI] staff:created render failed', e); } });
+    __services?.events?.on?.('audit:logged', ()=>{ try { this.renderAuditLog(); } catch(err){ console.warn('[UI] audit render after log failed', err); } });
   }
 
   // ==== Staff ====
@@ -1208,6 +1211,73 @@ export class AppUI {
   return `<tr><td class=\"text-left\">${tsStr}</td><td>${msg}</td></tr>`;
     }).join('');
   tbody.innerHTML = rows || '<tr><td colspan=\"2\" class=\"text-center text-muted\">Keine Einträge</td></tr>';
+  }
+
+  async _hydrateAuditLog(){
+    if (this._auditHydrationPromise) return this._auditHydrationPromise;
+    const run = async () => {
+      try {
+        const ready = __services?.ready;
+        if (ready?.then) {
+          try { await ready; } catch(e){ console.warn('[AppUI] audit hydration waiting on services failed', e); }
+        }
+        const auditSvc = __services?.audit;
+        if (!auditSvc) return;
+        let localEntries = [];
+        try {
+          const list = auditSvc.list?.();
+          if (Array.isArray(list)) localEntries = list;
+        } catch(e){ console.warn('[AppUI] audit local list failed', e); }
+
+        let remoteEntries = [];
+        const hasRemote = !!(__services?.store && (__services.store.remote || __services.store.constructor?.name === 'SupabaseAdapter'));
+        if (hasRemote && typeof auditSvc.listRemote === 'function') {
+          try {
+            const fetched = await auditSvc.listRemote();
+            if (Array.isArray(fetched)) remoteEntries = fetched;
+          } catch(e){ console.warn('[AppUI] audit remote list failed', e); }
+        }
+
+        const merged = this._mergeAuditEntries(localEntries, remoteEntries);
+        if (merged) {
+          appState.auditLog = merged;
+          appState.save?.();
+        }
+      } catch(err){
+        console.warn('[AppUI] audit hydration run failed', err);
+      }
+      this.renderAuditLog();
+    };
+    this._auditHydrationPromise = run().finally(()=>{ this._auditHydrationPromise = null; });
+    return this._auditHydrationPromise;
+  }
+
+  _mergeAuditEntries(localEntries = [], remoteEntries = []){
+    const byKey = new Map();
+    const push = (entry) => {
+      const normalized = this._normalizeAuditEntry(entry);
+      if (!normalized) return;
+      const key = normalized.id ? `id:${normalized.id}` : `${normalized.timestamp}:${normalized.message}`;
+      if (!byKey.has(key)) byKey.set(key, normalized);
+    };
+    (localEntries || []).forEach(push);
+    (remoteEntries || []).forEach(push);
+    if (!byKey.size) return [];
+    return Array.from(byKey.values()).sort((a,b)=>{
+      if (a.timestamp === b.timestamp) return 0;
+      return a.timestamp < b.timestamp ? -1 : 1;
+    });
+  }
+
+  _normalizeAuditEntry(entry){
+    if (!entry) return null;
+    const id = entry.id || entry.meta?.id || null;
+    const rawTs = entry.timestamp ?? entry.ts ?? entry.created_at ?? entry.createdAt ?? entry.inserted_at ?? entry.time;
+    let timestamp = typeof rawTs === 'number' && Number.isFinite(rawTs) ? rawTs : Date.parse(rawTs || '');
+    if (!Number.isFinite(timestamp)) timestamp = Date.now();
+    const message = entry.message ?? entry.action ?? entry.note ?? '';
+    const meta = entry.meta ?? entry.metadata ?? entry.payload ?? null;
+    return { id, timestamp, message, meta };
   }
 
   async addVacationPeriod(){
