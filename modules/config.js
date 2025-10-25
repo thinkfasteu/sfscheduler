@@ -45,7 +45,7 @@ export const APP_CONFIG = {
 
     // Minijob earnings
     MINIJOB_MAX_EARNING: 556,
-    MINIJOB_HOURLY_WAGE: 13.50,
+    MINIJOB_HOURLY_WAGE: 13.00,
 
     // Holiday API settings
     HOLIDAY_API_STATE: 'HE', // Hessen by default (used with Nager API counties: DE-HE)

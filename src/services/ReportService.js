@@ -55,12 +55,12 @@ export function createReportService(store, injectedState){
   }
   function computeEarnings(month){
     if (cache.earnings.has(month) && !cache.dirtyMonths.has(month)) return cache.earnings.get(month);
-    const wages = Number(APP_CONFIG?.MINIJOB_HOURLY_WAGE ?? 13.5);
+    const wages = Number(APP_CONFIG?.MINIJOB_HOURLY_WAGE ?? 13);
     const hours = sumMonthlyHours(month);
     const out = {};
     (state.staffData||[]).forEach(s => {
       const h = hours[s.id]||0;
-      const earn = s.role==='permanent' ? h * wages * (35/20) : h * wages; // placeholder logic
+      const earn = s.role==='permanent' ? null : h * wages;
       out[s.id] = { hours: h, earnings: earn };
     });
     cache.earnings.set(month, out);

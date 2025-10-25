@@ -1162,10 +1162,14 @@ export class AppUI {
       
       if (s.role==='minijob'){
         const cap = Number(APP_CONFIG?.MINIJOB_MAX_EARNING ?? 556);
-        if (earn > cap + 1e-6) status = `> Minijob-Cap (${cap.toFixed(0)}€)`;
+        const carryover = Number(appState.carryoverByStaffAndMonth?.[s.id]?.[month] ?? 0);
+        if (earn !== null && earn > cap + 1e-6) {
+          status = carryover < 0 ? 'OK (Ausgleich)' : `Überschreitung (${cap}€)`;
+        }
       }
       const otH = Number(overtimeByStaff[s.id]||0);
-  return `<tr><td class=\"text-left\">${s.name}${practicalLimitsInfo}</td><td>${s.role}</td><td>${contractedHours.toFixed(2)}</td><td>${h.toFixed(2)}</td><td>${otH>0?otH.toFixed(2):'—'}</td><td>${(Math.round(earn*100)/100).toFixed(2)} €</td><td>${status}</td></tr>`;
+      const earningsDisplay = (s.role === 'permanent' || earn === null) ? '—' : `${(Math.round(earn*100)/100).toFixed(2)} €`;
+  return `<tr><td class=\"text-left\">${s.name}${practicalLimitsInfo}</td><td>${s.role}</td><td>${contractedHours.toFixed(2)}</td><td>${h.toFixed(2)}</td><td>${otH>0?otH.toFixed(2):'—'}</td><td>${earningsDisplay}</td><td>${status}</td></tr>`;
     }).join('');
   tbody.innerHTML = rows || '<tr><td colspan=\"7\" class=\"text-center text-muted\">Keine Daten</td></tr>';
   }
