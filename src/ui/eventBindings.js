@@ -39,7 +39,6 @@ function __initEventBindings(){
     btn.addEventListener('click', e => { if (typeof window.showTab==='function') window.showTab(e, btn.getAttribute('data-tab')); });
   });
   // Staff
-  bind('addStaffVacationBtn','click', ()=> window.addStaffVacationPeriod && window.addStaffVacationPeriod());
   bind('addStaffIllnessBtn','click', ()=> window.addStaffIllnessPeriod && window.addStaffIllnessPeriod());
   bind('saveStaffBtn','click', ()=> window.addStaff && window.addStaff());
   bind('cancelEditBtn','click', ()=> window.resetStaffForm && window.resetStaffForm());

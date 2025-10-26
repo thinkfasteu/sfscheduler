@@ -643,6 +643,8 @@ export class ScheduleUI {
         }
         html += '</div>';
     grid.innerHTML = html;
+    // Re-bind schedule handlers after DOM update
+    window.__bindScheduleHandlers?.();
     // Set current month BEFORE attempting holiday badge update so filter works
     this.currentCalendarMonth = month;
     try { this.ensureHolidaysLoaded(y); } catch(e){ console.warn('[phase] ensureHolidaysLoaded failed', e); }
