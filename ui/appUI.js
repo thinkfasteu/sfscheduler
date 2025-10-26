@@ -830,9 +830,32 @@ export class AppUI {
       return statusLine;
     };
 
+    const getHolidayMeta = (dateStr) => {
+      if (this.scheduleUI?.getHolidayMeta) {
+        try { return this.scheduleUI.getHolidayMeta(dateStr); } catch (err) { console.warn('[Availability] getHolidayMeta via scheduleUI failed', err); }
+      }
+      try {
+        const yearKey = String(y);
+        const entry = appState.holidays?.[yearKey]?.[dateStr];
+        return normalizeHolidayEntry(entry, 'legacy');
+      } catch (err) {
+        console.warn('[Availability] fallback holiday meta failed', err);
+      }
+      return null;
+    };
+
     const getTypeForDate = (dateStr) => {
-      const d = parseYMD(dateStr); const isWE = d.getDay()===0 || d.getDay()===6; const hol = appState.holidays[String(y)]?.[dateStr]; return hol ? 'holiday' : (isWE ? 'weekend' : 'weekday'); };
-    const getShiftsForType = (type) => Object.entries(SHIFTS).filter(([_,v])=>v.type===type).map(([k])=>k);
+      const meta = getHolidayMeta(dateStr);
+      const d = parseYMD(dateStr);
+      const isWeekend = d.getDay()===0 || d.getDay()===6;
+      if (meta?.closed) return 'closed';
+      if (meta?.name) return 'holiday';
+      return isWeekend ? 'weekend' : 'weekday';
+    };
+    const getShiftsForType = (type) => {
+      if (type === 'closed') return [];
+      return Object.entries(SHIFTS).filter(([_,v])=>v.type===type).map(([k])=>k);
+    };
     const isPermanent = staff?.role === 'permanent';
     let html = '<div class="avail-grid">';
     if (isPermanent){
@@ -894,20 +917,32 @@ export class AppUI {
 
     for (let d=1; d<=days; d++){
       const dateStr = `${y}-${pad2(m)}-${pad2(d)}`;
+      const meta = getHolidayMeta(dateStr) || null;
       const type = getTypeForDate(dateStr);
       const shiftsForDay = getShiftsForType(type);
       const isWE = type==='weekend';
-      const holName = type==='holiday' ? (appState.holidays[String(y)]?.[dateStr]||'') : '';
-      const rowClasses = ['avail-row']; if (isWE) rowClasses.push('is-weekend'); if (holName) rowClasses.push('is-holiday');
+      const isHolidayType = type==='holiday';
+      const isClosed = type==='closed';
+      const holName = meta?.name || '';
+      const rowClasses = ['avail-row'];
+      if (isWE) rowClasses.push('is-weekend');
+      if (isHolidayType) rowClasses.push('is-holiday');
+      if (isClosed) rowClasses.push('is-closed');
   const dateObj = parseYMD(dateStr);
   const dayIndex = (dateObj instanceof Date && !Number.isNaN(dateObj?.getTime?.())) ? dateObj.getDay() : new Date(`${dateStr}T00:00:00`).getDay();
   const weekdayLabel = ['So','Mo','Di','Mi','Do','Fr','Sa'][dayIndex] || '';
-    const flags = [ isWE ? '<span class="day-flag">Wochenende</span>' : '', holName ? `<span class="day-flag">${holName}</span>` : '' ].filter(Boolean).join('');
-      const off = isDayOff(dateStr);
+    const flags = [
+        isWE ? '<span class="day-flag">Wochenende</span>' : '',
+        holName ? `<span class="day-flag">${holName}</span>` : '',
+        isClosed ? '<span class="day-flag badge-error">Geschlossen</span>' : ''
+      ].filter(Boolean).join('');
+      const off = isClosed ? true : isDayOff(dateStr);
   html += `<div class="${rowClasses.join(' ')} ${isPermanent ? 'avail-cols-permanent' : 'avail-cols-regular'}">`;
   html += `<div class="avail-cell"><span class="day-label">${weekdayLabel}</span><strong>${pad2(d)}.${pad2(m)}.${y}</strong> ${flags}</div>`;
   html += '<div class="avail-cell text-left">';
-      if (shiftsForDay.length===0){ html += '<span class="na-cell">—</span>'; }
+      if (shiftsForDay.length===0){
+        html += isClosed ? '<span class="na-cell">Geschlossen</span>' : '<span class="na-cell">—</span>';
+      }
       else {
         shiftsForDay.forEach(k=>{
           let val = getShiftValue(dateStr, k);
@@ -923,13 +958,19 @@ export class AppUI {
       }
       html += '</div>';
       if (isPermanent){
-        const isWeekday = !isWE && !holName;
+        const isWeekday = type === 'weekday';
         const vEven = isWeekday ? isVoluntary(dateStr, 'evening') : false;
         const vClose = isWeekday ? isVoluntary(dateStr, 'closing') : false;
   html += `<div class="avail-cell">${isWeekday?`<label class="inline align-center gap-6"><input type="checkbox" class="vol-evening" data-date="${dateStr}" ${vEven?'checked':''}/> <span>Abend</span></label>`:'<span class="na-cell">—</span>'}</div>`;
   html += `<div class="avail-cell">${isWeekday?`<label class="inline align-center gap-6"><input type="checkbox" class="vol-closing" data-date="${dateStr}" ${vClose?'checked':''}/> <span>Spät</span></label>`:'<span class="na-cell">—</span>'}</div>`;
       }
-      if (isPermanent){ html += `<div class="avail-cell"><button class="btn ${off?'btn-secondary':''}" data-dayoff="1" data-date="${dateStr}" data-off="${off?1:0}">${off?'Freiwunsch':'Frei wünschen'}</button></div>`; }
+      if (isPermanent){
+        if (isClosed){
+          html += '<div class="avail-cell"><span class="na-cell">Geschlossen</span></div>';
+        } else {
+          html += `<div class="avail-cell"><button class="btn ${off?'btn-secondary':''}" data-dayoff="1" data-date="${dateStr}" data-off="${off?1:0}">${off?'Freiwunsch':'Frei wünschen'}</button></div>`;
+        }
+      }
       html += '</div>';
     }
     html += '</div>';

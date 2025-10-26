@@ -243,6 +243,10 @@ class SchedulingEngine {
     this.absenceDaysByWeek = {};    // days counted as worked per week
     this.absenceHoursByMonth = {};  // hours deducted from monthly target
     this.computeAbsenceMaps();
+    this.holidayHoursByWeek = {};
+    this.holidayDaysByWeek = {};
+    this.holidayHoursByMonth = {};
+    this.computeHolidayCredits();
     // Snapshot student exception & fairness flags
     this.studentExceptionAllowed = !!appState.studentExceptionMonths?.[month];
     this.studentFairnessMode = !!appState.studentFairnessMode;
@@ -267,7 +271,12 @@ class SchedulingEngine {
             const dow = dt.getDay();
             if (dow!==0 && dow!==6) weekdayCount++;
         }
-        return weekly * (weekdayCount / 5);
+        let target = weekly * (weekdayCount / 5);
+        if (staff?.role === 'permanent'){
+            const credit = this.holidayHoursByMonth?.[staff.id] || 0;
+            if (credit > 0) target -= credit;
+        }
+        return Math.max(0, target);
     }
 
     // Get effective weekly hour limits using practical limits where available
@@ -370,6 +379,31 @@ class SchedulingEngine {
                 this.absenceHoursByWeek[sid][weekNum] = (this.absenceHoursByWeek[sid][weekNum]||0) + hpd;
                 this.absenceDaysByWeek[sid][weekNum] = (this.absenceDaysByWeek[sid][weekNum]||0) + 1;
                 this.absenceHoursByMonth[sid] = (this.absenceHoursByMonth[sid]||0) + hpd;
+            });
+        }
+    }
+
+    computeHolidayCredits(){
+        const staffList = appState.staffData || [];
+        if (!staffList.length) return;
+        for (let day=1; day<=this.daysInMonth; day++){
+            const dt = new Date(this.year, this.monthNum-1, day);
+            const dow = dt.getDay();
+            if (dow === 0 || dow === 6) continue;
+            const dateStr = this.toLocalISODate(dt);
+            const entry = resolveHolidayEntry(dateStr);
+            if (!entry?.name) continue;
+            const weekNum = this.getWeekNumber(dt);
+            staffList.forEach(staff => {
+                if (staff?.role !== 'permanent') return;
+                const sid = staff.id;
+                const hoursPerDay = this.getHoursPerWorkingDay(staff);
+                if (!hoursPerDay) return;
+                if (!this.holidayHoursByWeek[sid]) this.holidayHoursByWeek[sid] = {};
+                if (!this.holidayDaysByWeek[sid]) this.holidayDaysByWeek[sid] = {};
+                this.holidayHoursByWeek[sid][weekNum] = (this.holidayHoursByWeek[sid][weekNum] || 0) + hoursPerDay;
+                this.holidayDaysByWeek[sid][weekNum] = (this.holidayDaysByWeek[sid][weekNum] || 0) + 1;
+                this.holidayHoursByMonth[sid] = (this.holidayHoursByMonth[sid] || 0) + hoursPerDay;
             });
         }
     }
@@ -483,7 +517,9 @@ class SchedulingEngine {
 
             // Typical workdays adherence (do not exceed typical days by much)
             const typicalDays = Number(staff.typicalWorkdays || 0);
-            const workedDaysThisWeek = (this.daysWorkedThisWeek[staff.id] || 0) + (this.absenceDaysByWeek?.[staff.id]?.[weekNum] || 0);
+            const workedDaysThisWeek = (this.daysWorkedThisWeek[staff.id] || 0)
+                + (this.absenceDaysByWeek?.[staff.id]?.[weekNum] || 0)
+                + (this.holidayDaysByWeek?.[staff.id]?.[weekNum] || 0);
             if (typicalDays > 0){
                 // Small bonus to reach typical days
                 if (workedDaysThisWeek < typicalDays) score += 20;
