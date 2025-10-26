@@ -1168,7 +1168,6 @@ export class ScheduleUI {
         // Build candidate list with scoring from engine
         const engine = new SchedulingEngine(month);
         const weekNum = engine.getWeekNumber(date);
-        const staffSel = document.getElementById('swapStaffSelect');
         // Lightweight consent updater (prevents full candidate re-render on selection changes)
         const updateConsentForSelected = () => {
             try {
@@ -1291,7 +1290,6 @@ export class ScheduleUI {
                 if (blocker) parts.push(`Blockiert: ${blocker}`);
                 return `${s.name}: ${parts.length?parts.join(', '):'—'}`;
             }).join('<br/>');
-            const notes = document.getElementById('candidateNotes');
             notes.innerHTML = `Hinweise:<br/>${hints}`;
 
             // Consent UI: only relevant for permanent, weekend, no weekendPreference
@@ -1332,11 +1330,9 @@ export class ScheduleUI {
         managerCb.onchange = () => renderCandidates();
     }
     renderCandidates();
-        const notes = document.getElementById('candidateNotes');
         // Notes content set in renderCandidates
 
         // Add explicit 'Leave blank' option (unassign)
-        const leaveBtn = document.getElementById('leaveBlankBtn');
         if (leaveBtn){
             leaveBtn.onclick = ()=>{
                 const sh = shiftSel.value;
