@@ -175,6 +175,10 @@ export class EventHandler {
     executeAssign(){
         const modal = document.getElementById('swapModal');
         if (!modal) return;
+        if (modal.dataset.closed === 'true'){
+            alert('Dieser Tag ist als geschlossen markiert. Es können keine Zuweisungen vorgenommen werden.');
+            return;
+        }
         const dateStr = modal.dataset.date;
         const shiftKey = modal.dataset.shift;
         const selectEl = document.getElementById('swapStaffSelect');

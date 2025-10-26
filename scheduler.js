@@ -5,6 +5,39 @@ const WIN = (typeof window !== 'undefined') ? window : { holidayService: null };
 import { parseYMD } from './utils/dateUtils.js';
 import { getStudentWeeklyCapSync } from './modules/academicTerms.js';
 
+function resolveHolidayEntry(dateStr){
+    const normalize = (value) => {
+        if (!value) return null;
+        if (typeof value === 'string') {
+            return { name: value, closed: false };
+        }
+        if (typeof value === 'object') {
+            return {
+                name: value.name || value.localName || '',
+                closed: !!value.closed
+            };
+        }
+        return null;
+    };
+    const yearStr = dateStr.split('-')[0];
+    const fromState = appState.holidays?.[yearStr]?.[dateStr];
+    const stateEntry = normalize(fromState);
+    if (stateEntry) return stateEntry;
+    try {
+        const svc = WIN.holidayService;
+        if (svc?.getHoliday) {
+            const svcEntry = normalize(svc.getHoliday(dateStr));
+            if (svcEntry) return svcEntry;
+        }
+        const name = svc?.getHolidayName?.(dateStr) || null;
+        const closed = svc?.isClosed?.(dateStr) || false;
+        if (name || closed) return { name: name || '', closed: !!closed };
+    } catch (e) {
+        /* noop */
+    }
+    return null;
+}
+
 // Minimal, consistent schedule container used by the UI/state
 class Schedule {
     constructor(month){
@@ -16,17 +49,14 @@ class Schedule {
         this.daysInMonth = new Date(y, m, 0).getDate();
     }
     getShiftsForDate(dateStr){
-        // Christmas Day (December 25) and New Year's Day (January 1) are non-business days
-        if (dateStr.endsWith('-12-25') || dateStr.endsWith('-01-01')) {
-            return []; // No shifts available on Christmas or New Year
+        const entry = resolveHolidayEntry(dateStr);
+        if (entry?.closed) {
+            return [];
         }
-        
+
         const d = parseYMD(dateStr);
         const isWeekend = [0,6].includes(d.getDay());
-        // Use TS singleton as primary source, fallback to appState for compatibility
-        const isHoliday = WIN.holidayService
-            ? WIN.holidayService.isHoliday(dateStr)
-            : !!(appState.holidays?.[String(this.year)]?.[dateStr]);
+        const isHoliday = !!entry?.name;
         const type = isHoliday ? 'holiday' : isWeekend ? 'weekend' : 'weekday';
         
         const shifts = Object.entries(SHIFTS)
@@ -37,10 +67,8 @@ class Schedule {
     }
     setAssignment(dateStr, shiftKey, staffId){
         if (!this.data[dateStr]){
-            // Use TS singleton as primary source for holiday name
-            const holidayName = WIN.holidayService
-                ? WIN.holidayService.getHolidayName(dateStr)
-                : (appState.holidays?.[String(this.year)]?.[dateStr] || null);
+            const entry = resolveHolidayEntry(dateStr);
+            const holidayName = entry?.name || null;
             this.data[dateStr] = { assignments: {}, holidayName };
         }
         this.data[dateStr].assignments[shiftKey] = staffId;
@@ -130,14 +158,8 @@ const BUSINESS_RULES = {
     NON_BUSINESS_DAYS: {
         id: 'NON_BUSINESS_DAYS', description: 'No scheduling on Christmas and New Year',
         validate: (dateStr, _shiftKey, _staff, _hours, _engine) => {
-            // Christmas Day (December 25) and New Year's Day (January 1) are non-business days
-            // No shifts should be scheduled on these days regardless of holiday shift availability
-            if (dateStr.endsWith('-12-25')) {
-                return false; // Christmas Day - no scheduling
-            }
-            if (dateStr.endsWith('-01-01')) {
-                return false; // New Year's Day - no scheduling  
-            }
+            const entry = resolveHolidayEntry(dateStr);
+            if (entry?.closed) return false;
             return true;
         }
     },
@@ -297,6 +319,7 @@ class SchedulingEngine {
     toLocalISODate(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
     getWeekNumber(d){ d=new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7)); const y0=new Date(Date.UTC(d.getUTCFullYear(),0,1)); return Math.ceil((((d-y0)/86400000)+1)/7); }
     isWeekend(dateStr){ const d=parseYMD(dateStr); return [0,6].includes(d.getDay()); }
+    isClosedDay(dateStr){ const entry = resolveHolidayEntry(dateStr); return !!entry?.closed; }
     isNightWeekendShift(shiftKey){ return shiftKey==='closing' || shiftKey.startsWith('weekend-'); }
     parseShiftTime(dateStr, timeStr){ const [H,M]=timeStr.split(':').map(Number); const [y,m,d]=dateStr.split('-').map(Number); return new Date(y,m-1,d,H,M); }
 

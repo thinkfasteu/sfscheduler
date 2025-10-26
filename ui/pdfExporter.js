@@ -40,15 +40,44 @@ function getMonthLabel(month) {
 	return date.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
 }
 
-function getHolidayName(dateStr) {
+function getHolidayMeta(dateStr) {
+	const normalize = (value) => {
+		if (!value) return null;
+		if (typeof value === 'string') {
+			return { name: value, closed: false };
+		}
+		if (typeof value === 'object') {
+			return {
+				name: value.name || value.localName || '',
+				closed: !!value.closed
+			};
+		}
+		return null;
+	};
+
 	const yearStr = dateStr.split('-')[0];
+	const fromState = appState.holidays?.[yearStr]?.[dateStr];
+	const stateEntry = normalize(fromState);
+	if (stateEntry) return stateEntry;
 	try {
-		const viaService = window.holidayService?.getHolidayName?.(dateStr);
-		if (viaService) return viaService;
+		const svc = window.holidayService;
+		if (svc?.getHoliday) {
+			const svcEntry = normalize(svc.getHoliday(dateStr));
+			if (svcEntry) return svcEntry;
+		}
+		const name = svc?.getHolidayName?.(dateStr) || null;
+		const closed = svc?.isClosed?.(dateStr) || false;
+		if (name || closed) return { name: name || '', closed: !!closed };
 	} catch (err) {
 		console.warn('[pdfExporter] holidayService lookup failed', err);
 	}
-	return appState.holidays?.[yearStr]?.[dateStr] || null;
+	return null;
+}
+
+function getHolidayName(dateStr) {
+	const meta = getHolidayMeta(dateStr);
+	if (meta) return meta.name || null;
+	return null;
 }
 
 function buildStaffIndex() {
@@ -94,7 +123,9 @@ function buildTableRows(month, schedule, staffIndex) {
 		const weekday = date.toLocaleDateString('de-DE', { weekday: 'short' });
 		const dateLabel = date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
 		const isWeekend = [0, 6].includes(date.getDay());
-		const holidayName = getHolidayName(dateStr);
+		const meta = getHolidayMeta(dateStr) || {};
+		const holidayName = meta.name || null;
+		const closedDay = !!meta.closed;
 		const assignments = schedule?.[dateStr]?.assignments || {};
 
 		const rowMeta = {
@@ -103,6 +134,7 @@ function buildTableRows(month, schedule, staffIndex) {
 			holidayName,
 			isWeekend,
 			isHoliday: Boolean(holidayName),
+			isClosed: closedDay,
 			blackoutColumns: []
 		};
 
@@ -111,7 +143,13 @@ function buildTableRows(month, schedule, staffIndex) {
 		let evening = '—';
 		let closing = '—';
 
-		if (holidayName) {
+		if (closedDay) {
+			early = 'Geschlossen';
+			midday = '';
+			evening = '';
+			closing = '';
+			rowMeta.blackoutColumns = ['midday', 'evening', 'closing'];
+		} else if (holidayName) {
 			early = formatAssignment({ staffIndex, assignments, shiftKey: HOLIDAY_SHIFT_KEYS[0], includeTime: true, annotateShift: true });
 			midday = formatAssignment({ staffIndex, assignments, shiftKey: HOLIDAY_SHIFT_KEYS[1], includeTime: true, annotateShift: true });
 			rowMeta.blackoutColumns = ['evening', 'closing'];
@@ -253,7 +291,18 @@ export function exportSchedulePdf({ month, schedule }) {
 			const meta = data.row.raw.__meta;
 			if (!meta) return;
 
-			if (meta.isHoliday) {
+			if (meta.isClosed) {
+				if (data.column.dataKey !== 'day') {
+					data.cell.styles.fillColor = BLACKOUT_FILL;
+					data.cell.styles.textColor = BLACKOUT_TEXT;
+					if (data.column.dataKey !== 'early') {
+						data.cell.text = [''];
+					}
+				}
+				if (data.column.dataKey === 'early' && (!data.cell.text || !data.cell.text.length)) {
+					data.cell.text = ['Geschlossen'];
+				}
+			} else if (meta.isHoliday) {
 				data.cell.styles.fillColor = HOLIDAY_FILL;
 			}
 
@@ -283,10 +332,17 @@ export function exportSchedulePdf({ month, schedule }) {
 				doc.setFont('helvetica', 'normal');
 				doc.setFontSize(9);
 				doc.text(meta.dateLabel, splitX + 1.8, cell.y + cell.height / 2, { baseline: 'middle' });
-				if (meta.holidayName) {
+				const annotations = [];
+				if (meta.holidayName) annotations.push(meta.holidayName);
+				if (meta.isClosed) annotations.push('Geschlossen');
+				if (annotations.length) {
 					doc.setFontSize(7.5);
 					doc.setTextColor(90, 90, 90);
-					doc.text(meta.holidayName, cell.x + 1.8, cell.y + cell.height - 1.5, { baseline: 'bottom' });
+					let labelY = cell.y + cell.height - 1.5;
+					annotations.slice().reverse().forEach((label, idx) => {
+						doc.text(label, cell.x + 1.8, labelY, { baseline: 'bottom' });
+						labelY -= 2.7;
+					});
 					doc.setTextColor(0, 0, 0);
 				}
 			}

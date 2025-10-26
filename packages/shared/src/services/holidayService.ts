@@ -18,8 +18,16 @@ interface Holiday {
   launchYear?: number
 }
 
+type HolidaySource = 'api' | 'manual' | 'legacy'
+
+export interface HolidayEntry {
+  name: string
+  closed?: boolean
+  source?: HolidaySource
+}
+
 interface HolidayStore {
-  [year: string]: { [date: string]: string } // { "2024": { "2024-12-25": "1. Weihnachtstag" } }
+  [year: string]: { [date: string]: HolidayEntry }
 }
 
 class SharedHolidayService {
@@ -29,18 +37,18 @@ class SharedHolidayService {
   /**
    * Fetch holidays for a specific year from the Nager.at API
    */
-  async fetchHolidaysForYear(year: number): Promise<{ [date: string]: string }> {
+  async fetchHolidaysForYear(year: number): Promise<{ [date: string]: HolidayEntry }> {
     const yearStr = String(year)
 
     // Return cached holidays if already loaded
     if (this.holidayStore[yearStr] && Object.keys(this.holidayStore[yearStr]).length > 0) {
-      return this.holidayStore[yearStr]
+  return this.holidayStore[yearStr]
     }
 
     // Check if we're already loading this year
     if (this.loadingPromises.has(year)) {
       await this.loadingPromises.get(year)
-      return this.holidayStore[yearStr] || {}
+  return this.holidayStore[yearStr] || {}
     }
 
     // Start loading
@@ -49,7 +57,7 @@ class SharedHolidayService {
 
     try {
       await loadingPromise
-      return this.holidayStore[yearStr] || {}
+  return this.holidayStore[yearStr] || {}
     } finally {
       this.loadingPromises.delete(year)
     }
@@ -78,10 +86,24 @@ class SharedHolidayService {
 
       // Convert to the format expected: { "YYYY-MM-DD": "Holiday Name" }
       const yearStr = String(year)
-      this.holidayStore[yearStr] = {}
+      const previous = this.holidayStore[yearStr] || {}
+      const next: { [date: string]: HolidayEntry } = {}
       stateHolidays.forEach(holiday => {
-        this.holidayStore[yearStr][holiday.date] = holiday.localName
+        const existing = previous[holiday.date]
+        next[holiday.date] = {
+          name: holiday.localName,
+          closed: existing?.closed ?? false,
+          source: 'api'
+        }
       })
+      // Preserve custom/manual holidays
+      Object.entries(previous).forEach(([date, entry]) => {
+        if (!next[date]) {
+          next[date] = { ...entry, source: entry.source || 'manual' }
+        }
+      })
+
+      this.holidayStore[yearStr] = next
 
       console.log(`[HolidayService] Loaded ${stateHolidays.length} holidays for ${year}:`, this.holidayStore[yearStr])
 
@@ -98,20 +120,86 @@ class SharedHolidayService {
     }
   }
 
+  private ensureYearContainer(year: number | string): { [date: string]: HolidayEntry } {
+    const yearStr = String(year)
+    if (!this.holidayStore[yearStr]) {
+      this.holidayStore[yearStr] = {}
+    }
+    return this.holidayStore[yearStr]
+  }
+
+  private getEntry(dateStr: string): HolidayEntry | null {
+    const year = dateStr.split('-')[0]
+    const entry = this.holidayStore[year]?.[dateStr]
+    return entry ? { ...entry } : null
+  }
+
   /**
    * Check if a specific date is a holiday
    */
   isHoliday(dateStr: string): boolean {
-    const year = dateStr.split('-')[0]
-    return !!(this.holidayStore[year]?.[dateStr])
+    const entry = this.getEntry(dateStr)
+    return !!(entry && entry.name)
   }
 
   /**
    * Get the holiday name for a specific date
    */
   getHolidayName(dateStr: string): string | null {
+    const entry = this.getEntry(dateStr)
+    return entry ? entry.name : null
+  }
+
+  /**
+   * Retrieve the full holiday entry for a date
+   */
+  getHoliday(dateStr: string): HolidayEntry | null {
+    return this.getEntry(dateStr)
+  }
+
+  /**
+   * Mark or unmark a date as closed
+   */
+  setHolidayClosed(dateStr: string, closed: boolean): void {
     const year = dateStr.split('-')[0]
-    return this.holidayStore[year]?.[dateStr] || null
+    const store = this.ensureYearContainer(year)
+    const current = store[dateStr] || { name: '', closed: false, source: 'manual' }
+    store[dateStr] = { ...current, closed }
+  }
+
+  /**
+   * Add or update a manual holiday entry
+   */
+  upsertHoliday(dateStr: string, entry: HolidayEntry): void {
+    const year = dateStr.split('-')[0]
+    const store = this.ensureYearContainer(year)
+    store[dateStr] = {
+      name: entry.name || '',
+      closed: !!entry.closed,
+      source: entry.source || 'manual'
+    }
+  }
+
+  bulkUpsert(entries: { [date: string]: HolidayEntry }): void {
+    Object.entries(entries).forEach(([dateStr, entry]) => {
+      this.upsertHoliday(dateStr, entry)
+    })
+  }
+
+  removeHoliday(dateStr: string): void {
+    const year = dateStr.split('-')[0]
+    const store = this.holidayStore[year]
+    if (store && store[dateStr]) {
+      delete store[dateStr]
+    }
+  }
+
+  /**
+   * Determine if a day is marked closed
+   */
+  isClosed(dateStr: string): boolean {
+    const entry = this.getEntry(dateStr)
+    return !!entry?.closed
   }
 
   /**
@@ -131,9 +219,9 @@ class SharedHolidayService {
   /**
    * Get all holidays for a specific year
    */
-  getHolidaysForYear(year: number): { [date: string]: string } {
-    const yearStr = String(year)
-    return this.holidayStore[yearStr] || {}
+  getHolidaysForYear(year: number): { [date: string]: HolidayEntry } {
+    const store = this.ensureYearContainer(year)
+    return { ...store }
   }
 
   /**
@@ -157,13 +245,14 @@ class SharedHolidayService {
   /**
    * Get day type classification consistent with scheduler logic
    */
-  getDayType(dateStr: string): 'holiday' | 'weekend' | 'weekday' {
+  getDayType(dateStr: string): 'holiday' | 'weekend' | 'weekday' | 'closed' {
     const date = new Date(dateStr + 'T00:00:00')
     const dayOfWeek = date.getDay()
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6 // Sunday = 0, Saturday = 6
-    const isHoliday = this.isHoliday(dateStr)
+    const entry = this.getEntry(dateStr)
 
-    if (isHoliday) return 'holiday'
+    if (entry?.closed) return 'closed'
+    if (entry?.name) return 'holiday'
     if (isWeekend) return 'weekend'
     return 'weekday'
   }

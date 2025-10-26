@@ -22,6 +22,21 @@ import { SchedulingEngine } from '../scheduler.js';
 import { ScheduleValidator } from '../validation.js';
 import { parseYMD } from '../utils/dateUtils.js';
 
+function normalizeHolidayMeta(value) {
+    if (!value) return null;
+    if (typeof value === 'string') {
+        return { name: value, closed: false, source: 'legacy' };
+    }
+    if (typeof value === 'object') {
+        return {
+            name: value.name || value.localName || '',
+            closed: !!value.closed,
+            source: value.source || 'legacy'
+        };
+    }
+    return null;
+}
+
 export class ScheduleUI {
     constructor(containerId) {
         this.container = document.querySelector(containerId);
@@ -355,11 +370,39 @@ export class ScheduleUI {
         // No need for delegation since direct binding is more reliable
     }
 
+    getHolidayMeta(dateStr){
+        const yearStr = dateStr.split('-')[0];
+        const fromState = normalizeHolidayMeta(window.appState?.holidays?.[yearStr]?.[dateStr]);
+        if (fromState) return fromState;
+        try {
+            const svc = window.holidayService;
+            if (svc?.getHoliday) {
+                const entry = normalizeHolidayMeta(svc.getHoliday(dateStr));
+                if (entry) return entry;
+            }
+            const name = svc?.getHolidayName?.(dateStr) || null;
+            const closed = svc?.isClosed?.(dateStr) || false;
+            if (name || closed) return { name: name || '', closed: !!closed, source: 'service' };
+        } catch(e){ /* noop */ }
+        return null;
+    }
+
+    getHolidayName(dateStr) {
+        const meta = this.getHolidayMeta(dateStr);
+        return meta?.name || null;
+    }
+
+    isClosedDay(dateStr){
+        const meta = this.getHolidayMeta(dateStr);
+        return !!meta?.closed;
+    }
+
     // Compute canonical day type using latest holiday + weekend logic
     computeDayType(dateStr){
         try {
-            const hol = this.getHolidayName(dateStr);
-            if (hol) return 'holiday';
+            const meta = this.getHolidayMeta(dateStr);
+            if (meta?.closed) return 'closed';
+            if (meta?.name) return 'holiday';
             const d = parseYMD(dateStr).getDay();
             if (d===0 || d===6) return 'weekend';
             return 'weekday';
@@ -462,68 +505,49 @@ export class ScheduleUI {
         }
     }
 
-    // Helper function to get holiday name using TS singleton with appState fallback
-    getHolidayName(dateStr) {
-        const yearStr = dateStr.split('-')[0];
-        // Prefer service only if it actually returns a value for this date
-        try {
-            const fromSvc = window.holidayService?.getHolidayName?.(dateStr) || null;
-            if (fromSvc) return fromSvc;
-        } catch(e){ /* swallow */ }
-        return window.appState?.holidays?.[yearStr]?.[dateStr] || null;
-    }
     // Canonical shift resolution based on computed day type
     getApplicableShifts(dateStr){
         const type = this.computeDayType(dateStr);
+        if (type === 'closed') return [];
         return Object.entries(SHIFTS).filter(([_,v])=>v.type===type).map(([k])=>k);
     }
 
     updateHolidayBadges(year) {
-        // Paint holiday badges only for the currently rendered month to avoid log spam
-        const yearStr = String(year);
-        const svcMap = window.holidayService?.getHolidaysForYear?.(Number(year)) || {};
-        const holidays = Object.keys(svcMap).length ? svcMap : (window.appState?.holidays?.[yearStr] || {});
-        const monthKey = this.currentCalendarMonth; // e.g. "2025-10"
-        if (!monthKey) return;
-        const entries = Object.entries(holidays).filter(([dateStr]) => dateStr.startsWith(monthKey));
-        console.log(`[updateHolidayBadges] Painting ${entries.length} holiday(s) for ${monthKey}`);
-        for (const [dateStr, holidayName] of entries) {
-            const calBody = document.querySelector(`.cal-body[data-date="${dateStr}"]`);
-            if (!calBody) continue; // silently ignore days not in DOM
-            const calCell = calBody.parentElement;
-            const calDate = calCell?.querySelector('.cal-date');
-            if (!calDate) continue;
-            if (!calDate.querySelector('.badge')) {
-                const dayText = calDate.textContent.trim();
-                calDate.innerHTML = `${dayText} <span class="badge">${holidayName}</span>`;
-            }
-        }
+        this.updateHolidayBadgesExt(year);
     }
 
     // Extended version with options
     updateHolidayBadgesExt(year, { retype=false }={}){
-        const yearStr = String(year);
-        const svcMap = window.holidayService?.getHolidaysForYear?.(Number(year)) || {};
-        const holidays = Object.keys(svcMap).length ? svcMap : (window.appState?.holidays?.[yearStr] || {});
         const monthKey = this.currentCalendarMonth;
         if (!monthKey) return 0;
-        if (retype){
+        const bodies = Array.from(document.querySelectorAll(`.cal-body[data-date^="${monthKey}"]`));
+        if (!bodies.length) return 0;
+        if (retype) {
             try { this.reclassifyMonthDayTypes(monthKey); } catch(e){ console.warn('[holiday][retype] failed', e); }
         }
-        const entries = Object.entries(holidays).filter(([dateStr]) => dateStr.startsWith(monthKey));
-        console.log(`[updateHolidayBadges] Painting ${entries.length} holiday(s) for ${monthKey}${retype?' (after retype)':''}`);
-        let painted=0;
-        for (const [dateStr, holidayName] of entries) {
-            const calBody = document.querySelector(`.cal-body[data-date="${dateStr}"]`);
-            if (!calBody) continue;
-            const calCell = calBody.parentElement;
+        let painted = 0;
+        bodies.forEach(body => {
+            const dateStr = body.getAttribute('data-date');
+            if (!dateStr) return;
+            const meta = this.getHolidayMeta(dateStr);
+            const calCell = body.parentElement;
             const calDate = calCell?.querySelector('.cal-date');
-            if (!calDate) continue;
-            if (!calDate.querySelector('.badge')) {
-                const dayText = calDate.textContent.trim();
-                calDate.innerHTML = `${dayText} <span class="badge">${holidayName}</span>`;
-                painted++;
-            }
+            if (!calDate) return;
+            const baseDay = calDate.dataset.day || calDate.textContent.trim().split(' ')[0] || '';
+            const badges = [];
+            if (meta?.name) badges.push(`<span class="badge">${meta.name}</span>`);
+            if (meta?.closed) badges.push('<span class="badge badge-error">Geschlossen</span>');
+            calDate.innerHTML = badges.length ? `${baseDay} ${badges.join(' ')}` : baseDay;
+            calCell?.classList.toggle('cal-closed', !!meta?.closed);
+            const type = this.computeDayType(dateStr);
+            body.setAttribute('data-type', type);
+            if (badges.length) painted++;
+        });
+        if (retype) {
+            bodies.forEach(body => {
+                const dateStr = body.getAttribute('data-date');
+                if (dateStr) this.updateDay(dateStr);
+            });
         }
         return painted;
     }
@@ -628,13 +652,19 @@ export class ScheduleUI {
                     html += '<div class="cal-cell cal-empty"></div>';
                 } else {
                     const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                    const isWeekend = c >= 5;
-                    // Use TS singleton as primary source, fallback to appState for compatibility
-                    const holName = this.getHolidayName(dateStr);
-                    const type = holName ? 'holiday' : (isWeekend ? 'weekend' : 'weekday');
-                    html += `<div class="cal-cell ${isWeekend ? 'cal-weekend' : ''}">
-                        <div class="cal-date">${day}${holName ? ` <span class=\"badge\">${holName}</span>` : ''}</div>
-                        <div class="cal-body" data-date="${dateStr}" data-type="${type}"></div>
+                    const meta = this.getHolidayMeta(dateStr);
+                    const dayType = this.computeDayType(dateStr);
+                    const isWeekend = [0,6].includes(parseYMD(dateStr).getDay());
+                    const badges = [];
+                    if (meta?.name) badges.push(`<span class=\"badge\">${meta.name}</span>`);
+                    if (meta?.closed) badges.push('<span class="badge badge-error">Geschlossen</span>');
+                    const dayLabel = badges.length ? `${day} ${badges.join(' ')}` : String(day);
+                    const classes = ['cal-cell'];
+                    if (isWeekend) classes.push('cal-weekend');
+                    if (dayType === 'closed') classes.push('cal-closed');
+                    html += `<div class="${classes.join(' ')}">
+                        <div class="cal-date" data-day="${day}">${dayLabel}</div>
+                        <div class="cal-body" data-date="${dateStr}" data-type="${dayType}"></div>
                     </div>`;
                     day++;
                 }
@@ -856,6 +886,10 @@ export class ScheduleUI {
         document.querySelectorAll('.cal-body[data-date]').forEach(cell => {
             const dateStr = cell.getAttribute('data-date');
             const type = cell.getAttribute('data-type');
+            if (type === 'closed') {
+                cell.innerHTML = '<div class="staff-assignment closed-day">Geschlossen</div>';
+                return;
+            }
             const shifts = Object.entries(SHIFTS).filter(([_, v]) => v.type === type).map(([k]) => k);
             const assignments = data[dateStr]?.assignments || {};
             const invalidKeys = Object.keys(assignments).filter(k => !shifts.includes(k));
@@ -956,6 +990,10 @@ export class ScheduleUI {
 
     renderAssignmentsForDate(month, cellEl, dateStr){
         const type = cellEl.getAttribute('data-type');
+        if (type === 'closed') {
+            cellEl.innerHTML = '<div class="staff-assignment closed-day">Geschlossen</div>';
+            return;
+        }
         const shifts = Object.entries(SHIFTS).filter(([_,v])=>v.type===type).map(([k])=>k);
         const data = window.appState?.scheduleData?.[month] || {};
         const assignments = data[dateStr]?.assignments || {};
@@ -1013,34 +1051,111 @@ export class ScheduleUI {
         }
         // Build shift list for that date based on SHIFTS and holiday/weekend detection
         const [y,m,d] = dateStr.split('-').map(Number);
-    const date = new Date(y, m-1, d);
-        const holName = this.getHolidayName(dateStr);
+        const date = new Date(y, m-1, d);
+        const meta = this.getHolidayMeta(dateStr) || {};
+        const holName = meta.name || '';
+        const isClosedDay = !!meta.closed;
         const isWeekend = [0,6].includes(date.getDay());
         const allShifts = this.getApplicableShifts(dateStr);
 
         const shiftSel = document.getElementById('swapShiftSelect');
-        shiftSel.innerHTML = allShifts.map(s=>`<option value="${s}">${s}</option>`).join('');
-        // Default to preset, otherwise pick first unassigned if possible
+        const staffSel = document.getElementById('swapStaffSelect');
+        const title = document.getElementById('swapTitle');
+        const detail = document.getElementById('swapDetail');
+        const currentAssignment = document.getElementById('currentAssignment');
+        const notes = document.getElementById('candidateNotes');
+        const assignBtn = document.getElementById('executeAssignBtn');
+        const leaveBtn = document.getElementById('leaveBlankBtn');
+        const consentRow = document.getElementById('consentRow');
+        const consentHint = document.getElementById('consentHint');
+
         const month = dateStr.substring(0,7);
         const cur = window.appState?.scheduleData?.[month]?.[dateStr]?.assignments || {};
         const isSwapMode = presetShift && cur[presetShift];
-        if (presetShift && allShifts.includes(presetShift)) {
-            shiftSel.value = presetShift;
-        } else {
-            const firstUnassigned = allShifts.find(s => !cur[s]);
-            if (firstUnassigned) shiftSel.value = firstUnassigned;
-        }
-        // Disable shift selection in swap mode to prevent confusion
-        shiftSel.disabled = isSwapMode;
 
-        const title = document.getElementById('swapTitle');
-        const detail = document.getElementById('swapDetail');
         title.textContent = isSwapMode ? `Tausch ${dateStr}` : `Zuweisung ${dateStr}`;
-        detail.textContent = holName ? `Feiertag: ${holName}` : isWeekend ? 'Wochenende' : 'Wochentag';
+        if (detail) {
+            if (isClosedDay) {
+                detail.textContent = holName ? `Geschlossen – ${holName}` : 'Geschlossen';
+            } else if (holName) {
+                detail.textContent = `Feiertag: ${holName}`;
+            } else {
+                detail.textContent = isWeekend ? 'Wochenende' : 'Wochentag';
+            }
+        }
+
+        if (isClosedDay || allShifts.length === 0) {
+            if (shiftSel) {
+                shiftSel.innerHTML = '';
+                shiftSel.disabled = true;
+            }
+            if (staffSel) {
+                staffSel.innerHTML = '';
+                staffSel.disabled = true;
+            }
+            if (assignBtn) assignBtn.disabled = true;
+            if (consentRow) consentRow.classList.add('hidden');
+            if (consentHint) consentHint.classList.add('hidden');
+            document.getElementById('includePermanentsRow')?.classList.add('hidden');
+            document.getElementById('includeManagerRow')?.classList.add('hidden');
+            if (notes) {
+                notes.innerHTML = 'Dieser Tag ist als geschlossen markiert. Es können keine Zuweisungen vorgenommen werden.';
+            }
+            if (currentAssignment) {
+                const entries = Object.entries(cur);
+                if (entries.length) {
+                    const summary = entries.map(([shiftKey, staffId]) => {
+                        const metaShift = SHIFTS[shiftKey] || {};
+                        const staff = (window.appState?.staffData||[]).find(s=>s.id==staffId);
+                        const name = staff?.name || (staffId === 'manager' ? 'Manager' : staffId);
+                        return `${metaShift.name || shiftKey}: ${name}`;
+                    });
+                    currentAssignment.innerHTML = `Aktuelle Zuweisungen:<br/>${summary.join('<br/>')}`;
+                } else {
+                    currentAssignment.textContent = 'Geschlossen – keine Schichten verfügbar.';
+                }
+            }
+            if (leaveBtn) {
+                leaveBtn.textContent = 'Alle Zuweisungen entfernen';
+                leaveBtn.onclick = () => {
+                    const monthKey = dateStr.substring(0,7);
+                    if (window.appState.scheduleData[monthKey]) {
+                        delete window.appState.scheduleData[monthKey][dateStr];
+                        if (Object.keys(window.appState.scheduleData[monthKey]).length === 0) {
+                            delete window.appState.scheduleData[monthKey];
+                        }
+                        appState.save?.();
+                    }
+                    this.updateDay(dateStr);
+                    if (window.modalManager) window.modalManager.close('swapModal'); else window.closeModal?.('swapModal');
+                };
+            }
+            modal.dataset.closed = 'true';
+            modal.dataset.shift = '';
+            executeBtn.style.display = 'none';
+            (window.modalManager||window).open ? window.modalManager.open('swapModal') : window.showModal?.('swapModal');
+            return;
+        }
+
+        if (assignBtn) assignBtn.disabled = false;
+        if (leaveBtn) leaveBtn.textContent = 'Leer lassen';
+
+        if (shiftSel) {
+            shiftSel.innerHTML = allShifts.map(s=>`<option value="${s}">${s}</option>`).join('');
+            if (presetShift && allShifts.includes(presetShift)) {
+                shiftSel.value = presetShift;
+            } else {
+                const firstUnassigned = allShifts.find(s => !cur[s]);
+                if (firstUnassigned) shiftSel.value = firstUnassigned;
+            }
+            shiftSel.disabled = isSwapMode;
+        }
+
+        modal.dataset.closed = 'false';
 
         // Show current assignment for first shift
-        const currentAssignment = document.getElementById('currentAssignment');
         const updateCurrent = () => {
+            if (!shiftSel) return;
             const s = shiftSel.value;
             const sid = cur[s];
             const staff = (window.appState?.staffData||[]).find(x=>x.id==sid);
@@ -1237,21 +1352,26 @@ export class ScheduleUI {
         }
         // Stash selection into modal dataset for handler
         modal.dataset.date = dateStr;
-        modal.dataset.shift = shiftSel.value;
-        const syncShift = () => { modal.dataset.shift = shiftSel.value; renderCandidates(); updateCurrent(); };
-        shiftSel.addEventListener('change', syncShift);
+        if (shiftSel) {
+            modal.dataset.shift = shiftSel.value;
+            const syncShift = () => { modal.dataset.shift = shiftSel.value; renderCandidates(); updateCurrent(); };
+            shiftSel.addEventListener('change', syncShift);
+        } else {
+            modal.dataset.shift = '';
+        }
         // React to staff selection changes to update consent row state
-                document.getElementById('swapStaffSelect').addEventListener('change', () => {
-                        // Keep current selection; just refresh consent & current assignment view
-                        updateConsentForSelected();
-                        const s = document.getElementById('swapShiftSelect').value;
-                        const sid = parseInt(document.getElementById('swapStaffSelect').value || 0);
-                        const currentAssignment = document.getElementById('currentAssignment');
-                        const staff = (window.appState?.staffData||[]).find(x=>x.id==sid);
-                        if (currentAssignment) {
-                            currentAssignment.textContent = sid ? `Aktuell: ${staff?.name||sid}` : 'Aktuell: —';
-                        }
-                });
+        if (staffSel) {
+            staffSel.addEventListener('change', () => {
+                updateConsentForSelected();
+                const s = shiftSel?.value;
+                const sid = parseInt(staffSel.value || 0);
+                const currentAssignment = document.getElementById('currentAssignment');
+                const staff = (window.appState?.staffData||[]).find(x=>x.id==sid);
+                if (currentAssignment) {
+                    currentAssignment.textContent = sid ? `Aktuell: ${staff?.name||sid}` : 'Aktuell: —';
+                }
+            });
+        }
 
         // Persist consent when user toggles it
         const consentCb = document.getElementById('consentCheckbox');
@@ -1338,11 +1458,15 @@ export class ScheduleUI {
         }
 
         const syncHeader = () => {
-            const holName = this.getHolidayName(activeDateStr);
+            const meta = this.getHolidayMeta(activeDateStr) || {};
             const dateObj = parseYMD(activeDateStr);
             const isWeekend = [0,6].includes(dateObj.getDay());
             if (titleEl) titleEl.textContent = `Suchen & Zuweisen – ${activeDateStr}`;
-            if (detailEl) detailEl.textContent = holName ? `Feiertag: ${holName}` : isWeekend ? 'Wochenende' : 'Wochentag';
+            if (detailEl) {
+                if (meta.closed) detailEl.textContent = meta.name ? `Geschlossen – ${meta.name}` : 'Geschlossen';
+                else if (meta.name) detailEl.textContent = `Feiertag: ${meta.name}`;
+                else detailEl.textContent = isWeekend ? 'Wochenende' : 'Wochentag';
+            }
         };
 
         const updateShiftOptions = (preserveSelection = true) => {
@@ -1355,11 +1479,34 @@ export class ScheduleUI {
             } else if (applicable.length){
                 shiftSel.value = applicable[0];
             }
+            const isClosed = this.isClosedDay(activeDateStr) || applicable.length === 0;
+            shiftSel.disabled = isClosed;
+            const notesEl = document.getElementById('searchCandidateNotes');
+            if (isClosed) {
+                if (staffSel) {
+                    staffSel.innerHTML = '';
+                    staffSel.disabled = true;
+                }
+                notesEl && (notesEl.innerHTML = 'Dieser Tag ist als geschlossen markiert. Es können keine Zuweisungen vorgenommen werden.');
+                includeRow?.classList.add('hidden');
+                consentRow?.classList.add('hidden');
+                const execBtn = document.getElementById('executeSearchAssignBtn');
+                if (execBtn) execBtn.disabled = true;
+            } else {
+                if (staffSel) staffSel.disabled = false;
+                const execBtn = document.getElementById('executeSearchAssignBtn');
+                if (execBtn) execBtn.disabled = false;
+            }
         };
 
         const updateModalDataset = () => {
             modal.dataset.date = activeDateStr;
-            if (shiftSel) modal.dataset.shift = shiftSel.value;
+            modal.dataset.closed = this.isClosedDay(activeDateStr) ? 'true' : 'false';
+            if (shiftSel && shiftSel.value) {
+                modal.dataset.shift = shiftSel.value;
+            } else {
+                modal.dataset.shift = '';
+            }
         };
 
         const updateSearchConsentForSelected = () => {
@@ -1383,6 +1530,13 @@ export class ScheduleUI {
 
         const renderCandidates = () => {
             if (!shiftSel || !staffSel) return;
+            const closed = this.isClosedDay(activeDateStr) || !shiftSel.value;
+            if (closed) {
+                staffSel.innerHTML = '';
+                const notesEl = document.getElementById('searchCandidateNotes');
+                if (notesEl) notesEl.innerHTML = 'Dieser Tag ist als geschlossen markiert. Es können keine Zuweisungen vorgenommen werden.';
+                return;
+            }
             const dateObj = parseYMD(activeDateStr);
             const month = activeDateStr.substring(0,7);
             const isWeekendSearch = [0,6].includes(dateObj.getDay());
@@ -1503,12 +1657,23 @@ export class ScheduleUI {
         if (searchLeaveBtn){
             searchLeaveBtn.onclick = () =>{
                 const sh = shiftSel?.value;
-                if (!sh) return;
+                const closed = this.isClosedDay(activeDateStr) || !sh;
                 const month = activeDateStr.substring(0,7);
                 if (!window.appState.scheduleData[month]) window.appState.scheduleData[month] = {};
                 const schedule = window.appState.scheduleData[month];
-                if (!schedule[activeDateStr]) schedule[activeDateStr] = { assignments:{} };
-                delete schedule[activeDateStr].assignments[sh];
+                if (!schedule[activeDateStr] && !closed) schedule[activeDateStr] = { assignments:{} };
+                if (closed) {
+                    delete schedule[activeDateStr];
+                    if (Object.keys(schedule).length === 0) {
+                        delete window.appState.scheduleData[month];
+                    }
+                } else {
+                    delete schedule[activeDateStr].assignments[sh];
+                    if (Object.keys(schedule[activeDateStr].assignments).length === 0) {
+                        delete schedule[activeDateStr];
+                        if (Object.keys(schedule).length === 0) delete window.appState.scheduleData[month];
+                    }
+                }
                 appState.save?.();
                 this.updateDay(activeDateStr);
                 if (window.modalManager) window.modalManager.close('searchModal'); else window.closeModal?.('searchModal');
@@ -1520,6 +1685,10 @@ export class ScheduleUI {
 
         const execBtn = document.getElementById('executeSearchAssignBtn');
         execBtn.onclick = async () => {
+            if (modal.dataset.closed === 'true') {
+                alert('Dieser Tag ist als geschlossen markiert. Es können keine Zuweisungen vorgenommen werden.');
+                return;
+            }
             const sh = shiftSel?.value;
             const sid = parseInt(staffSel?.value||0);
             if (!sh || !sid){ alert('Bitte Mitarbeiter wählen'); return; }

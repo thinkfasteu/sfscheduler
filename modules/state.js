@@ -100,6 +100,7 @@ export class AppState {
   // Run light migrations after load (idempotent)
   try { this.migrateVoluntaryEveningKeys(); } catch {}
   try { this.normalizeStaffRecords(); } catch {}
+  try { this.normalizeHolidayRecords(); } catch {}
   // Persist if anything changed
   try { this.save(true); } catch {}
     }
@@ -179,6 +180,54 @@ export class AppState {
       }
     });
     if (changed) this.voluntaryEveningAvailability = map;
+  }
+
+  normalizeHolidayRecords(){
+    if (!this.holidays || typeof this.holidays !== 'object') {
+      this.holidays = {};
+      return;
+    }
+    const normalizedYears = {};
+    let mutated = false;
+    const normalizeEntry = (value, fallbackSource = 'manual') => {
+      if (!value) return null;
+      if (typeof value === 'string') {
+        return { name: value, closed: false, source: fallbackSource };
+      }
+      if (typeof value === 'object') {
+        const entry = {
+          name: value.name || value.localName || '',
+          closed: !!value.closed,
+          source: value.source || fallbackSource
+        };
+        return entry;
+      }
+      return null;
+    };
+    Object.entries(this.holidays).forEach(([year, collection]) => {
+      if (!collection || typeof collection !== 'object') {
+        normalizedYears[year] = {};
+        mutated = true;
+        return;
+      }
+      const next = {};
+      Object.entries(collection).forEach(([dateStr, value]) => {
+        const entry = normalizeEntry(value, 'legacy');
+        if (entry && entry.name) {
+          next[dateStr] = entry;
+          if (value !== entry) mutated = true;
+        } else if (entry) {
+          next[dateStr] = entry;
+          mutated = true;
+        } else {
+          mutated = true;
+        }
+      });
+      normalizedYears[year] = next;
+    });
+    if (mutated) {
+      this.holidays = normalizedYears;
+    }
   }
 
   normalizeStaffRecords(){

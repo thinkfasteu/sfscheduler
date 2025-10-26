@@ -8,6 +8,16 @@ import { auditMsg } from '../src/services/auditMessages.js';
 let __services = (typeof window!=='undefined' && window.__services) ? window.__services : null;
 (async ()=>{ try { if (!__services) { const m = await import('../src/services/index.js'); __services = m.createServices({}); } } catch(e){ console.warn('Service init failed (fallback to appState)', e); } })();
 
+function normalizeHolidayEntry(value, defaultSource = 'manual') {
+  if (!value) return { name: '', closed: false, source: defaultSource };
+  if (typeof value === 'string') return { name: value, closed: false, source: defaultSource };
+  return {
+    name: value.name || value.localName || '',
+    closed: !!value.closed,
+    source: value.source || defaultSource
+  };
+}
+
 export class AppUI {
   constructor(scheduleUI){
     this.scheduleUI = scheduleUI;
@@ -233,23 +243,34 @@ export class AppUI {
     const yearSel = document.getElementById('holidaysYear');
     const dateEl = document.getElementById('holidayDate');
     const nameEl = document.getElementById('holidayName');
+    const closedEl = document.getElementById('holidayClosedToggle');
     if (!yearSel || !dateEl || !nameEl) return;
     const year = yearSel.value; const date = dateEl.value; const name = nameEl.value?.trim();
     if (!year || !date || !name){ alert('Bitte Jahr, Datum und Name angeben'); return; }
-    if (__services?.holiday){ __services.holiday.add(year, date, name); } else {
-      if (!appState.holidays[year]) appState.holidays[year] = {}; appState.holidays[year][date] = name; appState.save();
+    const closed = !!closedEl?.checked;
+    if (__services?.holiday){ __services.holiday.add(year, date, name, { closed }); } else {
+      if (!appState.holidays[year]) appState.holidays[year] = {};
+      appState.holidays[year][date] = { name, closed, source: 'manual' };
+      appState.save();
     }
     dateEl.value=''; nameEl.value='';
+    if (closedEl) closedEl.checked = false;
     this.renderHolidaysList();
+    try { window.ui?.updateHolidayBadgesExt?.(Number(year), { retype:true }); } catch {}
+    try { window.ui?.updateDay?.(date); } catch {}
   }
 
   removeHoliday(date){
     const yearSel = document.getElementById('holidaysYear');
     const year = yearSel?.value; if (!year) return;
     if (__services?.holiday){ __services.holiday.remove(year, date); } else {
-      if (!appState.holidays[year]) return; delete appState.holidays[year][date]; appState.save();
+      if (!appState.holidays[year]) return;
+      delete appState.holidays[year][date];
+      appState.save();
     }
     this.renderHolidaysList();
+    try { window.ui?.updateHolidayBadgesExt?.(Number(year), { retype:true }); } catch {}
+    try { window.ui?.updateDay?.(date); } catch {}
   }
 
   renderHolidaysList(){
@@ -257,11 +278,56 @@ export class AppUI {
     const list = document.getElementById('holidaysList'); if (!yearSel || !list) return;
     const year = yearSel.value;
     let entries = [];
-    if (__services?.holiday){ entries = __services.holiday.list(year).map(o=>[o.date,o.name]); }
-    else { entries = Object.entries(appState.holidays[year]||{}); }
-    const items = entries.sort(([a],[b])=> a.localeCompare(b));
-    list.innerHTML = items.length ? items.map(([d,n])=>`<li class="list-item"><span>${d} – ${n}</span><button class="btn btn-sm btn-danger" data-date="${d}" title="Entfernen">✕</button></li>`).join('') : '<li class="list-item"><span>Keine Feiertage</span></li>';
+    if (__services?.holiday){
+      entries = (__services.holiday.list(year) || []).map(entry => ({
+        date: entry.date,
+        name: entry.name || '',
+        closed: !!entry.closed,
+        source: entry.source || 'manual'
+      }));
+    } else {
+      const store = appState.holidays[year] || {};
+      entries = Object.entries(store).map(([date, value]) => ({ date, ...normalizeHolidayEntry(value) }));
+    }
+    const items = entries.sort((a,b)=> a.date.localeCompare(b.date));
+    list.innerHTML = items.length ? items.map(({ date: d, name: n, closed })=>{
+      const label = n ? n : '(kein Name)';
+      const closedBadge = closed ? '<span class="badge badge-error">Geschlossen</span>' : '';
+      const closedChecked = closed ? 'checked' : '';
+      return `<li class="list-item">
+        <span>${d} &ndash; ${label}</span>
+        ${closedBadge}
+        <label class="inline holiday-toggle">
+          <input type="checkbox" data-toggle-closed="${d}" ${closedChecked} />
+          <span>Geschlossen</span>
+        </label>
+        <button class="btn btn-sm btn-danger" data-date="${d}" title="Entfernen">✕</button>
+      </li>`;
+    }).join('') : '<li class="list-item"><span>Keine Feiertage</span></li>';
     list.querySelectorAll('button[data-date]').forEach(btn=>btn.addEventListener('click', e=>{ const d=e.currentTarget.getAttribute('data-date'); this.removeHoliday(d); }));
+    list.querySelectorAll('input[data-toggle-closed]').forEach(cb => cb.addEventListener('change', e => {
+      const date = e.currentTarget.getAttribute('data-toggle-closed');
+      const checked = e.currentTarget.checked;
+      this.setHolidayClosed(date, checked);
+    }));
+  }
+
+  setHolidayClosed(date, closed){
+    const yearSel = document.getElementById('holidaysYear');
+    const year = yearSel?.value;
+    if (!year) return;
+    if (__services?.holiday?.setClosed){
+      __services.holiday.setClosed(year, date, closed);
+    } else {
+      if (!appState.holidays[year]) appState.holidays[year] = {};
+      const entry = normalizeHolidayEntry(appState.holidays[year][date]);
+      entry.closed = !!closed;
+      appState.holidays[year][date] = entry;
+      appState.save();
+    }
+    this.renderHolidaysList();
+    try { window.ui?.updateHolidayBadgesExt?.(Number(year), { retype:true }); } catch {}
+    try { window.ui?.updateDay?.(date); } catch {}
   }
 
   renderIcsSources(){
