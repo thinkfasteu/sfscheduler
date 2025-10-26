@@ -67,8 +67,8 @@ export class EventHandler {
         appState.scheduleData[month] = validated;
         appState.save();
         
-        this.ui.refreshDisplay();
-        this.closeModal('swapModal');
+    this.ui.refreshDisplay();
+    this.closeModal('swapModal');
     }
 
     generateSchedule() { /* removed feature */ }
@@ -85,7 +85,7 @@ export class EventHandler {
     }
 
     closeModal(id) {
-        this.modalManager.closeModal(id);
+    this.modalManager.close(id);
     }
 }
  

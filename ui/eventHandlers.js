@@ -225,7 +225,8 @@ export class EventHandler {
         appState.save();
         try { window.appUI?.recomputeOvertimeCredits?.(month); } catch {}
         this.ui.updateCalendarFromSelect?.();
-        try { this.modalManager.closeModal('swapModal'); } catch {}
+    try { this.modalManager.close('swapModal'); }
+    catch {}
     }
 
     parseStaffId(raw){
