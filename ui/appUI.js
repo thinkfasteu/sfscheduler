@@ -1677,6 +1677,20 @@ export class AppUI {
     const endTs = endDate.getTime();
     if (endTs < startTs) return;
     let removedAssignments = 0;
+    const removedDetails = [];
+    // Capture pre-removal assignment count for diagnostics
+    const countAssignments = () => {
+      let c = 0;
+      Object.values(appState.scheduleData || {}).forEach(monthValue => {
+        const container = monthValue && typeof monthValue === 'object' && monthValue.data && typeof monthValue.data === 'object'
+          ? monthValue.data
+          : monthValue;
+        if (!container || typeof container !== 'object') return;
+        Object.values(container).forEach(d => { if (d && d.assignments) c += Object.keys(d.assignments).length; });
+      });
+      return c;
+    };
+    const beforeCount = countAssignments();
     Object.values(appState.scheduleData).forEach(monthValue => {
       const container = monthValue && typeof monthValue === 'object' && monthValue.data && typeof monthValue.data === 'object'
         ? monthValue.data
@@ -1692,6 +1706,8 @@ export class AppUI {
         let changed = false;
         Object.keys({ ...(dayObj.assignments || {}) }).forEach(shiftKey => {
           if (String(dayObj.assignments[shiftKey]) === String(staffId)) {
+            // record detail before deleting
+            removedDetails.push({ date: dateStr, shift: shiftKey, staffId: String(staffId) });
             delete dayObj.assignments[shiftKey];
             changed = true;
           }
@@ -1704,6 +1720,11 @@ export class AppUI {
     });
     if (removedAssignments > 0) {
       appState.save?.();
+      // Expose last removal for debugging in the console without persisting to durable state
+      try {
+        appState.__debugLastIllnessRemoval = { staffId, start, end, removedAssignments, removedDetails, beforeCount, afterCount: countAssignments(), ts: (new Date()).toISOString() };
+      } catch(e) { /* noop */ }
+      console.info('[AppUI] removed assignments for illness', appState.__debugLastIllnessRemoval);
       try {
         if (this.scheduleUI?.updateCalendarFromSelect) {
           this.scheduleUI.updateCalendarFromSelect();
