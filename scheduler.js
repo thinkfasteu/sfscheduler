@@ -409,25 +409,28 @@ class SchedulingEngine {
     }
 
     isStaffAvailable(staff, dateStr, shiftKey){
+    this._lastAvailabilityReason = null;
     const vac = appState.vacationsByStaff?.[staff.id]||[];
-    if (vac.length){ const t=parseYMD(dateStr).getTime(); for(const p of vac){ if(!p?.start||!p?.end) continue; const s=parseYMD(p.start).getTime(); const e=parseYMD(p.end).getTime(); if (t>=s && t<=e) return false; } }
+    if (vac.length){ const t=parseYMD(dateStr).getTime(); for(const p of vac){ if(!p?.start||!p?.end) continue; const s=parseYMD(p.start).getTime(); const e=parseYMD(p.end).getTime(); if (t>=s && t<=e){ this._lastAvailabilityReason = 'vacation'; return false; } } }
     // Illness periods block assignment exactly like vacations
     const ill = appState.illnessByStaff?.[staff.id]||[];
-    if (ill.length){ const t=parseYMD(dateStr).getTime(); for(const p of ill){ if(!p?.start||!p?.end) continue; const s=parseYMD(p.start).getTime(); const e=parseYMD(p.end).getTime(); if (t>=s && t<=e) return false; } }
+    if (ill.length){ const t=parseYMD(dateStr).getTime(); for(const p of ill){ if(!p?.start||!p?.end) continue; const s=parseYMD(p.start).getTime(); const e=parseYMD(p.end).getTime(); if (t>=s && t<=e){ this._lastAvailabilityReason = 'illness'; return false; } } }
         
         // Robust availability lookup: handle both namespaced and legacy key formats
         const availBucket =
             appState.availabilityData?.[`staff:${staff.id}`] ??
             appState.availabilityData?.[staff.id] ?? null;
-        if (availBucket?.[dateStr] === 'off') return false;
+        if (availBucket?.[dateStr] === 'off'){ this._lastAvailabilityReason = 'day-off'; return false; }
         const a = availBucket?.[dateStr]?.[shiftKey];
         
         // For non-permanent staff: only explicit 'yes' or 'prefer' counts as available; undefined / legacy 'no' treated not available.
         if (staff.role !== 'permanent'){
-            return a === 'yes' || a === 'prefer';
+            const ok = (a === 'yes' || a === 'prefer');
+            if (!ok){ this._lastAvailabilityReason = a === 'no' ? 'explicit-no' : 'no-availability'; }
+            return ok;
         }
         // Permanents: available unless explicitly opted out (no/off)
-        if (a==='no' || a==='off') return false;
+        if (a==='no' || a==='off'){ this._lastAvailabilityReason = 'permanent-opted-out'; return false; }
         return true;
     }
 
@@ -442,10 +445,17 @@ class SchedulingEngine {
     findCandidatesForShift(dateStr, shiftKey, scheduledToday, weekNum){
         const hours = SHIFTS[shiftKey].hours;
         const cands=[];
+        const debugTrace = { date: dateStr, shift: shiftKey, rejections: [], candidates: [] };
         (appState.staffData||[]).forEach(staff=>{
             if (staff.id === 'manager') return; // Exclude manager from automated generation
-            if (scheduledToday.has(staff.id)) return;
-            if (!this.isStaffAvailable(staff, dateStr, shiftKey)) return;
+            if (scheduledToday.has(staff.id)) {
+                debugTrace.rejections.push({ staffId: staff.id, reason: 'already-scheduled-today' });
+                return;
+            }
+            if (!this.isStaffAvailable(staff, dateStr, shiftKey)) {
+                debugTrace.rejections.push({ staffId: staff.id, reason: this._lastAvailabilityReason || 'unavailable' });
+                return;
+            }
             const weekH = this.staffHoursByWeek[staff.id][weekNum]||0; const monthH = this.monthlyHours[staff.id]||0;
             let score=0;
             const avail = appState.availabilityData?.[staff.id]?.[dateStr]?.[shiftKey];
@@ -647,7 +657,10 @@ class SchedulingEngine {
                 }
             }
             cands.push({ staff, score });
+            debugTrace.candidates.push({ staffId: staff.id, score, weekHours: weekH, monthHours: monthH });
         });
+        debugTrace.candidates.sort((a,b)=> b.score - a.score);
+        try { appState.__debugLastCandidateScan = debugTrace; } catch(e) { /* noop */ }
         return cands.sort((a,b)=> b.score - a.score);
     }
 

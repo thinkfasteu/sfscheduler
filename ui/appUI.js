@@ -1676,10 +1676,10 @@ export class AppUI {
     const startTs = startDate.getTime();
     const endTs = endDate.getTime();
     if (endTs < startTs) return;
-    let removedAssignments = 0;
-    const removedDetails = [];
-    // Capture pre-removal assignment count for diagnostics
-    const countAssignments = () => {
+  let removedAssignments = 0;
+  const removedDetails = [];
+  // Capture pre-removal assignment count for diagnostics
+  const countAssignments = () => {
       let c = 0;
       Object.values(appState.scheduleData || {}).forEach(monthValue => {
         const container = monthValue && typeof monthValue === 'object' && monthValue.data && typeof monthValue.data === 'object'
@@ -1718,12 +1718,22 @@ export class AppUI {
         }
       });
     });
+    const afterCount = countAssignments();
+    // Always emit debug info so we know the hook ran even if nothing was removed
+    try {
+      appState.__debugLastIllnessRemoval = {
+        staffId: String(staffId),
+        start,
+        end,
+        beforeCount,
+        afterCount,
+        removedAssignments,
+        removedDetails,
+        ts: (new Date()).toISOString()
+      };
+    } catch(e) { /* noop */ }
     if (removedAssignments > 0) {
       appState.save?.();
-      // Expose last removal for debugging in the console without persisting to durable state
-      try {
-        appState.__debugLastIllnessRemoval = { staffId, start, end, removedAssignments, removedDetails, beforeCount, afterCount: countAssignments(), ts: (new Date()).toISOString() };
-      } catch(e) { /* noop */ }
       console.info('[AppUI] removed assignments for illness', appState.__debugLastIllnessRemoval);
       try {
         if (this.scheduleUI?.updateCalendarFromSelect) {
